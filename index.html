@@ -118,6 +118,9 @@
     </main>
 
     <aside class="detail-pane" aria-label="详情">
+      <button class="icon-btn detail-close-btn" id="detail-close-btn" type="button" title="关闭角色卡片">
+        <img src="src/_logo/icons/x.svg" alt="">
+      </button>
       <section class="detail-card detail-profile">
         <img id="detail-avatar" src="src/_logo/emoji/robot_3d.png" alt="" class="detail-profile__avatar">
         <h2 id="detail-name">NEXT Chat</h2>
@@ -327,7 +330,9 @@
               <aside class="kb-sidebar" aria-label="知识库列表">
                 <div class="kb-create-row">
                   <input id="kb-name-input" placeholder="新建知识库名称">
-                  <button id="kb-create-btn" class="btn btn-primary" type="button">创建</button>
+                  <button id="kb-create-btn" class="btn btn-primary kb-icon-btn" type="button" title="创建知识库" aria-label="创建知识库">
+                    <img src="src/_logo/icons/plus.svg" alt="">
+                  </button>
                 </div>
                 <div id="kb-list" class="kb-list"></div>
               </aside>

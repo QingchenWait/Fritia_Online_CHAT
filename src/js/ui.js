@@ -140,6 +140,9 @@ function bindGlobalEvents() {
 
   document.getElementById('conversation-search')?.addEventListener('input', renderConversationList);
   document.querySelector('[data-chat-info-toggle]')?.addEventListener('click', handleChatInfoToggle);
+  document.getElementById('detail-close-btn')?.addEventListener('click', () => {
+    document.getElementById('app')?.classList.remove('is-detail-open');
+  });
   document.getElementById('mobile-back-btn')?.addEventListener('click', () => {
     document.getElementById('app')?.classList.remove('is-chat-open');
   });
@@ -1176,6 +1179,18 @@ async function renderKnowledgeDetail() {
   if (enable) {
     enable.textContent = isActive ? '停用检索' : '启用此知识库';
     enable.classList.toggle('btn-primary', !isActive);
+    enable.classList.toggle('btn-soft', isActive);
+    enable.classList.add('kb-icon-btn');
+    enable.innerHTML = `<img src="${isActive ? 'src/_logo/icons/x.svg' : 'src/_logo/icons/database.svg'}" alt="">`;
+    enable.title = isActive ? '停用检索' : '启用此知识库';
+    enable.setAttribute('aria-label', enable.title);
+  }
+  const deleteKb = document.getElementById('kb-delete-btn');
+  if (deleteKb) {
+    deleteKb.classList.add('kb-icon-btn', 'kb-icon-btn-danger');
+    deleteKb.innerHTML = '<img src="src/_logo/icons/trash-2.svg" alt="">';
+    deleteKb.title = '删除知识库';
+    deleteKb.setAttribute('aria-label', '删除知识库');
   }
   await renderKnowledgeFileList(kb.id);
 }
@@ -1202,6 +1217,13 @@ async function renderKnowledgeFileList(kbId) {
       <span><strong>${escapeHtml(file.name)}</strong><small>${file.charCount || 0} 字 · ${file.chunkCount || 0} 分块 · ${formatBytes(file.size)}</small></span>
       <button class="btn btn-danger" type="button" data-delete-file="${escapeHtml(file.id)}">删除</button>
     `;
+    const fileDeleteButton = row.querySelector('[data-delete-file]');
+    if (fileDeleteButton) {
+      fileDeleteButton.classList.add('kb-icon-btn', 'kb-icon-btn-danger');
+      fileDeleteButton.innerHTML = '<img src="src/_logo/icons/trash-2.svg" alt="">';
+      fileDeleteButton.title = '删除文档';
+      fileDeleteButton.setAttribute('aria-label', '删除文档');
+    }
     row.addEventListener('click', event => {
       const deleteButton = event.target.closest('[data-delete-file]');
       if (deleteButton) return;
@@ -1252,7 +1274,7 @@ async function renderKnowledgeChunks(kbId, fileId) {
 }
 
 function setKbStatus(text, kind = 'info') {
-  const status = document.getElementById('kb-upload-status') || document.getElementById('kb-active-status');
+  const status = document.getElementById('kb-active-status') || document.getElementById('kb-upload-status');
   if (!status) return;
   status.textContent = text || '';
   status.dataset.kind = kind;

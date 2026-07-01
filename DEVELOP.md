@@ -190,3 +190,17 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - 增加导出/导入 ZIP，覆盖聊天、角色、知识库、长期记忆。
 - 增加 Playwright 截图检查，覆盖桌面横屏和移动竖屏。
 - 选择 Tauri 或 Capacitor 壳层并补充原生权限配置。
+
+## 2026-07-02 Chat UI Critical Layout Fix
+
+- 桌面聊天主列改为顶部固定、消息列表独立滚动、底部输入栏绝对定位悬浮，避免长聊天记录把输入框挤出视口。
+- `#message-list` 和列表区域补充自绘滚动条，符合 `src/ui_rules/ui_design_rules.md` 的 Soft UI / 蓝紫主色视觉要求。
+- 移动端竖屏恢复原左侧功能入口，将 `.rail` 改为列表页底部悬浮 Tab Bar；进入聊天页时自动收起，避免遮挡输入栏。
+- 私聊右上角“角色卡片”改为与群聊成员一致的右侧玻璃悬浮窗口，并新增 `#detail-close-btn` 关闭按钮。
+
+## 2026-07-02 Knowledge UI Refinement
+
+- 修复用户深色聊天气泡内 `@` 提及颜色过暗的问题，改为浅色半透明胶囊样式。
+- 知识库管理区 `.kb-management-grid` 在宽屏下使用 `repeat(2, minmax(0, 1fr))`，保证文件列表和分块预览等宽。
+- 隐藏 `#kb-upload-status` 横条，并将知识库操作状态写入顶部 `#kb-active-status`。
+- 知识库创建、启用/停用、删除知识库和删除文档操作全部改为外部 SVG 图标按钮。

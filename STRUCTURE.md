@@ -429,3 +429,18 @@ fritia_online_next_chat/
 - Lucide Icons：ISC License。
 - Microsoft Fluent UI Emoji：MIT License。
 - 项目自身：保留仓库现有 `LICENSE`。
+
+## 2026-07-02 UI Layout Mapping
+
+- `.message-list`：聊天消息独立滚动容器，带自绘滚动条，底部留出悬浮输入栏空间。
+- `.composer`：聊天底部悬浮输入栏，桌面端和移动聊天页固定在聊天主列底部。
+- `.rail`：桌面端为左侧导航栏，移动端列表页转为底部悬浮 Tab Bar。
+- `.detail-pane`：私聊角色卡片右侧悬浮窗口，与群聊成员侧边窗口保持同类玻璃卡片样式。
+- `#detail-close-btn`：关闭私聊角色卡片悬浮窗口。
+
+## 2026-07-02 Knowledge UI Refinement Mapping
+
+- `.message-row.is-self .message-mention`：用户深色气泡内的浅色 `@` 提及样式。
+- `.kb-management-grid`：宽屏知识库文件列表和分块预览等宽双栏。
+- `.kb-icon-btn`：知识库操作图标按钮，复用 `src/_logo/icons` 中的 `plus.svg`、`database.svg`、`x.svg`、`trash-2.svg`。
+- `#kb-upload-status`：旧上传等待横条保留兼容但隐藏，状态提示转由 `#kb-active-status` 展示。
