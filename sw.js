@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v1';
+const CACHE_NAME = 'fritia-next-chat-v2';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -18,6 +18,7 @@ const CORE_ASSETS = [
 ];
 
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS)));
 });
 
@@ -26,16 +27,27 @@ self.addEventListener('activate', event => {
     caches.keys().then(keys => Promise.all(keys
       .filter(key => key !== CACHE_NAME)
       .map(key => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  const networkFirst = url.origin === location.origin
+    && (url.pathname === '/'
+      || url.pathname.endsWith('.html')
+      || url.pathname.endsWith('.js')
+      || url.pathname.endsWith('.css')
+      || url.pathname.endsWith('.json'));
+  const fetchAndCache = () => fetch(event.request).then(response => {
+    const copy = response.clone();
+    caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
+    return response;
+  });
   event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-      const copy = response.clone();
-      caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
-      return response;
-    }).catch(() => cached))
+    networkFirst
+      ? fetchAndCache().catch(() => caches.match(event.request))
+      : caches.match(event.request).then(cached => cached || fetchAndCache())
   );
 });

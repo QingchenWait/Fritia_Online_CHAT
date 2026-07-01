@@ -6,16 +6,20 @@ import {
   formatTime,
   getConversationMessages,
   loadAppStore,
+  normalizeGroupSettings,
   normalizeCharacterRecord,
   readFileAsDataUrl,
   readFileAsText,
   saveAppStore,
-  upsertCharacter
+  upsertCharacter,
+  updateGroupConversation
 } from './storage.js';
 import { characterAvatar, getCharacterById } from './characters.js';
 import { getSettings, saveSettings, getAdvancedSettings, saveAdvancedSettings } from './settings.js';
 import {
   createKnowledgeBase,
+  deleteKnowledgeBase,
+  deleteKnowledgeBaseFile,
   ensurePreloadedKnowledgeBases,
   getActiveKnowledgeBaseIds,
   getKnowledgeBaseChunks,
@@ -36,20 +40,45 @@ import {
 import { sendPrivateMessage } from './chat_engine.js';
 import { runRoundtableTurn, sendGroupPlayerMessage } from './roundtable.js';
 
+const MAX_KB_PREVIEW_CHUNKS = 80;
+const MAX_KB_PREVIEW_CHARS = 360;
+const ROUNDTABLE_IDLE_DELAY_MS = 45000;
+
+let roundtableIdleTimer = 0;
+
 const state = {
   store: loadAppStore(),
   listTab: 'chats',
   selectedKbId: '',
+  selectedKbFileId: '',
   selectedAttachment: null,
+  groupMemberSelection: new Set(),
+  groupMemberSearch: '',
+  groupEditorMode: 'create',
+  groupInfoEditing: false,
+  groupInfoMemberSearch: '',
+  mention: {
+    active: false,
+    start: -1,
+    query: '',
+    selectedIndex: 0,
+    candidates: []
+  },
   memoryGraph: {
     nodes: [],
     edges: [],
     selectedNodeId: '',
+    archiveFilter: 'orphan',
+    transform: { x: 0, y: 0, scale: 1 },
+    positions: {},
+    drag: null,
+    suppressClick: false,
     animation: 0
   }
 };
 
 export function initUi() {
+  state.store = loadAppStore();
   bindGlobalEvents();
   syncSettingsToForm();
   renderAll();
@@ -110,14 +139,16 @@ function bindGlobalEvents() {
   });
 
   document.getElementById('conversation-search')?.addEventListener('input', renderConversationList);
+  document.querySelector('[data-chat-info-toggle]')?.addEventListener('click', handleChatInfoToggle);
   document.getElementById('mobile-back-btn')?.addEventListener('click', () => {
     document.getElementById('app')?.classList.remove('is-chat-open');
   });
-  document.getElementById('quick-new-group')?.addEventListener('click', () => openPanel('group-editor-panel'));
+  document.getElementById('quick-new-group')?.addEventListener('click', () => openPanel('group-editor-panel', { fresh: true }));
 
   bindComposer();
   bindCharacterForm();
   bindGroupEditor();
+  bindGroupInfoPanel();
   bindSettings();
   bindKnowledge();
   bindMemoryPanel();
@@ -130,6 +161,7 @@ function bindComposer() {
   const fileInput = document.getElementById('file-input');
   send?.addEventListener('click', handleSend);
   input?.addEventListener('keydown', event => {
+    if (handleMentionKeydown(event)) return;
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSend();
@@ -138,6 +170,17 @@ function bindComposer() {
   input?.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = `${Math.min(input.scrollHeight, 128)}px`;
+    updateMentionPicker();
+  });
+  input?.addEventListener('click', updateMentionPicker);
+  input?.addEventListener('keyup', event => {
+    if (!['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) updateMentionPicker();
+  });
+  document.addEventListener('click', event => {
+    const picker = document.getElementById('mention-popover');
+    if (!picker || picker.classList.contains('hidden')) return;
+    if (picker.contains(event.target) || input?.contains(event.target)) return;
+    closeMentionPicker();
   });
   imageInput?.addEventListener('change', async () => {
     const file = imageInput.files?.[0];
@@ -180,6 +223,7 @@ async function handleSend() {
   input.style.height = 'auto';
   state.selectedAttachment = null;
   renderAttachmentPreview();
+  closeMentionPicker();
   if (conversation.type === 'group') {
     const sent = await sendGroupPlayerMessage({
       store: state.store,
@@ -188,10 +232,11 @@ async function handleSend() {
       attachments,
       onStore: updateStore
     });
+    const latestConversation = sent.store.conversations.find(item => item.id === conversation.id) || conversation;
     await runRoundtableTurn({
       store: sent.store,
-      conversation,
-      characters: state.store.characters,
+      conversation: latestConversation,
+      characters: sent.store.characters,
       triggerText: text,
       onStore: updateStore
     });
@@ -237,8 +282,7 @@ function bindCharacterForm() {
       updatedAt: Date.now()
     });
     const next = upsertCharacter(state.store, character);
-    const latest = loadAppStore();
-    ensurePrivateConversation(latest, character);
+    ensurePrivateConversation(next, character);
     updateStore(loadAppStore());
     event.target.reset();
     closePanel('character-import-panel');
@@ -247,26 +291,97 @@ function bindCharacterForm() {
 }
 
 function bindGroupEditor() {
+  document.getElementById('group-member-search')?.addEventListener('input', event => {
+    state.groupMemberSearch = event.target.value.trim().toLowerCase();
+    renderGroupMemberPicker();
+  });
   document.getElementById('create-group-btn')?.addEventListener('click', () => {
-    const title = document.getElementById('group-name').value.trim() || '圆桌密语';
-    const memberIds = [...document.querySelectorAll('#group-member-list .member-item.is-selected')]
-      .map(item => item.dataset.characterId);
+    const memberIds = [...state.groupMemberSelection];
     if (memberIds.length < 2) return;
-    const conversation = createGroupConversation(state.store, title, memberIds, state.store.characters);
-    updateStore(loadAppStore());
+    const active = getActiveConversation();
+    const title = state.groupEditorMode === 'edit' && active?.type === 'group'
+      ? active.title || buildGroupTitle(memberIds)
+      : buildGroupTitle(memberIds);
+    let conversation;
+    if (state.groupEditorMode === 'edit' && active?.type === 'group') {
+      const next = updateGroupConversation(state.store, active.id, { memberIds, title });
+      updateStore(next);
+      conversation = next.conversations.find(item => item.id === active.id);
+    } else {
+      conversation = createGroupConversation(state.store, title, memberIds, state.store.characters);
+      updateStore(loadAppStore());
+    }
     closePanel('group-editor-panel');
     selectConversation(conversation.id);
   });
-  document.getElementById('roundtable-autoplay-btn')?.addEventListener('click', async () => {
+}
+
+function bindGroupInfoPanel() {
+  document.getElementById('group-info-close')?.addEventListener('click', closeGroupInfoPanel);
+  document.getElementById('group-info-backdrop')?.addEventListener('click', closeGroupInfoPanel);
+  document.querySelectorAll('[data-group-info-open]').forEach(button => {
+    button.addEventListener('click', openGroupInfoPanel);
+  });
+  document.getElementById('group-info-invite-btn')?.addEventListener('click', () => openGroupInfoEditor());
+  document.getElementById('group-info-remove-btn')?.addEventListener('click', () => openGroupInfoEditor());
+  document.getElementById('group-info-cancel-members')?.addEventListener('click', () => {
+    state.groupInfoEditing = false;
+    renderGroupInfoPanel();
+  });
+  document.getElementById('group-info-save-members')?.addEventListener('click', () => {
     const conversation = getActiveConversation();
     if (!conversation || conversation.type !== 'group') return;
-    await runRoundtableTurn({
-      store: state.store,
-      conversation,
-      characters: state.store.characters,
-      triggerText: '',
-      onStore: updateStore
+    const memberIds = [...state.groupMemberSelection];
+    if (memberIds.length < 2) return;
+    const settings = normalizeGroupSettings(conversation.groupSettings);
+    const next = updateGroupConversation(state.store, conversation.id, {
+      memberIds,
+      groupSettings: { maxParticipants: Math.max(settings.maxParticipants, memberIds.length) }
     });
+    state.groupInfoEditing = false;
+    updateStore(next);
+  });
+  document.getElementById('group-info-member-search')?.addEventListener('input', event => {
+    state.groupInfoMemberSearch = event.target.value.trim().toLowerCase();
+    renderGroupInfoMemberEditor();
+  });
+  bindGroupSettingToggle('group-setting-auto-talk', 'autoBotChat');
+  bindGroupSettingToggle('group-setting-idle-talk', 'idleTalk');
+  bindGroupSettingToggle('group-setting-bot-at', 'botAtMentionTriggersReply');
+  document.getElementById('group-setting-chain-limit')?.addEventListener('input', event => {
+    const conversation = getActiveConversation();
+    if (!conversation || conversation.type !== 'group') return;
+    const botChainLimit = Math.max(1, Math.min(6, Math.round(Number(event.target.value) || 3)));
+    setText('group-info-chain-label', `${botChainLimit} 次`);
+    updateStore(updateGroupConversation(state.store, conversation.id, {
+      groupSettings: { botChainLimit }
+    }));
+  });
+  document.getElementById('group-setting-max-members')?.addEventListener('change', event => {
+    const conversation = getActiveConversation();
+    if (!conversation || conversation.type !== 'group') return;
+    const currentCount = Math.max(2, conversation.memberIds.length);
+    const maxParticipants = Math.max(currentCount, Math.min(20, Math.round(Number(event.target.value) || currentCount)));
+    event.target.value = String(maxParticipants);
+    updateStore(updateGroupConversation(state.store, conversation.id, {
+      groupSettings: { maxParticipants }
+    }));
+  });
+  document.getElementById('group-info-more-settings')?.addEventListener('click', () => {
+    closeGroupInfoPanel();
+    openPanel('settings-panel');
+    showSettingsSection('advanced');
+  });
+  document.getElementById('group-info-leave')?.addEventListener('click', closeGroupInfoPanel);
+}
+
+function bindGroupSettingToggle(id, key) {
+  document.getElementById(id)?.addEventListener('change', event => {
+    const conversation = getActiveConversation();
+    if (!conversation || conversation.type !== 'group') return;
+    updateStore(updateGroupConversation(state.store, conversation.id, {
+      groupSettings: { [key]: event.target.checked }
+    }));
   });
 }
 
@@ -295,35 +410,171 @@ function bindSettings() {
 }
 
 function bindKnowledge() {
-  document.getElementById('kb-create-btn')?.addEventListener('click', async () => {
+  const create = async () => {
     const nameInput = document.getElementById('kb-name-input');
     const kb = await createKnowledgeBase(nameInput.value.trim() || '新知识库');
     nameInput.value = '';
     state.selectedKbId = kb.id;
+    state.selectedKbFileId = '';
     refreshKnowledgePanel();
+  };
+  document.getElementById('kb-create-btn')?.addEventListener('click', () => {
+    create().catch(err => setKbStatus(err?.message || '创建知识库失败。', 'warn'));
+  });
+  document.getElementById('kb-name-input')?.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    create().catch(err => setKbStatus(err?.message || '创建知识库失败。', 'warn'));
+  });
+  document.getElementById('kb-upload-btn')?.addEventListener('click', () => {
+    document.getElementById('kb-file-input')?.click();
   });
   document.getElementById('kb-file-input')?.addEventListener('change', async event => {
     const files = [...(event.target.files || [])];
     if (!state.selectedKbId || !files.length) return;
-    await importFilesToKnowledgeBase(state.selectedKbId, files);
-    event.target.value = '';
+    try {
+      setKbStatus(`正在导入 ${files.length} 个文件...`, 'info');
+      await importFilesToKnowledgeBase(state.selectedKbId, files);
+      event.target.value = '';
+      state.selectedKbFileId = '';
+      setKbStatus('文档已导入，索引已重建。', 'ok');
+      refreshKnowledgePanel();
+    } catch (err) {
+      setKbStatus(err?.message || '上传失败。', 'warn');
+    }
+  });
+  document.getElementById('kb-enable-toggle')?.addEventListener('click', () => {
+    if (!state.selectedKbId) return;
+    toggleActiveKnowledgeBaseId(state.selectedKbId);
     refreshKnowledgePanel();
+  });
+  document.getElementById('kb-delete-btn')?.addEventListener('click', async () => {
+    if (!state.selectedKbId) return;
+    const title = document.getElementById('kb-current-title')?.textContent || '当前知识库';
+    if (!confirm(`确认删除「${title}」及其全部文件与索引？此操作不可撤销。`)) return;
+    try {
+      await deleteKnowledgeBase(state.selectedKbId);
+      state.selectedKbId = '';
+      state.selectedKbFileId = '';
+      setKbStatus('知识库已删除。', 'ok');
+      refreshKnowledgePanel();
+    } catch (err) {
+      setKbStatus(err?.message || '删除失败。', 'warn');
+    }
   });
 }
 
 function bindMemoryPanel() {
-  document.getElementById('memory-search-btn')?.addEventListener('click', () => renderMemorySearch());
+  document.getElementById('memory-search-btn')?.addEventListener('click', () => performMemorySearch());
   document.getElementById('memory-search-input')?.addEventListener('keydown', event => {
-    if (event.key === 'Enter') renderMemorySearch();
+    if (event.key === 'Enter') performMemorySearch();
+  });
+  document.getElementById('memory-search-toggle')?.addEventListener('click', () => {
+    document.querySelector('.memory-search-console')?.classList.toggle('is-expanded');
+  });
+  document.getElementById('memory-result-close')?.addEventListener('click', () => {
+    document.getElementById('memory-search-results')?.classList.add('hidden');
+  });
+  document.getElementById('memory-archive-btn')?.addEventListener('click', () => {
+    closeMemorySettingsPopover();
+    document.getElementById('memory-archive-popover')?.classList.remove('hidden');
+    renderMemoryArchive();
+  });
+  document.getElementById('memory-archive-close')?.addEventListener('click', closeMemoryArchivePopover);
+  document.getElementById('memory-archive-search')?.addEventListener('input', renderMemoryArchive);
+  document.getElementById('memory-archive-filter')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-memory-filter]');
+    if (!button) return;
+    state.memoryGraph.archiveFilter = button.dataset.memoryFilter || 'orphan';
+    renderMemoryArchive();
+  });
+  document.getElementById('memory-settings-btn')?.addEventListener('click', () => {
+    closeMemoryArchivePopover();
+    syncMemoryNodeSettings();
+    document.getElementById('memory-settings-popover')?.classList.remove('hidden');
+  });
+  document.getElementById('memory-settings-close')?.addEventListener('click', closeMemorySettingsPopover);
+  document.getElementById('memory-node-settings-save')?.addEventListener('click', () => {
+    updateLongTermMemorySettings({
+      enabled: document.getElementById('memory-setting-enabled')?.checked,
+      retentionDays: Number(document.getElementById('memory-setting-retention')?.value),
+      blockedKeywords: String(document.getElementById('memory-setting-keywords')?.value || '')
+        .split(/[\n,，]/)
+        .map(item => item.trim())
+        .filter(Boolean),
+      includeIntimate: document.getElementById('memory-setting-intimate')?.checked
+    });
+    closeMemorySettingsPopover();
+    syncSettingsToForm();
   });
   const canvas = document.getElementById('memory-graph-canvas');
   canvas?.addEventListener('click', event => {
+    if (state.memoryGraph.suppressClick) {
+      state.memoryGraph.suppressClick = false;
+      return;
+    }
     const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    const node = state.memoryGraph.nodes.find(item => Math.hypot(item.x - x, item.y - y) < item.r + 4);
+    const point = screenToGraph(event.clientX - rect.left, event.clientY - rect.top);
+    const node = findMemoryNodeAtPoint(point);
     state.memoryGraph.selectedNodeId = node?.id || '';
     renderMemoryNodeDetail();
+  });
+  canvas?.addEventListener('wheel', event => {
+    event.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const factor = event.deltaY > 0 ? 0.9 : 1.1;
+    zoomMemoryGraph(event.clientX - rect.left, event.clientY - rect.top, factor);
+  }, { passive: false });
+  canvas?.addEventListener('pointerdown', event => {
+    const rect = canvas.getBoundingClientRect();
+    const point = screenToGraph(event.clientX - rect.left, event.clientY - rect.top);
+    const node = findMemoryNodeAtPoint(point);
+    canvas.setPointerCapture?.(event.pointerId);
+    state.memoryGraph.drag = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      nodeId: node?.id || '',
+      moved: false
+    };
+    if (node) {
+      state.memoryGraph.selectedNodeId = node.id;
+      renderMemoryNodeDetail();
+    }
+  });
+  canvas?.addEventListener('pointermove', event => {
+    const drag = state.memoryGraph.drag;
+    if (!drag || drag.id !== event.pointerId) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    if (drag.nodeId) {
+      const current = state.memoryGraph.positions[drag.nodeId]
+        || state.memoryGraph.nodes.find(node => node.id === drag.nodeId)
+        || { x: 0, y: 0 };
+      const scale = state.memoryGraph.transform.scale || 1;
+      state.memoryGraph.positions[drag.nodeId] = {
+        x: current.x + dx / scale,
+        y: current.y + dy / scale
+      };
+    } else {
+      state.memoryGraph.transform.x += dx;
+      state.memoryGraph.transform.y += dy;
+    }
+    renderMemoryGraph();
+  });
+  canvas?.addEventListener('pointerup', event => {
+    const drag = state.memoryGraph.drag;
+    if (drag?.id === event.pointerId) {
+      state.memoryGraph.suppressClick = Boolean(drag.moved);
+      state.memoryGraph.drag = null;
+    }
+  });
+  canvas?.addEventListener('pointercancel', () => {
+    state.memoryGraph.suppressClick = false;
+    state.memoryGraph.drag = null;
   });
   window.addEventListener('resize', () => renderMemoryGraph());
 }
@@ -340,8 +591,10 @@ function renderAll() {
   renderConversationList();
   renderMessages();
   renderDetail();
-  renderGroupMemberPicker();
+  renderGroupInfoPanel();
+  renderMentionPicker();
   updateContextStatus();
+  scheduleRoundtableIdle();
 }
 
 function renderConversationList() {
@@ -396,7 +649,7 @@ function getListItems(query) {
         kind: item.type,
         id: item.id,
         title: item.title || conversationTitle(item),
-        avatar: item.avatar || conversationAvatar(item),
+        avatar: conversationAvatar(item),
         preview: last ? `${last.speakerName || ''}${last.speakerName ? '：' : ''}${last.text || attachmentSummary(last.attachments)}` : '还没有消息',
         meta: last ? formatTime(last.createdAt) : ''
       };
@@ -432,6 +685,11 @@ function createMessageNode(message) {
   avatar.src = message.role === 'user'
     ? 'src/_char/Profile_Adjutant.png'
     : characterAvatar(getCharacterById(state.store.characters, message.speakerId));
+  if (message.role !== 'user' && message.speakerName) {
+    avatar.classList.add('message-avatar--mentionable');
+    avatar.title = `@${message.speakerName}`;
+    avatar.addEventListener('click', () => insertMentionText(message.speakerName));
+  }
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   const name = document.createElement('div');
@@ -442,7 +700,7 @@ function createMessageNode(message) {
   if (message.status === 'typing') {
     content.innerHTML = '<span class="typing-indicator"><span></span><span></span><span></span></span>';
   } else {
-    content.textContent = message.text || '';
+    renderMessageText(content, message.text || '');
     for (const attachment of message.attachments || []) {
       if (attachment.type === 'image' && attachment.dataUrl) {
         const image = document.createElement('img');
@@ -469,6 +727,7 @@ function createMessageNode(message) {
 
 function renderDetail() {
   const conversation = getActiveConversation();
+  updateConversationChrome(conversation);
   const avatar = document.getElementById('detail-avatar');
   const name = document.getElementById('detail-name');
   const description = document.getElementById('detail-description');
@@ -478,7 +737,7 @@ function renderDetail() {
   const headSubtitle = document.getElementById('chat-subtitle');
   if (!conversation) return;
   const title = conversation.title || conversationTitle(conversation);
-  const icon = conversation.avatar || conversationAvatar(conversation);
+  const icon = conversationAvatar(conversation);
   avatar.src = icon;
   headAvatar.src = icon;
   name.textContent = title;
@@ -534,20 +793,321 @@ function renderAttachmentPreview() {
 function renderGroupMemberPicker() {
   const container = document.getElementById('group-member-list');
   if (!container) return;
-  const active = getActiveConversation();
-  const selected = new Set(active?.type === 'group' ? active.memberIds : state.store.characters.slice(0, 3).map(item => item.id));
+  const selected = state.groupMemberSelection;
+  const query = state.groupMemberSearch;
+  const characters = state.store.characters.filter(character => {
+    if (!query) return true;
+    return matchQuery([character.name, character.description, character.source], query);
+  });
   container.innerHTML = '';
-  for (const character of state.store.characters) {
+  for (const character of characters) {
     const item = document.createElement('button');
     item.className = `member-item${selected.has(character.id) ? ' is-selected' : ''}`;
     item.type = 'button';
     item.dataset.characterId = character.id;
     item.innerHTML = `
+      <span class="member-check" aria-hidden="true"></span>
+      <img src="${escapeHtml(characterAvatar(character))}" alt="">
+      <span class="member-text"><strong>${escapeHtml(character.name)}</strong><small>${escapeHtml(character.description || character.source)}</small></span>
+    `;
+    item.addEventListener('click', () => {
+      if (selected.has(character.id)) selected.delete(character.id);
+    else selected.add(character.id);
+      renderGroupMemberPicker();
+    });
+    container.appendChild(item);
+  }
+  if (!characters.length) {
+    container.innerHTML = '<div class="member-empty">没有匹配的好友。</div>';
+  }
+  renderGroupSelectionSummary();
+}
+
+function openGroupInfoPanel() {
+  const conversation = getActiveConversation();
+  if (!conversation || conversation.type !== 'group') return;
+  state.groupInfoEditing = false;
+  state.groupInfoMemberSearch = '';
+  state.groupMemberSelection = new Set(conversation.memberIds);
+  document.getElementById('group-info-panel')?.classList.remove('hidden');
+  document.getElementById('group-info-backdrop')?.classList.remove('hidden');
+  renderGroupInfoPanel();
+}
+
+function closeGroupInfoPanel() {
+  document.getElementById('group-info-panel')?.classList.add('hidden');
+  document.getElementById('group-info-backdrop')?.classList.add('hidden');
+  state.groupInfoEditing = false;
+}
+
+function openGroupInfoEditor() {
+  const conversation = getActiveConversation();
+  if (!conversation || conversation.type !== 'group') return;
+  state.groupInfoEditing = true;
+  state.groupInfoMemberSearch = '';
+  state.groupMemberSelection = new Set(conversation.memberIds);
+  const search = document.getElementById('group-info-member-search');
+  if (search) search.value = '';
+  renderGroupInfoPanel();
+}
+
+function renderGroupInfoPanel() {
+  const panel = document.getElementById('group-info-panel');
+  if (!panel || panel.classList.contains('hidden')) return;
+  const conversation = getActiveConversation();
+  if (!conversation || conversation.type !== 'group') {
+    closeGroupInfoPanel();
+    return;
+  }
+  const settings = normalizeGroupSettings(conversation.groupSettings);
+  const members = getGroupMembers(conversation);
+  setText('group-info-count', `查看${members.length}名群成员`);
+  setText('group-info-max-label', `${settings.maxParticipants} 人`);
+  const maxInput = document.getElementById('group-setting-max-members');
+  if (maxInput) {
+    maxInput.min = String(Math.max(2, members.length));
+    maxInput.value = String(settings.maxParticipants);
+  }
+  const chainInput = document.getElementById('group-setting-chain-limit');
+  if (chainInput) chainInput.value = String(settings.botChainLimit);
+  setChecked('group-setting-auto-talk', settings.autoBotChat);
+  setChecked('group-setting-idle-talk', settings.idleTalk);
+  setChecked('group-setting-bot-at', settings.botAtMentionTriggersReply);
+  setText('group-info-chain-label', `${settings.botChainLimit} 次`);
+  renderGroupInfoMemberGrid(members);
+  renderGroupInfoMemberEditor();
+}
+
+function renderGroupInfoMemberGrid(members) {
+  const grid = document.getElementById('group-info-member-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (const character of members.slice(0, 13)) {
+    const item = document.createElement('button');
+    item.className = 'group-info-member';
+    item.type = 'button';
+    item.title = character.name;
+    item.innerHTML = `
+      <img src="${escapeHtml(characterAvatar(character))}" alt="">
+      <span>${escapeHtml(compactLabel(character.name, 4))}</span>
+    `;
+    item.addEventListener('click', () => insertMentionText(character.name));
+    grid.appendChild(item);
+  }
+  grid.appendChild(createGroupInfoAction('group-info-invite-btn', '+', '邀请'));
+  grid.appendChild(createGroupInfoAction('group-info-remove-btn', '-', '移出'));
+}
+
+function createGroupInfoAction(id, symbol, label) {
+  const button = document.createElement('button');
+  button.className = 'group-info-member group-info-member--action';
+  button.id = id;
+  button.type = 'button';
+  button.innerHTML = `<span class="group-info-symbol">${symbol}</span><span>${label}</span>`;
+  button.addEventListener('click', openGroupInfoEditor);
+  return button;
+}
+
+function renderGroupInfoMemberEditor() {
+  const editor = document.getElementById('group-info-member-editor');
+  const list = document.getElementById('group-info-member-list');
+  const save = document.getElementById('group-info-save-members');
+  if (!editor || !list) return;
+  editor.classList.toggle('hidden', !state.groupInfoEditing);
+  if (!state.groupInfoEditing) return;
+  const query = state.groupInfoMemberSearch;
+  const selected = state.groupMemberSelection;
+  const characters = state.store.characters.filter(character => {
+    if (!query) return true;
+    return matchQuery([character.name, character.description, character.source], query);
+  });
+  list.innerHTML = '';
+  for (const character of characters) {
+    const item = document.createElement('button');
+    item.className = `group-info-member-row${selected.has(character.id) ? ' is-selected' : ''}`;
+    item.type = 'button';
+    item.innerHTML = `
+      <span class="member-check" aria-hidden="true"></span>
       <img src="${escapeHtml(characterAvatar(character))}" alt="">
       <span><strong>${escapeHtml(character.name)}</strong><small>${escapeHtml(character.description || character.source)}</small></span>
     `;
-    item.addEventListener('click', () => item.classList.toggle('is-selected'));
-    container.appendChild(item);
+    item.addEventListener('click', () => {
+      if (selected.has(character.id)) selected.delete(character.id);
+      else selected.add(character.id);
+      renderGroupInfoMemberEditor();
+    });
+    list.appendChild(item);
+  }
+  if (!characters.length) {
+    list.innerHTML = '<div class="member-empty">没有匹配的好友。</div>';
+  }
+  if (save) {
+    const count = selected.size;
+    save.disabled = count < 2;
+    save.textContent = `保存成员(${count})`;
+  }
+}
+
+function getGroupMembers(conversation) {
+  return conversation.memberIds
+    .map(id => getCharacterById(state.store.characters, id))
+    .filter(Boolean);
+}
+
+function updateMentionPicker() {
+  const input = document.getElementById('message-input');
+  const conversation = getActiveConversation();
+  if (!input || conversation?.type !== 'group') {
+    closeMentionPicker();
+    return;
+  }
+  const token = findMentionToken(input.value, input.selectionStart || 0);
+  if (!token) {
+    closeMentionPicker();
+    return;
+  }
+  const candidates = getMentionCandidates(conversation, token.query);
+  state.mention = {
+    active: candidates.length > 0,
+    start: token.start,
+    query: token.query,
+    selectedIndex: 0,
+    candidates
+  };
+  renderMentionPicker();
+}
+
+function handleMentionKeydown(event) {
+  if (!state.mention.active) return false;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeMentionPicker();
+    return true;
+  }
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    const delta = event.key === 'ArrowDown' ? 1 : -1;
+    const length = state.mention.candidates.length || 1;
+    state.mention.selectedIndex = (state.mention.selectedIndex + delta + length) % length;
+    renderMentionPicker();
+    return true;
+  }
+  if (event.key === 'Enter' || event.key === 'Tab') {
+    const candidate = state.mention.candidates[state.mention.selectedIndex];
+    if (candidate) {
+      event.preventDefault();
+      insertMentionText(candidate.insertName || candidate.name, { replaceToken: true });
+      return true;
+    }
+  }
+  return false;
+}
+
+function renderMentionPicker() {
+  const picker = document.getElementById('mention-popover');
+  if (!picker) return;
+  const conversation = getActiveConversation();
+  if (!state.mention.active || conversation?.type !== 'group') {
+    picker.classList.add('hidden');
+    picker.innerHTML = '';
+    return;
+  }
+  picker.classList.remove('hidden');
+  picker.innerHTML = '';
+  state.mention.candidates.forEach((candidate, index) => {
+    const row = document.createElement('button');
+    row.className = `mention-row${index === state.mention.selectedIndex ? ' is-active' : ''}`;
+    row.type = 'button';
+    row.innerHTML = `
+      <img src="${escapeHtml(candidate.avatar)}" alt="">
+      <span><strong>@${escapeHtml(candidate.name)}</strong><small>${escapeHtml(candidate.description || '群成员')}</small></span>
+    `;
+    row.addEventListener('mousedown', event => {
+      event.preventDefault();
+      insertMentionText(candidate.insertName || candidate.name, { replaceToken: true });
+    });
+    picker.appendChild(row);
+  });
+}
+
+function closeMentionPicker() {
+  state.mention.active = false;
+  state.mention.candidates = [];
+  const picker = document.getElementById('mention-popover');
+  if (picker) {
+    picker.classList.add('hidden');
+    picker.innerHTML = '';
+  }
+}
+
+function getMentionCandidates(conversation, query) {
+  const normalized = String(query || '').trim().toLowerCase();
+  const allCandidate = {
+    id: 'all',
+    name: '大家',
+    insertName: '大家',
+    avatar: 'src/_logo/icons/users.svg',
+    description: '全体成员'
+  };
+  const members = getGroupMembers(conversation).map(character => ({
+    id: character.id,
+    name: character.name,
+    insertName: character.name,
+    avatar: characterAvatar(character),
+    description: character.description || character.source
+  }));
+  return [allCandidate, ...members]
+    .filter(item => !normalized || item.name.toLowerCase().includes(normalized) || String(item.description || '').toLowerCase().includes(normalized))
+    .slice(0, 8);
+}
+
+function findMentionToken(value, caret) {
+  const before = String(value || '').slice(0, caret);
+  const match = before.match(/[@＠][^\s@＠，。！？、：:；;]*$/);
+  if (!match) return null;
+  return {
+    start: caret - match[0].length,
+    query: match[0].slice(1)
+  };
+}
+
+function insertMentionText(name, options = {}) {
+  const input = document.getElementById('message-input');
+  if (!input || !name) return;
+  const value = input.value || '';
+  const caret = input.selectionStart || value.length;
+  const token = options.replaceToken ? findMentionToken(value, caret) : null;
+  const start = token ? token.start : caret;
+  const end = token ? caret : caret;
+  const insert = `@${name} `;
+  input.value = `${value.slice(0, start)}${insert}${value.slice(end)}`;
+  const nextCaret = start + insert.length;
+  input.focus();
+  input.setSelectionRange(nextCaret, nextCaret);
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 128)}px`;
+  closeMentionPicker();
+}
+
+function renderMessageText(container, text) {
+  container.innerHTML = '';
+  const source = String(text || '');
+  const pattern = /[@＠][^\s@＠，。！？、：:；;]+/g;
+  let lastIndex = 0;
+  for (const match of source.matchAll(pattern)) {
+    if (match.index > lastIndex) {
+      container.appendChild(document.createTextNode(source.slice(lastIndex, match.index)));
+    }
+    const mention = document.createElement('button');
+    mention.className = 'message-mention';
+    mention.type = 'button';
+    mention.textContent = match[0];
+    mention.addEventListener('click', () => insertMentionText(match[0].slice(1)));
+    container.appendChild(mention);
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < source.length) {
+    container.appendChild(document.createTextNode(source.slice(lastIndex)));
   }
 }
 
@@ -555,8 +1115,13 @@ async function refreshKnowledgePanel() {
   const list = document.getElementById('kb-list');
   if (!list) return;
   const kbs = await listKnowledgeBases().catch(() => []);
-  const activeIds = new Set(getActiveKnowledgeBaseIds());
-  if (!state.selectedKbId && kbs.length) state.selectedKbId = kbs[0].id;
+  const activeIds = getActiveKnowledgeBaseIds().filter(id => kbs.some(kb => kb.id === id));
+  const activeSet = new Set(activeIds);
+  if (state.selectedKbId && !kbs.some(kb => kb.id === state.selectedKbId)) {
+    state.selectedKbId = '';
+    state.selectedKbFileId = '';
+  }
+  if (!state.selectedKbId && kbs.length) state.selectedKbId = activeIds[0] || kbs[0].id;
   list.innerHTML = '';
   for (const kb of kbs) {
     const item = document.createElement('button');
@@ -564,11 +1129,11 @@ async function refreshKnowledgePanel() {
     item.type = 'button';
     item.innerHTML = `
       <strong>${escapeHtml(kb.name)}</strong>
-      <small>${kb.fileCount || 0} 文件 · ${kb.chunkCount || 0} 分块 · ${activeIds.has(kb.id) ? '已启用' : '未启用'}</small>
+      <small>${kb.fileCount || 0} 文件 · ${kb.chunkCount || 0} 分块 · ${activeSet.has(kb.id) ? '已启用' : '未启用'}</small>
     `;
-    item.addEventListener('click', event => {
+    item.addEventListener('click', () => {
       state.selectedKbId = kb.id;
-      if (event.altKey) toggleActiveKnowledgeBaseId(kb.id);
+      state.selectedKbFileId = '';
       refreshKnowledgePanel();
     });
     item.addEventListener('dblclick', () => {
@@ -581,31 +1146,116 @@ async function refreshKnowledgePanel() {
 }
 
 async function renderKnowledgeDetail() {
-  const head = document.getElementById('kb-detail-head');
+  const empty = document.getElementById('kb-empty');
+  const detail = document.getElementById('kb-detail');
+  const title = document.getElementById('kb-current-title');
+  const meta = document.getElementById('kb-current-meta');
+  const activeStatus = document.getElementById('kb-active-status');
+  const enable = document.getElementById('kb-enable-toggle');
   const fileList = document.getElementById('kb-file-list');
-  const chunkPreview = document.getElementById('kb-chunk-preview');
-  if (!head || !fileList || !chunkPreview) return;
+  const chunkPreview = document.getElementById('kb-chunk-list');
+  if (!empty || !detail || !fileList || !chunkPreview) return;
+  const kbs = await listKnowledgeBases().catch(() => []);
+  const kb = kbs.find(item => item.id === state.selectedKbId) || null;
+  empty.classList.toggle('hidden', Boolean(kb));
+  detail.classList.toggle('hidden', !kb);
   if (!state.selectedKbId) {
-    head.textContent = '选择一个知识库查看文件与分块。';
     fileList.innerHTML = '';
     chunkPreview.innerHTML = '';
     return;
   }
-  const files = await getKnowledgeBaseFiles(state.selectedKbId);
-  const chunks = await getKnowledgeBaseChunks(state.selectedKbId);
-  head.textContent = `当前知识库：${state.selectedKbId}。双击左侧知识库可切换启用状态。`;
-  fileList.innerHTML = files.map(file => `
-    <div class="file-row">
-      <strong>${escapeHtml(file.name)}</strong>
-      <small>${file.charCount || 0} 字 · ${file.chunkCount || 0} 分块</small>
-    </div>
-  `).join('') || '<div class="file-row"><small>暂无文件。</small></div>';
-  chunkPreview.innerHTML = chunks.slice(0, 60).map(chunk => `
+  if (!kb) return;
+  const activeIds = getActiveKnowledgeBaseIds();
+  const isActive = activeIds.includes(kb.id);
+  if (title) title.textContent = kb.name;
+  if (meta) meta.textContent = `${kb.fileCount || 0} 文件 · ${kb.chunkCount || 0} 分块`;
+  if (activeStatus) {
+    activeStatus.textContent = isActive ? '此知识库正在参与 RAG 检索。' : '此知识库未启用，启用后会加入检索上下文。';
+    activeStatus.dataset.kind = isActive ? 'ok' : 'info';
+  }
+  if (enable) {
+    enable.textContent = isActive ? '停用检索' : '启用此知识库';
+    enable.classList.toggle('btn-primary', !isActive);
+  }
+  await renderKnowledgeFileList(kb.id);
+}
+
+async function renderKnowledgeFileList(kbId) {
+  const fileList = document.getElementById('kb-file-list');
+  if (!fileList) return;
+  const files = (await getKnowledgeBaseFiles(kbId)).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  if (!files.some(file => file.id === state.selectedKbFileId)) {
+    state.selectedKbFileId = files[0]?.id || '';
+  }
+  fileList.innerHTML = '';
+  if (!files.length) {
+    fileList.innerHTML = '<div class="kb-empty-line">还没有文档。上传 txt 或 md 文件后会自动建立索引。</div>';
+    await renderKnowledgeChunks(kbId, '');
+    return;
+  }
+  for (const file of files) {
+    const row = document.createElement('article');
+    row.className = `file-row${state.selectedKbFileId === file.id ? ' is-active' : ''}`;
+    row.tabIndex = 0;
+    row.dataset.fileId = file.id;
+    row.innerHTML = `
+      <span><strong>${escapeHtml(file.name)}</strong><small>${file.charCount || 0} 字 · ${file.chunkCount || 0} 分块 · ${formatBytes(file.size)}</small></span>
+      <button class="btn btn-danger" type="button" data-delete-file="${escapeHtml(file.id)}">删除</button>
+    `;
+    row.addEventListener('click', event => {
+      const deleteButton = event.target.closest('[data-delete-file]');
+      if (deleteButton) return;
+      state.selectedKbFileId = file.id;
+      renderKnowledgeChunks(kbId, file.id);
+      renderKnowledgeFileList(kbId);
+    });
+    row.querySelector('[data-delete-file]')?.addEventListener('click', async event => {
+      event.stopPropagation();
+      if (!confirm(`确认删除「${file.name}」及其所有分块？`)) return;
+      try {
+        await deleteKnowledgeBaseFile(file.id);
+        if (state.selectedKbFileId === file.id) state.selectedKbFileId = '';
+        setKbStatus('文件已删除，索引已重建。', 'ok');
+        refreshKnowledgePanel();
+      } catch (err) {
+        setKbStatus(err?.message || '删除文件失败。', 'warn');
+      }
+    });
+    fileList.appendChild(row);
+  }
+  await renderKnowledgeChunks(kbId, state.selectedKbFileId);
+}
+
+async function renderKnowledgeChunks(kbId, fileId) {
+  const title = document.getElementById('kb-preview-title');
+  const chunkPreview = document.getElementById('kb-chunk-list');
+  if (!chunkPreview) return;
+  if (!fileId) {
+    if (title) title.textContent = '分块预览';
+    chunkPreview.innerHTML = '<div class="kb-empty-line">选择一个文件查看分块。</div>';
+    return;
+  }
+  const files = await getKnowledgeBaseFiles(kbId);
+  const file = files.find(item => item.id === fileId);
+  const chunks = await getKnowledgeBaseChunks(kbId, fileId);
+  const previewChunks = chunks.slice(0, MAX_KB_PREVIEW_CHUNKS);
+  if (title) {
+    const suffix = chunks.length > MAX_KB_PREVIEW_CHUNKS ? ` · 前 ${MAX_KB_PREVIEW_CHUNKS}/${chunks.length} 块` : ` · ${chunks.length} 块`;
+    title.textContent = file ? `分块预览 · ${file.name}${suffix}` : '分块预览';
+  }
+  chunkPreview.innerHTML = previewChunks.map(chunk => `
     <div class="chunk-row">
       <strong>#${chunk.index + 1} ${escapeHtml(chunk.title || '片段')}</strong>
-      <small>${escapeHtml((chunk.text || '').slice(0, 220))}</small>
+      <small>${escapeHtml(compactText(chunk.text || '', MAX_KB_PREVIEW_CHARS))}</small>
     </div>
-  `).join('') || '<div class="chunk-row"><small>暂无分块。</small></div>';
+  `).join('') || '<div class="kb-empty-line">这个文件暂无分块。</div>';
+}
+
+function setKbStatus(text, kind = 'info') {
+  const status = document.getElementById('kb-upload-status') || document.getElementById('kb-active-status');
+  if (!status) return;
+  status.textContent = text || '';
+  status.dataset.kind = kind;
 }
 
 function renderMemoryNodePanel() {
@@ -613,54 +1263,113 @@ function renderMemoryNodePanel() {
   const stats = document.getElementById('memory-node-stats');
   if (stats) stats.textContent = `${store.memories.length} 条记忆 · ${store.edges.length} 条关系`;
   renderMemoryArchive();
+  if (!document.getElementById('memory-search-results')?.classList.contains('hidden')) performMemorySearch();
   renderMemoryGraph();
 }
 
 function renderMemoryArchive() {
   const list = document.getElementById('memory-archive-list');
   if (!list) return;
-  const memories = getOrphanMemories(getLongTermMemoryStore()).slice(0, 50);
-  list.innerHTML = memories.map(memory => `
-    <button class="memory-archive-item" type="button" data-memory-id="${escapeHtml(memory.id)}">
+  const store = getLongTermMemoryStore();
+  const filter = state.memoryGraph.archiveFilter || 'orphan';
+  const search = String(document.getElementById('memory-archive-search')?.value || '').trim().toLowerCase();
+  const orphanIds = new Set(getOrphanMemories(store).map(memory => memory.id));
+  const rows = store.memories
+    .filter(memory => {
+      if (filter === 'orphan' && !orphanIds.has(memory.id)) return false;
+      if (filter === 'public' && memory.scope !== 'public:roundtable') return false;
+      if (filter === 'private' && memory.scope === 'public:roundtable') return false;
+      if (!search) return true;
+      return [
+        memory.text,
+        memory.source,
+        memory.scope,
+        memory.characterName,
+        memory.characterId,
+        ...(memory.tags || [])
+      ].some(value => String(value || '').toLowerCase().includes(search));
+    })
+    .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))
+    .slice(0, 120);
+  updateMemoryArchiveFilter(filter);
+  list.innerHTML = rows.map(memory => `
+    <article class="memory-archive-item">
       <strong>${escapeHtml(memory.text)}</strong>
-      <small>${escapeHtml(memory.source)} · ${escapeHtml(memory.characterName || memory.characterId || '公共')}</small>
-    </button>
-  `).join('') || '<div class="memory-archive-item"><small>暂无未入图谱记忆。</small></div>';
-  list.querySelectorAll('[data-memory-id]').forEach(button => {
-    button.addEventListener('dblclick', () => {
-      deleteLongTermMemoryMemory(button.dataset.memoryId);
+      <small>${escapeHtml(memory.source)} · ${memory.scope === 'public:roundtable' ? '公共记忆' : '私有记忆'} · ${escapeHtml(memory.characterName || memory.characterId || '公共')}</small>
+      <button class="btn btn-danger" type="button" data-delete-memory-id="${escapeHtml(memory.id)}">删除</button>
+    </article>
+  `).join('') || '<div class="memory-empty-line">没有匹配的记忆。</div>';
+  list.querySelectorAll('[data-delete-memory-id]').forEach(button => {
+    button.addEventListener('click', () => {
+      deleteLongTermMemoryMemory(button.dataset.deleteMemoryId);
       renderMemoryNodePanel();
     });
   });
 }
 
-function renderMemorySearch() {
+function performMemorySearch() {
   const query = document.getElementById('memory-search-input')?.value.trim() || '';
+  const panel = document.getElementById('memory-search-results');
+  const title = document.getElementById('memory-result-title');
   const list = document.getElementById('memory-result-list');
   const store = getLongTermMemoryStore();
   if (!list) return;
+  panel?.classList.remove('hidden');
+  if (title) title.textContent = query ? `搜索：${query}` : '全部关系';
   const results = store.edges.filter(edge => {
     if (!query) return true;
     return `${edge.head} ${edge.relation} ${edge.tail}`.includes(query);
   }).slice(0, 60);
   list.innerHTML = results.map(edge => `
-    <button class="memory-result-item" type="button" data-edge-id="${escapeHtml(edge.id)}">
+    <article class="memory-result-item" role="button" tabindex="0" data-edge-id="${escapeHtml(edge.id)}">
       <strong>${escapeHtml(edge.head)} ${escapeHtml(edge.relation)} ${escapeHtml(edge.tail)}</strong>
-      <small>${edge.scope === 'public:roundtable' ? '公共记忆' : '私有记忆'} · 来源 ${(edge.sourceMemoryIds || []).length} 条 · 双击删除</small>
-    </button>
+      <small>${edge.scope === 'public:roundtable' ? '公共记忆' : '私有记忆'} · 来源 ${(edge.sourceMemoryIds || []).length} 条</small>
+      <span class="memory-result-actions"><span>定位节点</span><button class="btn btn-danger" type="button" data-delete-edge-id="${escapeHtml(edge.id)}">删除</button></span>
+    </article>
   `).join('') || '<div class="memory-result-item"><small>没有匹配的关系。</small></div>';
   list.querySelectorAll('[data-edge-id]').forEach(button => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', event => {
+      if (event.target.closest('[data-delete-edge-id]')) return;
       const graph = state.memoryGraph;
       const edge = graph.edges.find(item => item.id === button.dataset.edgeId);
       graph.selectedNodeId = edge?.from || '';
       renderMemoryNodeDetail();
     });
-    button.addEventListener('dblclick', () => {
-      deleteLongTermMemoryEdge(button.dataset.edgeId);
+  });
+  list.querySelectorAll('[data-delete-edge-id]').forEach(button => {
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      const edge = store.edges.find(item => item.id === button.dataset.deleteEdgeId);
+      const label = edge ? `${edge.head} --${edge.relation}--> ${edge.tail}` : '该关系';
+      if (!confirm(`确认删除「${label}」？\n这会同时删除长期记忆知识库中对应的相关内容。`)) return;
+      deleteLongTermMemoryEdge(button.dataset.deleteEdgeId);
       renderMemoryNodePanel();
     });
   });
+}
+
+function updateMemoryArchiveFilter(filter) {
+  document.querySelectorAll('[data-memory-filter]').forEach(button => {
+    const active = button.dataset.memoryFilter === filter;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function closeMemoryArchivePopover() {
+  document.getElementById('memory-archive-popover')?.classList.add('hidden');
+}
+
+function closeMemorySettingsPopover() {
+  document.getElementById('memory-settings-popover')?.classList.add('hidden');
+}
+
+function syncMemoryNodeSettings() {
+  const settings = getLongTermMemorySettings();
+  setChecked('memory-setting-enabled', settings.enabled);
+  setChecked('memory-setting-intimate', settings.includeIntimate);
+  setValue('memory-setting-retention', settings.retentionDays);
+  setValue('memory-setting-keywords', (settings.blockedKeywords || []).join('\n'));
 }
 
 function renderMemoryGraph() {
@@ -677,13 +1386,20 @@ function renderMemoryGraph() {
   const height = rect.height || 500;
   const centerX = width / 2;
   const centerY = height / 2;
+  const positionIds = new Set(graph.nodes.map(node => node.id));
+  Object.keys(state.memoryGraph.positions).forEach(id => {
+    if (!positionIds.has(id)) delete state.memoryGraph.positions[id];
+  });
   const nodes = graph.nodes.map((node, index) => {
     const angle = (Math.PI * 2 * index) / Math.max(1, graph.nodes.length);
     const radius = Math.max(90, Math.min(width, height) * 0.34);
+    const fallbackX = centerX + Math.cos(angle) * radius;
+    const fallbackY = centerY + Math.sin(angle) * radius;
+    const saved = state.memoryGraph.positions[node.id];
     return {
       ...node,
-      x: centerX + Math.cos(angle) * radius,
-      y: centerY + Math.sin(angle) * radius,
+      x: Number.isFinite(saved?.x) ? saved.x : fallbackX,
+      y: Number.isFinite(saved?.y) ? saved.y : fallbackY,
       r: node.kind === 'player' ? 24 : node.kind === 'public' ? 21 : 18
     };
   });
@@ -692,6 +1408,10 @@ function renderMemoryGraph() {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
+  const transform = state.memoryGraph.transform;
+  ctx.save();
+  ctx.translate(transform.x, transform.y);
+  ctx.scale(transform.scale, transform.scale);
   ctx.strokeStyle = '#d7e1ea';
   ctx.lineWidth = 1;
   ctx.font = '12px "Segoe UI", sans-serif';
@@ -721,9 +1441,32 @@ function renderMemoryGraph() {
     ctx.font = '600 12px "Segoe UI", sans-serif';
     ctx.fillText(compactLabel(node.label), node.x, node.y + 4);
   }
+  ctx.restore();
   state.memoryGraph.nodes = nodes;
   state.memoryGraph.edges = edges;
   renderMemoryNodeDetail();
+}
+
+function screenToGraph(x, y) {
+  const transform = state.memoryGraph.transform;
+  return {
+    x: (x - transform.x) / transform.scale,
+    y: (y - transform.y) / transform.scale
+  };
+}
+
+function findMemoryNodeAtPoint(point) {
+  return state.memoryGraph.nodes.find(item => Math.hypot(item.x - point.x, item.y - point.y) < item.r + 4);
+}
+
+function zoomMemoryGraph(screenX, screenY, factor) {
+  const transform = state.memoryGraph.transform;
+  const before = screenToGraph(screenX, screenY);
+  const nextScale = Math.max(0.45, Math.min(2.8, transform.scale * factor));
+  transform.scale = nextScale;
+  transform.x = screenX - before.x * nextScale;
+  transform.y = screenY - before.y * nextScale;
+  renderMemoryGraph();
 }
 
 function renderMemoryNodeDetail() {
@@ -774,14 +1517,22 @@ function updateContextStatus() {
   setText('model-status', settings.apiKey ? settings.model : '未配置');
 }
 
-function openPanel(id) {
+function openPanel(id, options = {}) {
   document.getElementById(id)?.classList.remove('hidden');
-  if (id === 'group-editor-panel') renderGroupMemberPicker();
+  if (id === 'group-editor-panel') {
+    prepareGroupEditor(options);
+    renderGroupMemberPicker();
+  }
   if (id === 'memory-node-panel') renderMemoryNodePanel();
 }
 
 function closePanel(id) {
   document.getElementById(id)?.classList.add('hidden');
+  if (id === 'memory-node-panel') {
+    document.getElementById('memory-search-results')?.classList.add('hidden');
+    closeMemoryArchivePopover();
+    closeMemorySettingsPopover();
+  }
 }
 
 function showSettingsSection(section) {
@@ -795,6 +1546,9 @@ function showSettingsSection(section) {
 
 function selectConversation(id) {
   const next = saveAppStore({ ...state.store, activeConversationId: id });
+  document.getElementById('app')?.classList.remove('is-detail-open');
+  closeGroupInfoPanel();
+  closeMentionPicker();
   updateStore(next);
   document.getElementById('app')?.classList.add('is-chat-open');
 }
@@ -802,6 +1556,33 @@ function selectConversation(id) {
 function updateStore(store) {
   state.store = store || loadAppStore();
   renderAll();
+}
+
+function scheduleRoundtableIdle() {
+  if (roundtableIdleTimer) clearTimeout(roundtableIdleTimer);
+  roundtableIdleTimer = 0;
+  const conversation = getActiveConversation();
+  if (!conversation || conversation.type !== 'group') return;
+  const settings = normalizeGroupSettings(conversation.groupSettings);
+  if (!settings.idleTalk || !settings.autoBotChat) return;
+  const messages = getConversationMessages(state.store, conversation.id);
+  const latest = messages[messages.length - 1];
+  if (latest?.status === 'typing') return;
+  const lastActivity = latest?.createdAt || conversation.updatedAt || Date.now();
+  const delay = Math.max(12000, ROUNDTABLE_IDLE_DELAY_MS - (Date.now() - lastActivity));
+  roundtableIdleTimer = setTimeout(async () => {
+    const active = getActiveConversation();
+    if (!active || active.id !== conversation.id || active.type !== 'group') return;
+    const activeSettings = normalizeGroupSettings(active.groupSettings);
+    if (!activeSettings.idleTalk || !activeSettings.autoBotChat) return;
+    await runRoundtableTurn({
+      store: state.store,
+      conversation: active,
+      characters: state.store.characters,
+      triggerText: '',
+      onStore: updateStore
+    });
+  }, delay);
 }
 
 function getActiveConversation() {
@@ -826,7 +1607,83 @@ function conversationAvatar(conversation) {
   if (conversation.type === 'private') {
     return characterAvatar(getCharacterById(state.store.characters, conversation.memberIds[0]));
   }
-  return conversation.avatar || 'src/_logo/emoji/speech_balloon_3d.png';
+  return 'src/_char/Profile_GroupChat.png';
+}
+
+function handleChatInfoToggle() {
+  const conversation = getActiveConversation();
+  if (!conversation) return;
+  if (conversation.type === 'group') {
+    openGroupInfoPanel();
+    return;
+  }
+  document.getElementById('app')?.classList.toggle('is-detail-open');
+  renderDetail();
+}
+
+function updateConversationChrome(conversation) {
+  const app = document.getElementById('app');
+  const infoButton = document.getElementById('chat-info-btn');
+  if (!app) return;
+  const isPrivate = conversation?.type === 'private';
+  const isGroup = conversation?.type === 'group';
+  app.classList.toggle('is-private-chat', Boolean(isPrivate));
+  app.classList.toggle('is-group-chat', Boolean(isGroup));
+  if (!isPrivate) app.classList.remove('is-detail-open');
+  if (!isGroup) closeGroupInfoPanel();
+  if (infoButton) {
+    infoButton.title = isPrivate ? '角色卡片' : '群聊成员';
+    infoButton.setAttribute('aria-label', isPrivate ? '打开角色卡片' : '打开群聊成员');
+    const icon = infoButton.querySelector('img');
+    if (icon) icon.src = isPrivate ? 'src/_logo/icons/bot.svg' : 'src/_logo/icons/users.svg';
+  }
+  document.querySelectorAll('.detail-group-action').forEach(button => {
+    button.classList.toggle('hidden', !isGroup);
+  });
+}
+
+function prepareGroupEditor(options = {}) {
+  const active = getActiveConversation();
+  state.groupMemberSearch = '';
+  state.groupEditorMode = !options.fresh && active?.type === 'group' ? 'edit' : 'create';
+  const search = document.getElementById('group-member-search');
+  if (search) search.value = '';
+  state.groupMemberSelection = new Set(state.groupEditorMode === 'edit' ? active.memberIds : []);
+}
+
+function renderGroupSelectionSummary() {
+  const strip = document.getElementById('group-selected-strip');
+  const total = document.getElementById('group-member-total');
+  const create = document.getElementById('create-group-btn');
+  const title = document.getElementById('group-editor-title');
+  const selectedCharacters = [...state.groupMemberSelection]
+    .map(id => getCharacterById(state.store.characters, id))
+    .filter(Boolean);
+  if (total) total.textContent = String(state.store.characters.length);
+  if (title) title.textContent = state.groupEditorMode === 'edit' ? '群聊成员' : '创建群聊';
+  if (strip) {
+    strip.innerHTML = selectedCharacters.length
+      ? selectedCharacters.map(character => `<img src="${escapeHtml(characterAvatar(character))}" alt="${escapeHtml(character.name)}" title="${escapeHtml(character.name)}">`).join('')
+      : '<span>选择至少 2 位好友</span>';
+  }
+  if (create) {
+    const count = selectedCharacters.length;
+    create.disabled = count < 2;
+    if (state.groupEditorMode === 'edit') {
+      create.textContent = count ? `保存成员(${count})` : '保存成员';
+    } else {
+      create.textContent = count ? `创建群聊(${count})` : '创建群聊';
+    }
+  }
+}
+
+function buildGroupTitle(memberIds) {
+  const names = memberIds
+    .map(id => getCharacterById(state.store.characters, id)?.name)
+    .filter(Boolean);
+  if (!names.length) return '圆桌密语';
+  const title = names.slice(0, 3).join('、');
+  return names.length > 3 ? `${title} 等人的群聊` : `${title}的群聊`;
 }
 
 function attachmentSummary(attachments = []) {
@@ -844,6 +1701,11 @@ function setValue(id, value) {
   if (element) element.value = value ?? '';
 }
 
+function setChecked(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.checked = Boolean(value);
+}
+
 function setText(id, value) {
   const element = document.getElementById(id);
   if (element) element.textContent = value ?? '';
@@ -852,6 +1714,22 @@ function setText(id, value) {
 function compactLabel(label, max = 7) {
   const chars = [...String(label || '')];
   return chars.length > max ? `${chars.slice(0, max).join('')}...` : label;
+}
+
+function compactText(text, max = 360) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  const chars = [...normalized];
+  return chars.length > max ? `${chars.slice(0, max).join('')}...` : normalized;
+}
+
+function formatBytes(size) {
+  const bytes = Math.max(0, Number(size) || 0);
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) {
+    const value = bytes / 1024;
+    return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function escapeHtml(value) {

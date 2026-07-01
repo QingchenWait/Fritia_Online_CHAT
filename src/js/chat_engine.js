@@ -107,11 +107,15 @@ function buildMessages({ character, history, userText, ragMessage, memoryMessage
     `你正在一个 QQ / Telegram 风格的角色扮演聊天软件中发言。`,
     `本次你只扮演：${character.name}。不要代替用户或其他角色发言。`,
     mode === 'roundtable'
-      ? '这是群聊“圆桌密语”。如果要回应某人，可用 @名字 开头；仍然只输出你自己的消息。'
+      ? '这是群聊“圆桌密语”。仍然只输出你自己的消息。'
       : '这是私聊。请像即时通讯好友一样自然回复。',
+    mode === 'roundtable' && event?.expectsJson
+      ? '本轮圆桌调度要求只输出一个 JSON 对象，不要 Markdown、代码块或额外解释；JSON 中的 text 字段才是实际聊天内容。'
+      : '',
     `你的完整人格设定如下：\n${character.prompt || `你正在扮演 ${character.name}。`}`,
     character.examples ? `示例对话：\n${character.examples}` : '',
-    event?.targetName ? `本轮主要回应对象：${event.targetName}` : ''
+    event?.targetName ? `本轮主要回应对象：${event.targetName}` : '',
+    event?.botChainLimit ? `互聊进度：${event.interBotDebt || 0}/${event.botChainLimit}` : ''
   ].filter(Boolean).join('\n\n');
   const recent = history.slice(-historyLimit).map(item => ({
     role: item.role === 'assistant' ? 'assistant' : item.role === 'system' ? 'system' : 'user',

@@ -70,6 +70,14 @@ const DEFAULT_STORE = {
   updatedAt: 0
 };
 
+export const DEFAULT_GROUP_SETTINGS = Object.freeze({
+  autoBotChat: true,
+  idleTalk: false,
+  botAtMentionTriggersReply: false,
+  maxParticipants: 6,
+  botChainLimit: 3
+});
+
 export function loadAppStore() {
   const store = loadJson(STORAGE_KEYS.app, DEFAULT_STORE);
   return normalizeAppStore(store);
@@ -124,7 +132,7 @@ export function normalizeConversation(raw = {}) {
   if (!id) return null;
   const type = raw.type === 'group' ? 'group' : 'private';
   const memberIds = Array.isArray(raw.memberIds) ? [...new Set(raw.memberIds.map(item => clampText(item, 80)).filter(Boolean))] : [];
-  return {
+  const conversation = {
     id,
     type,
     title: clampText(raw.title, 100),
@@ -133,6 +141,22 @@ export function normalizeConversation(raw = {}) {
     createdAt: Number(raw.createdAt) || now(),
     updatedAt: Number(raw.updatedAt) || now(),
     unread: Math.max(0, Math.floor(Number(raw.unread) || 0))
+  };
+  if (type === 'group') {
+    conversation.avatar = conversation.avatar || 'src/_char/Profile_GroupChat.png';
+    conversation.groupSettings = normalizeGroupSettings(raw.groupSettings);
+  }
+  return conversation;
+}
+
+export function normalizeGroupSettings(raw = {}) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  return {
+    autoBotChat: source.autoBotChat !== false,
+    idleTalk: source.idleTalk === true,
+    botAtMentionTriggersReply: source.botAtMentionTriggersReply === true,
+    maxParticipants: clampNumber(source.maxParticipants, 2, 20, DEFAULT_GROUP_SETTINGS.maxParticipants),
+    botChainLimit: clampNumber(source.botChainLimit, 1, 6, DEFAULT_GROUP_SETTINGS.botChainLimit)
   };
 }
 
@@ -255,15 +279,13 @@ export function createGroupConversation(store, title, memberIds, characters = []
   const cleanMembers = [...new Set(memberIds.map(item => clampText(item, 80)).filter(Boolean))];
   const id = `group:${hashString(`${title}|${cleanMembers.join(',')}`)}`;
   const existing = store.conversations.find(item => item.id === id);
-  const memberAvatars = cleanMembers
-    .map(idValue => characters.find(item => item.id === idValue)?.avatar)
-    .filter(Boolean);
   const conversation = {
     id,
     type: 'group',
     title: clampText(title, 80) || '圆桌密语',
-    avatar: memberAvatars[0] || 'src/_logo/emoji/speech_balloon_3d.png',
+    avatar: 'src/_char/Profile_GroupChat.png',
     memberIds: cleanMembers,
+    groupSettings: normalizeGroupSettings(existing?.groupSettings),
     createdAt: existing?.createdAt || now(),
     updatedAt: now()
   };
@@ -273,8 +295,36 @@ export function createGroupConversation(store, title, memberIds, characters = []
   else next.conversations.unshift(conversation);
   if (!next.messages[id]) next.messages[id] = [];
   next.activeConversationId = id;
-  saveAppStore(next);
-  return conversation;
+  const saved = saveAppStore(next);
+  return saved.conversations.find(item => item.id === id) || normalizeConversation(conversation);
+}
+
+export function updateGroupConversation(store, conversationId, patch = {}) {
+  const next = structuredCloneSafe(store);
+  const index = next.conversations.findIndex(item => item.id === conversationId && item.type === 'group');
+  if (index < 0) return store;
+  const current = next.conversations[index];
+  const memberIds = Array.isArray(patch.memberIds)
+    ? [...new Set(patch.memberIds.map(item => clampText(item, 80)).filter(Boolean))]
+    : current.memberIds;
+  const groupSettings = patch.groupSettings
+    ? normalizeGroupSettings({ ...current.groupSettings, ...patch.groupSettings })
+    : normalizeGroupSettings(current.groupSettings);
+  const conversation = normalizeConversation({
+    ...current,
+    ...patch,
+    id: current.id,
+    type: 'group',
+    title: patch.title === undefined ? current.title : clampText(patch.title, 80),
+    avatar: 'src/_char/Profile_GroupChat.png',
+    memberIds,
+    groupSettings,
+    updatedAt: now()
+  });
+  next.conversations[index] = conversation;
+  if (!next.messages[current.id]) next.messages[current.id] = [];
+  next.activeConversationId = current.id;
+  return saveAppStore(next);
 }
 
 export function hashString(value = '') {
@@ -285,6 +335,12 @@ export function hashString(value = '') {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(36);
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(number)));
 }
 
 export function formatTime(ts) {

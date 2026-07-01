@@ -76,7 +76,7 @@
           <button class="icon-btn" type="button" title="视频通话占位">
             <img src="src/_logo/icons/video.svg" alt="">
           </button>
-          <button class="icon-btn" type="button" data-panel-open="group-editor-panel" title="群聊成员">
+          <button class="icon-btn" id="chat-info-btn" type="button" data-chat-info-toggle title="会话信息">
             <img src="src/_logo/icons/users.svg" alt="">
           </button>
         </div>
@@ -91,6 +91,7 @@
       </section>
 
       <footer class="composer">
+        <div id="mention-popover" class="mention-popover hidden" role="listbox" aria-label="@ 群成员"></div>
         <div id="attachment-preview" class="attachment-preview hidden"></div>
         <div class="composer-tools">
           <button class="icon-btn" type="button" title="表情">
@@ -140,7 +141,7 @@
             <img src="src/_logo/icons/network.svg" alt="">
             <span>记忆节点</span>
           </button>
-          <button type="button" data-panel-open="group-editor-panel">
+          <button type="button" class="detail-group-action" data-group-info-open>
             <img src="src/_logo/icons/messages-square.svg" alt="">
             <span>群聊成员</span>
           </button>
@@ -158,6 +159,64 @@
       </section>
     </aside>
   </div>
+
+  <div id="group-info-backdrop" class="group-info-backdrop hidden"></div>
+  <aside id="group-info-panel" class="group-info-panel hidden" aria-label="群聊成员与设置">
+    <div class="group-info-shell">
+      <header class="group-info-head">
+        <div>
+          <h2>群聊成员</h2>
+          <button id="group-info-count" class="group-link-btn" type="button">查看0名群成员</button>
+        </div>
+        <button id="group-info-close" class="icon-btn" type="button" title="关闭">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <section class="group-info-card">
+        <div id="group-info-member-grid" class="group-info-member-grid"></div>
+        <div id="group-info-member-editor" class="group-info-member-editor hidden">
+          <input id="group-info-member-search" type="search" placeholder="搜索好友">
+          <div id="group-info-member-list" class="group-info-member-list"></div>
+          <div class="group-info-editor-actions">
+            <button id="group-info-cancel-members" class="btn" type="button">取消</button>
+            <button id="group-info-save-members" class="btn btn-primary" type="button">保存成员</button>
+          </div>
+        </div>
+      </section>
+      <section class="group-info-section">
+        <h3>聊天设置</h3>
+        <label class="toggle-row">
+          <span>允许角色自动接话</span>
+          <input id="group-setting-auto-talk" type="checkbox">
+        </label>
+        <label class="toggle-row">
+          <span>允许空闲时主动搭话</span>
+          <input id="group-setting-idle-talk" type="checkbox">
+        </label>
+        <label class="toggle-row">
+          <span>Bot 开头 @ 也能触发回复</span>
+          <input id="group-setting-bot-at" type="checkbox">
+        </label>
+        <label class="group-setting-row group-setting-slider">
+          <span>玩家未回话时最多互聊</span>
+          <input id="group-setting-chain-limit" type="range" min="1" max="6" step="1">
+          <small id="group-info-chain-label">3 次</small>
+        </label>
+      </section>
+      <section class="group-info-section group-info-rows">
+        <label class="group-setting-row">
+          <span>群聊最大人数</span>
+          <input id="group-setting-max-members" type="number" min="2" max="20" step="1">
+          <small id="group-info-max-label">6 人</small>
+        </label>
+        <button id="group-info-more-settings" class="group-setting-row group-setting-button" type="button">
+          <span>更多设置</span>
+          <small>›</small>
+        </button>
+      </section>
+      <button id="group-info-leave" class="group-leave-btn" type="button">退出群聊</button>
+    </div>
+  </aside>
 
   <div id="character-import-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="character-import-title">
     <div class="modal-shell">
@@ -209,21 +268,24 @@
       <header class="modal-head">
         <div>
           <small>ROUND TABLE</small>
-          <h2 id="group-editor-title">群聊与成员</h2>
+          <h2 id="group-editor-title">创建群聊</h2>
         </div>
         <button class="icon-btn" type="button" data-panel-close="group-editor-panel">
           <img src="src/_logo/icons/x.svg" alt="">
         </button>
       </header>
       <div class="group-editor">
-        <label>
-          <span>群聊名称</span>
-          <input id="group-name" placeholder="圆桌密语">
-        </label>
+        <div class="group-create-search">
+          <div id="group-selected-strip" class="group-selected-strip" aria-live="polite"></div>
+          <input id="group-member-search" type="search" placeholder="搜索">
+        </div>
+        <div class="group-list-head">
+          <strong>好友列表</strong>
+          <span id="group-member-total">0</span>
+        </div>
         <div id="group-member-list" class="member-picker"></div>
-        <div class="form-actions">
-          <button id="create-group-btn" class="btn btn-primary" type="button">创建 / 更新群聊</button>
-          <button id="roundtable-autoplay-btn" class="btn" type="button">让角色接话</button>
+        <div class="group-create-actions">
+          <button id="create-group-btn" class="btn btn-primary" type="button" disabled>创建群聊</button>
         </div>
       </div>
     </div>
@@ -261,20 +323,58 @@
 
           <div class="settings-view" data-settings-view="knowledge">
             <div class="panel-title"><h3>知识库</h3><p>继承旧项目 IndexedDB + BM25/CJK 分块组织方式。</p></div>
-            <div class="kb-toolbar">
-              <input id="kb-name-input" placeholder="新知识库名称">
-              <button id="kb-create-btn" class="btn" type="button">创建</button>
-              <label class="btn">
-                上传 txt/md
-                <input id="kb-file-input" type="file" accept=".txt,.md" multiple hidden>
-              </label>
-            </div>
-            <div class="kb-layout">
-              <aside id="kb-list" class="kb-list"></aside>
-              <section class="kb-detail">
-                <div id="kb-detail-head" class="kb-detail-head">选择一个知识库查看文件与分块。</div>
-                <div id="kb-file-list" class="kb-files-panel"></div>
-                <div id="kb-chunk-preview" class="kb-chunks-panel"></div>
+            <div class="knowledge-workbench">
+              <aside class="kb-sidebar" aria-label="知识库列表">
+                <div class="kb-create-row">
+                  <input id="kb-name-input" placeholder="新建知识库名称">
+                  <button id="kb-create-btn" class="btn btn-primary" type="button">创建</button>
+                </div>
+                <div id="kb-list" class="kb-list"></div>
+              </aside>
+              <section class="kb-main" aria-label="知识库详情">
+                <div id="kb-empty" class="kb-empty-state">
+                  <span>ARCHIVE EMPTY</span>
+                  <strong>创建知识库后上传 txt / md 文件</strong>
+                </div>
+                <div id="kb-detail" class="kb-detail hidden">
+                  <div id="kb-detail-head" class="kb-detail-head">
+                    <div>
+                      <span>资料库终端</span>
+                      <h3 id="kb-current-title">知识库</h3>
+                      <p id="kb-current-meta">0 文件 · 0 分块</p>
+                    </div>
+                    <div class="kb-actions">
+                      <button id="kb-enable-toggle" class="btn btn-primary" type="button">启用此知识库</button>
+                      <button id="kb-delete-btn" class="btn btn-danger" type="button">删除知识库</button>
+                    </div>
+                  </div>
+                  <div id="kb-active-status" class="kb-status">选择知识库后可启用检索。</div>
+                  <div class="kb-upload-console">
+                    <input id="kb-file-input" type="file" accept=".txt,.md,text/plain,text/markdown" multiple hidden>
+                    <button id="kb-upload-btn" class="kb-upload-card" type="button">
+                      <span>LOCAL FILES</span>
+                      <strong>上传 txt / md 文档</strong>
+                      <small>默认 512 字分块 · 50 字重叠 · BM25 本地索引</small>
+                    </button>
+                    <div id="kb-upload-status" class="kb-status" aria-live="polite">等待上传文档。</div>
+                  </div>
+                  <div class="kb-management-grid">
+                    <section class="kb-files-panel">
+                      <div class="kb-panel-label">
+                        <span>文件列表</span>
+                        <strong>FILES</strong>
+                      </div>
+                      <div id="kb-file-list" class="kb-file-list"></div>
+                    </section>
+                    <section class="kb-chunks-panel">
+                      <div class="kb-panel-label">
+                        <span id="kb-preview-title">分块预览</span>
+                        <strong>CHUNKS</strong>
+                      </div>
+                      <div id="kb-chunk-list" class="kb-chunk-list"></div>
+                    </section>
+                  </div>
+                </div>
               </section>
             </div>
           </div>
@@ -325,6 +425,8 @@
         </div>
         <div class="modal-head-actions">
           <span id="memory-node-stats" class="status-pill">0 条记忆 · 0 条关系</span>
+          <button id="memory-archive-btn" class="btn" type="button">记忆档案</button>
+          <button id="memory-settings-btn" class="btn" type="button">设置</button>
           <button class="icon-btn" type="button" data-panel-close="memory-node-panel">
             <img src="src/_logo/icons/x.svg" alt="">
           </button>
@@ -333,19 +435,73 @@
       <div class="memory-layout">
         <aside class="memory-command-panel">
           <div class="memory-search-console">
-            <input id="memory-search-input" placeholder="搜索实体或关系">
-            <button id="memory-search-btn" class="btn" type="button">搜索</button>
+            <label class="memory-panel-kicker" for="memory-search-input">ENTITY SEARCH</label>
+            <div class="memory-search-row">
+              <button id="memory-search-toggle" class="icon-btn memory-search-toggle" type="button" aria-label="打开实体搜索" aria-expanded="false">
+                <img src="src/_logo/icons/search.svg" alt="">
+              </button>
+              <input id="memory-search-input" placeholder="搜索实体或关系">
+              <button id="memory-search-btn" class="btn btn-primary" type="button">搜索</button>
+            </div>
           </div>
-          <div id="memory-result-list" class="memory-result-list"></div>
-          <div class="memory-archive">
-            <div class="section-head"><h3>记忆档案</h3></div>
-            <div id="memory-archive-list" class="memory-archive-list"></div>
-          </div>
+          <section class="memory-node-card">
+            <div class="section-head"><h3>节点详情</h3></div>
+            <div id="memory-node-detail" class="memory-node-detail">点击节点查看关系。</div>
+          </section>
         </aside>
         <section class="memory-graph-wrap">
-          <canvas id="memory-graph-canvas" width="960" height="620"></canvas>
-          <aside id="memory-node-detail" class="memory-node-detail">点击节点查看关系。</aside>
+          <canvas id="memory-graph-canvas" width="960" height="620" aria-label="长期记忆知识图谱"></canvas>
+          <div class="memory-graph-hint">滚轮缩放 · 拖动画布 · 点击节点查看</div>
         </section>
+        <aside id="memory-search-results" class="memory-result-panel hidden" aria-live="polite">
+          <div class="memory-result-head">
+            <strong id="memory-result-title">搜索结果</strong>
+            <button id="memory-result-close" class="memory-mini-close" type="button" aria-label="关闭搜索结果">×</button>
+          </div>
+          <div id="memory-result-list" class="memory-result-list"></div>
+        </aside>
+        <aside id="memory-archive-popover" class="memory-archive-popover hidden" aria-live="polite">
+          <div class="memory-result-head">
+            <strong>记忆档案</strong>
+            <button id="memory-archive-close" class="memory-mini-close" type="button" aria-label="关闭记忆档案">×</button>
+          </div>
+          <div class="memory-archive-toolbar">
+            <label class="memory-archive-search-field" for="memory-archive-search">
+              <span>档案搜索</span>
+              <input id="memory-archive-search" type="text" maxlength="80" placeholder="搜索文本、角色、来源或 scope">
+            </label>
+            <div id="memory-archive-filter" class="memory-archive-filter" role="tablist" aria-label="记忆档案筛选">
+              <button class="is-active" type="button" data-memory-filter="orphan" aria-pressed="true">未入图谱</button>
+              <button type="button" data-memory-filter="all" aria-pressed="false">全部</button>
+              <button type="button" data-memory-filter="private" aria-pressed="false">私有</button>
+              <button type="button" data-memory-filter="public" aria-pressed="false">公共</button>
+            </div>
+          </div>
+          <div id="memory-archive-list" class="memory-archive-list"></div>
+        </aside>
+        <aside id="memory-settings-popover" class="memory-settings-popover hidden">
+          <div class="memory-result-head">
+            <strong>长期记忆设置</strong>
+            <button id="memory-settings-close" class="memory-mini-close" type="button" aria-label="关闭长期记忆设置">×</button>
+          </div>
+          <label class="memory-toggle-row">
+            <input id="memory-setting-enabled" type="checkbox">
+            <span>开启长期记忆收集</span>
+          </label>
+          <label class="memory-setting-field">
+            <span>存储天数</span>
+            <input id="memory-setting-retention" type="number" min="1" max="3650" step="1" value="60">
+          </label>
+          <label class="memory-setting-field">
+            <span>不录入关键词</span>
+            <textarea id="memory-setting-keywords" maxlength="800" placeholder="每行一个关键词，命中后不写入长期记忆"></textarea>
+          </label>
+          <label class="memory-toggle-row">
+            <input id="memory-setting-intimate" type="checkbox">
+            <span>允许录入亲密模式内容</span>
+          </label>
+          <button id="memory-node-settings-save" class="btn btn-primary" type="button">保存设置</button>
+        </aside>
       </div>
     </div>
   </div>

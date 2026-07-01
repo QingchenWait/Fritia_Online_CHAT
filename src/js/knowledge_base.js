@@ -2,7 +2,7 @@ import { STORAGE_KEYS, createId, clampText, readFileAsText, saveJson, loadJson }
 import { getAdvancedSettings } from './settings.js';
 
 const DB_NAME = 'fritia_knowledge_base_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const PRELOADED_SOURCE = {
   id: 'chenbai_character_settings_260622',
   path: 'src/_rag_data/chenbai_character_settings_260622.json'
@@ -14,6 +14,15 @@ const STOP_WORDS = new Set([
 ]);
 
 let dbPromise = null;
+
+function ensureStore(db, tx, storeName, options) {
+  if (db.objectStoreNames.contains(storeName)) return tx.objectStore(storeName);
+  return db.createObjectStore(storeName, options);
+}
+
+function ensureIndex(store, indexName, keyPath, options = {}) {
+  if (!store.indexNames.contains(indexName)) store.createIndex(indexName, keyPath, options);
+}
 
 export function requestToPromise(request) {
   return new Promise((resolve, reject) => {
@@ -40,21 +49,14 @@ function openDb() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains('knowledgeBases')) {
-        db.createObjectStore('knowledgeBases', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('files')) {
-        const store = db.createObjectStore('files', { keyPath: 'id' });
-        store.createIndex('kbId', 'kbId');
-      }
-      if (!db.objectStoreNames.contains('chunks')) {
-        const store = db.createObjectStore('chunks', { keyPath: 'id' });
-        store.createIndex('kbId', 'kbId');
-        store.createIndex('fileId', 'fileId');
-      }
-      if (!db.objectStoreNames.contains('indexes')) {
-        db.createObjectStore('indexes', { keyPath: 'kbId' });
-      }
+      const tx = request.transaction;
+      ensureStore(db, tx, 'knowledgeBases', { keyPath: 'id' });
+      const fileStore = ensureStore(db, tx, 'files', { keyPath: 'id' });
+      ensureIndex(fileStore, 'kbId', 'kbId');
+      const chunkStore = ensureStore(db, tx, 'chunks', { keyPath: 'id' });
+      ensureIndex(chunkStore, 'kbId', 'kbId');
+      ensureIndex(chunkStore, 'fileId', 'fileId');
+      ensureStore(db, tx, 'indexes', { keyPath: 'kbId' });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
@@ -82,8 +84,19 @@ async function putRecord(storeName, record) {
 
 async function getAllByIndex(storeName, indexName, value) {
   const db = await openDb();
-  const index = db.transaction(storeName, 'readonly').objectStore(storeName).index(indexName);
-  return requestToPromise(index.getAll(value));
+  const store = db.transaction(storeName, 'readonly').objectStore(storeName);
+  return requestToPromise(store.index(indexName).getAll(value));
+}
+
+async function deleteRecord(storeName, key, tx = null) {
+  if (tx) {
+    tx.objectStore(storeName).delete(key);
+    return;
+  }
+  const db = await openDb();
+  const ownTx = db.transaction(storeName, 'readwrite');
+  ownTx.objectStore(storeName).delete(key);
+  await txDone(ownTx);
 }
 
 export function loadKnowledgeState() {
@@ -129,6 +142,11 @@ export function toggleActiveKnowledgeBaseId(id) {
   if (set.has(id)) set.delete(id);
   else set.add(id);
   return saveKnowledgeState({ activeKbIds: [...set] });
+}
+
+function removeActiveKnowledgeBaseId(id) {
+  const state = loadKnowledgeState();
+  return saveKnowledgeState({ activeKbIds: state.activeKbIds.filter(item => item !== id) });
 }
 
 function normalizeIdList(value) {
@@ -179,6 +197,45 @@ export async function createKnowledgeBase(name) {
   await putRecord('knowledgeBases', record);
   setActiveKnowledgeBaseIds([record.id, ...getActiveKnowledgeBaseIds()]);
   return record;
+}
+
+export async function deleteKnowledgeBase(kbId) {
+  const [files, chunks] = await Promise.all([
+    getAllByIndex('files', 'kbId', kbId),
+    getAllByIndex('chunks', 'kbId', kbId)
+  ]);
+  const db = await openDb();
+  const tx = db.transaction(['knowledgeBases', 'files', 'chunks', 'indexes'], 'readwrite');
+  deleteRecord('knowledgeBases', kbId, tx);
+  deleteRecord('indexes', kbId, tx);
+  for (const file of files) deleteRecord('files', file.id, tx);
+  for (const chunk of chunks) deleteRecord('chunks', chunk.id, tx);
+  await txDone(tx);
+  removeActiveKnowledgeBaseId(kbId);
+  document.dispatchEvent(new CustomEvent('fritia-knowledge-base-updated', { detail: { deletedKbId: kbId } }));
+}
+
+export async function deleteKnowledgeBaseFile(fileId) {
+  const file = await getRecord('files', fileId);
+  if (!file) return null;
+  const chunks = await getAllByIndex('chunks', 'fileId', fileId);
+  const kb = await getRecord('knowledgeBases', file.kbId);
+  const db = await openDb();
+  const tx = db.transaction(['knowledgeBases', 'files', 'chunks'], 'readwrite');
+  deleteRecord('files', fileId, tx);
+  for (const chunk of chunks) deleteRecord('chunks', chunk.id, tx);
+  if (kb) {
+    tx.objectStore('knowledgeBases').put({
+      ...kb,
+      fileCount: Math.max(0, (kb.fileCount || 0) - 1),
+      chunkCount: Math.max(0, (kb.chunkCount || 0) - chunks.length),
+      updatedAt: Date.now()
+    });
+  }
+  await txDone(tx);
+  await rebuildKnowledgeBaseIndex(file.kbId);
+  document.dispatchEvent(new CustomEvent('fritia-knowledge-base-updated', { detail: { deletedFileId: fileId, kbId: file.kbId } }));
+  return file;
 }
 
 export async function importFilesToKnowledgeBase(kbId, files = []) {
