@@ -234,3 +234,8 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 ## 2026-07-02 Settings Save Flow
 
 - `#memory-settings-save` 和 `#advanced-save` 保存完成后统一调用 `closePanel('settings-panel')`，使设置悬浮窗口立即收起。
+
+## 2026-07-02 Memory Node Mobile Portrait
+
+- 仅在 `@media (max-width: 760px) and (orientation: portrait)` 下新增 `#memory-node-panel` 专用覆盖规则，迁移旧项目“记忆节点”移动端竖屏布局。
+- 保持横屏和其他窗口布局不变；compact 搜索继续复用 `long_term_memory.js` 中旧项目同源的 `.is-compact-open` 切换逻辑。

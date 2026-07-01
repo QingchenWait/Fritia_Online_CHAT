@@ -479,3 +479,9 @@ fritia_online_next_chat/
 
 - `#memory-settings-save`：保存设置页“长期记忆”配置后关闭 `#settings-panel`。
 - `#advanced-save`：保存高级设置和本地化配置后关闭 `#settings-panel`。
+
+## 2026-07-02 Memory Node Mobile Portrait Mapping
+
+- `@media (max-width: 760px) and (orientation: portrait) #memory-node-panel`：记忆节点竖屏专用布局覆盖，限制作用域不影响其他弹窗和横屏模式。
+- `.memory-search-console.is-compact-open`：竖屏左下角悬浮实体搜索展开态，沿用旧项目长期记忆模块的交互类名。
+- `.memory-result-panel` / `.memory-archive-popover` / `.memory-settings-popover`：竖屏底部浮层，用于搜索结果、记忆档案和长期记忆设置。
