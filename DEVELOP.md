@@ -1,5 +1,31 @@
 # DEVELOP
 
+## 2026-07-02 Advanced Settings And Localization
+
+- `src/js/settings.js` 迁移旧项目 DeepSeek 亲密模式字段：`localizationSensitivity`、`deepseekIntimateMode`、`deepseekIntimateModeStartedAt`、`deepseekIntimateModeDisabledAt`，并恢复 `isDeepSeekIntimateModeAvailable()` / `shouldUseDeepSeekIntimateMode()`。
+- 新增 `src/js/deepseek_intimate_mode.js`，按旧项目方式只在模型名包含 `deepseek` 且 `localizationSensitivity === 1` 且开关开启时读取 `src/_queries/deepseek_special_prompt.txt`，返回 `{ role: 'user', content: ... }`。
+- `src/js/chat_engine.js` 和 `src/js/roundtable.js` 在私聊/群聊请求中插入亲密模式 user 消息，并给对应 assistant/bot 回复写入 `meta.deepseekIntimateMode`；后续上下文会过滤已关闭亲密模式期间的旧回复。
+- `src/js/long_term_memory.js` 已有旧项目插槽 `options.deepseekIntimateMode && !settings.includeIntimate`，因此亲密模式回复默认不录入长期记忆，除非记忆节点设置开启“允许录入亲密模式内容”。
+- `index.html` 和 `src/styles/app.css` 将高级设置页重绘为参考图风格的分组卡片行列表，新增“本地化”集合与 iOS 风格亲密模式开关。
+- 高级设置 CSS 进一步参考旧项目 `.advanced-setting-row` 密集程度，压缩为约 58px 行高、13px 主标题、11px 说明、36px 数字输入和更小的滑块/开关控件。
+- 修复 `advanced-save` 保存顺序：先缓存 `localizationSensitivity` / `deepseekIntimateMode` 草稿值，再触发 `saveAdvancedSettings()`，避免高级设置事件同步表单后把本地化值写回默认值；同时主设置保存后调用 `closePanel('settings-panel')`。
+- 修复 `.btn:hover` 覆盖 `.btn-primary` 背景的问题，主按钮、知识库图标主按钮和记忆节点搜索主按钮 hover 时保持深色渐变，仅轻微变亮。
+
+## 2026-07-02 Long-Term Memory Node Rewrite
+
+- `src/js/long_term_memory.js` 从旧项目 `D:\Models\vibe_coding\fritia_online_v3 (dev)\js\long_term_memory.js` 重新迁移，保留旧项目的常量、记忆归一化、关系抽取、topic promotion、生命周期维护、搜索和 canvas 力导向图谱绘制逻辑。
+- 本项目没有旧项目的 `advanced_settings.js`，因此迁移模块在文件顶部用 `getAdvancedSettings()` 做兼容适配，只补齐长期记忆所需的维护、去重和访问增强默认参数。
+- `src/js/ui.js` 的“记忆节点”打开/关闭/初始化改为调用 `initLongTermMemoryPanel()`、`openMemoryNodePanel()`、`closeMemoryNodePanel()`；保留旧弱版函数作为未调用代码，避免本次重构扩大到无关设置逻辑。
+- 记忆节点 UI 不继承旧项目粉色/金色图谱配色，canvas 绘制色值改为本项目蓝紫 Soft UI 体系；按钮和开关样式遵循 `src/ui_rules/ui_design_rules.md`。
+
+## 2026-07-02 Roundtable Core Refactor
+
+- `src/js/roundtable.js` 重构为圆桌密语专用请求链路，不再通过 `requestCharacterReply()` 的通用群聊 prompt；模型请求体由 `buildRequestBody(settings, speaker, event, ragMessage, memoryMessage, intimateMessage)` 生成。
+- 迁移旧项目 `roundtable_whispers.js` 的 `BUILTIN_DEFS`、`FALLBACK_PROMPTS`、`SAFE_FALLBACKS`、`HOSTILE_PATTERNS`、流式读取、JSON 提取/修复解析、敌意内容过滤和 handoff 安全回退规则。
+- 新增 3 分钟窗口预算：`roundtableTokenHardLimit`、`roundtableCallLimit`、`roundtableFollowUpRate`，通过“设置 / 高级 / 圆桌密语”保存到高级设置。
+- 新增圆桌异常状态：请求配置缺失、API 错误、JSON 解析失败、预算硬限制等会写入 `getRoundtableError()`，并派发 `fritia-roundtable-error-updated` 供 UI 渲染。
+- 聊天头右上角按钮组左侧新增 `#roundtable-error-btn` 感叹号图标和 `#roundtable-error-popover` 详情浮层；详情内容使用自绘滚动条。
+
 更新时间：2026-07-01
 
 本文记录 Fritia Online NEXT Chat 的开发事实、版本变更和继承约定。后续每次代码结构变化都需要同步更新本文和 `STRUCTURE.md`。
@@ -204,3 +230,7 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - 知识库管理区 `.kb-management-grid` 在宽屏下使用 `repeat(2, minmax(0, 1fr))`，保证文件列表和分块预览等宽。
 - 隐藏 `#kb-upload-status` 横条，并将知识库操作状态写入顶部 `#kb-active-status`。
 - 知识库创建、启用/停用、删除知识库和删除文档操作全部改为外部 SVG 图标按钮。
+
+## 2026-07-02 Settings Save Flow
+
+- `#memory-settings-save` 和 `#advanced-save` 保存完成后统一调用 `closePanel('settings-panel')`，使设置悬浮窗口立即收起。

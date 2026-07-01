@@ -15,7 +15,7 @@ import {
   updateGroupConversation
 } from './storage.js';
 import { characterAvatar, getCharacterById } from './characters.js';
-import { getSettings, saveSettings, getAdvancedSettings, saveAdvancedSettings } from './settings.js';
+import { getSettings, saveSettings, getAdvancedSettings, saveAdvancedSettings, isDeepSeekIntimateModeAvailable } from './settings.js';
 import {
   createKnowledgeBase,
   deleteKnowledgeBase,
@@ -35,10 +35,13 @@ import {
   getLongTermMemorySettings,
   getLongTermMemoryStore,
   getOrphanMemories,
+  initLongTermMemoryPanel,
+  openMemoryNodePanel,
+  closeMemoryNodePanel,
   updateLongTermMemorySettings
 } from './long_term_memory.js';
 import { sendPrivateMessage } from './chat_engine.js';
-import { runRoundtableTurn, sendGroupPlayerMessage } from './roundtable.js';
+import { getRoundtableError, runRoundtableTurn, sendGroupPlayerMessage } from './roundtable.js';
 
 const MAX_KB_PREVIEW_CHUNKS = 80;
 const MAX_KB_PREVIEW_CHARS = 360;
@@ -57,6 +60,7 @@ const state = {
   groupEditorMode: 'create',
   groupInfoEditing: false,
   groupInfoMemberSearch: '',
+  roundtableErrorPopoverOpen: false,
   mention: {
     active: false,
     start: -1,
@@ -87,7 +91,6 @@ export function initUi() {
     updateContextStatus();
   });
   refreshKnowledgePanel();
-  renderMemoryNodePanel();
   updateContextStatus();
 }
 
@@ -101,12 +104,17 @@ function bindGlobalEvents() {
     updateContextStatus();
   });
   document.addEventListener('fritia-long-term-memory-updated', () => {
-    renderMemoryNodePanel();
     updateContextStatus();
   });
   document.addEventListener('fritia-settings-updated', () => {
     syncSettingsToForm();
     updateContextStatus();
+  });
+  document.addEventListener('fritia-advanced-settings-updated', () => {
+    syncSettingsToForm();
+  });
+  document.addEventListener('fritia-roundtable-error-updated', () => {
+    renderRoundtableErrorIndicator();
   });
 
   document.querySelectorAll('[data-panel-open]').forEach(button => {
@@ -140,6 +148,16 @@ function bindGlobalEvents() {
 
   document.getElementById('conversation-search')?.addEventListener('input', renderConversationList);
   document.querySelector('[data-chat-info-toggle]')?.addEventListener('click', handleChatInfoToggle);
+  document.getElementById('roundtable-error-btn')?.addEventListener('click', event => {
+    event.stopPropagation();
+    state.roundtableErrorPopoverOpen = !state.roundtableErrorPopoverOpen;
+    renderRoundtableErrorIndicator();
+  });
+  document.getElementById('roundtable-error-close')?.addEventListener('click', event => {
+    event.stopPropagation();
+    state.roundtableErrorPopoverOpen = false;
+    renderRoundtableErrorIndicator();
+  });
   document.getElementById('detail-close-btn')?.addEventListener('click', () => {
     document.getElementById('app')?.classList.remove('is-detail-open');
   });
@@ -147,6 +165,14 @@ function bindGlobalEvents() {
     document.getElementById('app')?.classList.remove('is-chat-open');
   });
   document.getElementById('quick-new-group')?.addEventListener('click', () => openPanel('group-editor-panel', { fresh: true }));
+  document.addEventListener('click', event => {
+    if (!state.roundtableErrorPopoverOpen) return;
+    const popover = document.getElementById('roundtable-error-popover');
+    const button = document.getElementById('roundtable-error-btn');
+    if (popover?.contains(event.target) || button?.contains(event.target)) return;
+    state.roundtableErrorPopoverOpen = false;
+    renderRoundtableErrorIndicator();
+  });
 
   bindComposer();
   bindCharacterForm();
@@ -395,20 +421,59 @@ function bindSettings() {
       baseUrl: document.getElementById('base-url').value,
       model: document.getElementById('model-name').value
     });
+    updateDeepSeekIntimateVisibility();
+    closePanel('settings-panel');
   });
   document.getElementById('advanced-save')?.addEventListener('click', () => {
+    const localizationSensitivity = Number(document.getElementById('localization-sensitivity').value);
+    const deepseekIntimateMode = Boolean(document.getElementById('deepseek-intimate-mode')?.checked);
     saveAdvancedSettings({
       kbChunkSize: Number(document.getElementById('adv-kb-chunk-size').value),
+      kbChunkOverlap: Number(document.getElementById('adv-kb-overlap').value),
+      kbCandidateLimit: Number(document.getElementById('adv-kb-candidate-limit').value),
+      kbInjectLimit: Number(document.getElementById('adv-kb-inject-limit').value),
       roundtableMaxParticipants: Number(document.getElementById('adv-roundtable-max').value),
-      historyLimit: Number(document.getElementById('adv-history-limit').value)
+      roundtableTokenHardLimit: Number(document.getElementById('adv-roundtable-token-limit').value),
+      roundtableCallLimit: Number(document.getElementById('adv-roundtable-call-limit').value),
+      roundtableFollowUpRate: Number(document.getElementById('adv-roundtable-follow-up-rate').value),
+      historyLimit: Number(document.getElementById('adv-history-limit').value),
+      memoryLimit: Number(document.getElementById('adv-memory-limit').value),
+      edgeLimit: Number(document.getElementById('adv-edge-limit').value)
+    });
+    saveSettings({
+      localizationSensitivity,
+      deepseekIntimateMode
+    });
+    closePanel('settings-panel');
+  });
+  [
+    'adv-kb-chunk-size',
+    'adv-kb-overlap',
+    'adv-kb-candidate-limit',
+    'adv-kb-inject-limit',
+    'adv-history-limit',
+    'adv-memory-limit',
+    'adv-edge-limit',
+    'adv-roundtable-max',
+    'adv-roundtable-token-limit',
+    'adv-roundtable-call-limit',
+    'adv-roundtable-follow-up-rate',
+    'localization-sensitivity'
+  ].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', () => {
+      refreshAdvancedValueLabels();
+      if (id === 'localization-sensitivity') updateDeepSeekIntimateVisibility();
     });
   });
+  document.getElementById('model-name')?.addEventListener('input', updateDeepSeekIntimateVisibility);
+  document.getElementById('deepseek-intimate-mode')?.addEventListener('change', refreshAdvancedValueLabels);
   document.getElementById('memory-settings-save')?.addEventListener('click', () => {
     updateLongTermMemorySettings({
       enabled: document.getElementById('memory-enabled').checked,
       retentionDays: Number(document.getElementById('memory-retention').value),
       blockedKeywords: document.getElementById('memory-blocked').value.split(/[，,]/).map(item => item.trim()).filter(Boolean)
     });
+    closePanel('settings-panel');
   });
 }
 
@@ -468,118 +533,7 @@ function bindKnowledge() {
 }
 
 function bindMemoryPanel() {
-  document.getElementById('memory-search-btn')?.addEventListener('click', () => performMemorySearch());
-  document.getElementById('memory-search-input')?.addEventListener('keydown', event => {
-    if (event.key === 'Enter') performMemorySearch();
-  });
-  document.getElementById('memory-search-toggle')?.addEventListener('click', () => {
-    document.querySelector('.memory-search-console')?.classList.toggle('is-expanded');
-  });
-  document.getElementById('memory-result-close')?.addEventListener('click', () => {
-    document.getElementById('memory-search-results')?.classList.add('hidden');
-  });
-  document.getElementById('memory-archive-btn')?.addEventListener('click', () => {
-    closeMemorySettingsPopover();
-    document.getElementById('memory-archive-popover')?.classList.remove('hidden');
-    renderMemoryArchive();
-  });
-  document.getElementById('memory-archive-close')?.addEventListener('click', closeMemoryArchivePopover);
-  document.getElementById('memory-archive-search')?.addEventListener('input', renderMemoryArchive);
-  document.getElementById('memory-archive-filter')?.addEventListener('click', event => {
-    const button = event.target.closest('[data-memory-filter]');
-    if (!button) return;
-    state.memoryGraph.archiveFilter = button.dataset.memoryFilter || 'orphan';
-    renderMemoryArchive();
-  });
-  document.getElementById('memory-settings-btn')?.addEventListener('click', () => {
-    closeMemoryArchivePopover();
-    syncMemoryNodeSettings();
-    document.getElementById('memory-settings-popover')?.classList.remove('hidden');
-  });
-  document.getElementById('memory-settings-close')?.addEventListener('click', closeMemorySettingsPopover);
-  document.getElementById('memory-node-settings-save')?.addEventListener('click', () => {
-    updateLongTermMemorySettings({
-      enabled: document.getElementById('memory-setting-enabled')?.checked,
-      retentionDays: Number(document.getElementById('memory-setting-retention')?.value),
-      blockedKeywords: String(document.getElementById('memory-setting-keywords')?.value || '')
-        .split(/[\n,，]/)
-        .map(item => item.trim())
-        .filter(Boolean),
-      includeIntimate: document.getElementById('memory-setting-intimate')?.checked
-    });
-    closeMemorySettingsPopover();
-    syncSettingsToForm();
-  });
-  const canvas = document.getElementById('memory-graph-canvas');
-  canvas?.addEventListener('click', event => {
-    if (state.memoryGraph.suppressClick) {
-      state.memoryGraph.suppressClick = false;
-      return;
-    }
-    const rect = canvas.getBoundingClientRect();
-    const point = screenToGraph(event.clientX - rect.left, event.clientY - rect.top);
-    const node = findMemoryNodeAtPoint(point);
-    state.memoryGraph.selectedNodeId = node?.id || '';
-    renderMemoryNodeDetail();
-  });
-  canvas?.addEventListener('wheel', event => {
-    event.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    const factor = event.deltaY > 0 ? 0.9 : 1.1;
-    zoomMemoryGraph(event.clientX - rect.left, event.clientY - rect.top, factor);
-  }, { passive: false });
-  canvas?.addEventListener('pointerdown', event => {
-    const rect = canvas.getBoundingClientRect();
-    const point = screenToGraph(event.clientX - rect.left, event.clientY - rect.top);
-    const node = findMemoryNodeAtPoint(point);
-    canvas.setPointerCapture?.(event.pointerId);
-    state.memoryGraph.drag = {
-      id: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      nodeId: node?.id || '',
-      moved: false
-    };
-    if (node) {
-      state.memoryGraph.selectedNodeId = node.id;
-      renderMemoryNodeDetail();
-    }
-  });
-  canvas?.addEventListener('pointermove', event => {
-    const drag = state.memoryGraph.drag;
-    if (!drag || drag.id !== event.pointerId) return;
-    const dx = event.clientX - drag.x;
-    const dy = event.clientY - drag.y;
-    if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
-    drag.x = event.clientX;
-    drag.y = event.clientY;
-    if (drag.nodeId) {
-      const current = state.memoryGraph.positions[drag.nodeId]
-        || state.memoryGraph.nodes.find(node => node.id === drag.nodeId)
-        || { x: 0, y: 0 };
-      const scale = state.memoryGraph.transform.scale || 1;
-      state.memoryGraph.positions[drag.nodeId] = {
-        x: current.x + dx / scale,
-        y: current.y + dy / scale
-      };
-    } else {
-      state.memoryGraph.transform.x += dx;
-      state.memoryGraph.transform.y += dy;
-    }
-    renderMemoryGraph();
-  });
-  canvas?.addEventListener('pointerup', event => {
-    const drag = state.memoryGraph.drag;
-    if (drag?.id === event.pointerId) {
-      state.memoryGraph.suppressClick = Boolean(drag.moved);
-      state.memoryGraph.drag = null;
-    }
-  });
-  canvas?.addEventListener('pointercancel', () => {
-    state.memoryGraph.suppressClick = false;
-    state.memoryGraph.drag = null;
-  });
-  window.addEventListener('resize', () => renderMemoryGraph());
+  initLongTermMemoryPanel();
 }
 
 function setListTab(tab) {
@@ -597,6 +551,7 @@ function renderAll() {
   renderGroupInfoPanel();
   renderMentionPicker();
   updateContextStatus();
+  renderRoundtableErrorIndicator();
   scheduleRoundtableIdle();
 }
 
@@ -757,6 +712,29 @@ function renderDetail() {
       .filter(Boolean)
       .join('、');
     tags.innerHTML = '<span class="tag">群聊</span><span class="tag">圆桌密语</span>';
+  }
+}
+
+function renderRoundtableErrorIndicator() {
+  const button = document.getElementById('roundtable-error-btn');
+  const popover = document.getElementById('roundtable-error-popover');
+  const title = document.getElementById('roundtable-error-title');
+  const detail = document.getElementById('roundtable-error-detail');
+  if (!button || !popover) return;
+  const conversation = getActiveConversation();
+  const error = getRoundtableError();
+  const visible = Boolean(
+    conversation?.type === 'group'
+    && error
+    && (!error.conversationId || error.conversationId === conversation.id)
+  );
+  if (!visible) state.roundtableErrorPopoverOpen = false;
+  button.classList.toggle('hidden', !visible);
+  popover.classList.toggle('hidden', !visible || !state.roundtableErrorPopoverOpen);
+  if (title) title.textContent = error?.title || '圆桌密语异常';
+  if (detail) {
+    const time = error?.createdAt ? `发生时间：${formatTime(error.createdAt)}` : '';
+    detail.textContent = [time, error?.detail || ''].filter(Boolean).join('\n\n');
   }
 }
 
@@ -1522,12 +1500,57 @@ function syncSettingsToForm() {
   setValue('base-url', settings.baseUrl);
   setValue('model-name', settings.model);
   setValue('adv-kb-chunk-size', advanced.kbChunkSize);
+  setValue('adv-kb-overlap', advanced.kbChunkOverlap);
+  setValue('adv-kb-candidate-limit', advanced.kbCandidateLimit);
+  setValue('adv-kb-inject-limit', advanced.kbInjectLimit);
   setValue('adv-roundtable-max', advanced.roundtableMaxParticipants);
+  setValue('adv-roundtable-token-limit', advanced.roundtableTokenHardLimit);
+  setValue('adv-roundtable-call-limit', advanced.roundtableCallLimit);
+  setValue('adv-roundtable-follow-up-rate', advanced.roundtableFollowUpRate);
   setValue('adv-history-limit', advanced.historyLimit);
+  setValue('adv-memory-limit', advanced.memoryLimit);
+  setValue('adv-edge-limit', advanced.edgeLimit);
+  setValue('localization-sensitivity', settings.localizationSensitivity);
+  setChecked('deepseek-intimate-mode', settings.deepseekIntimateMode);
   const enabled = document.getElementById('memory-enabled');
   if (enabled) enabled.checked = memory.enabled;
   setValue('memory-retention', memory.retentionDays);
   setValue('memory-blocked', memory.blockedKeywords.join(', '));
+  refreshAdvancedValueLabels();
+  updateDeepSeekIntimateVisibility();
+}
+
+function refreshAdvancedValueLabels() {
+  const valueOf = id => document.getElementById(id)?.value ?? '';
+  const checked = document.getElementById('deepseek-intimate-mode')?.checked;
+  const rows = {
+    'adv-kb-chunk-size-value': valueOf('adv-kb-chunk-size'),
+    'adv-kb-overlap-value': valueOf('adv-kb-overlap'),
+    'adv-kb-candidate-limit-value': valueOf('adv-kb-candidate-limit'),
+    'adv-kb-inject-limit-value': valueOf('adv-kb-inject-limit'),
+    'adv-history-limit-value': valueOf('adv-history-limit'),
+    'adv-memory-limit-value': valueOf('adv-memory-limit'),
+    'adv-edge-limit-value': valueOf('adv-edge-limit'),
+    'adv-roundtable-max-value': valueOf('adv-roundtable-max'),
+    'adv-roundtable-token-limit-value': valueOf('adv-roundtable-token-limit'),
+    'adv-roundtable-call-limit-value': valueOf('adv-roundtable-call-limit'),
+    'adv-roundtable-follow-up-rate-value': `${Math.round(Number(valueOf('adv-roundtable-follow-up-rate')) * 100 || 0)}%`,
+    'localization-sensitivity-value': `${(Number(valueOf('localization-sensitivity')) || 0.5).toFixed(2)}x`,
+    'deepseek-intimate-mode-value': checked ? 'ON' : 'OFF'
+  };
+  Object.entries(rows).forEach(([id, value]) => setText(id, value));
+}
+
+function updateDeepSeekIntimateVisibility() {
+  const card = document.getElementById('deepseek-intimate-mode-card');
+  if (!card) return;
+  const draft = {
+    ...getSettings(),
+    model: document.getElementById('model-name')?.value || getSettings().model,
+    localizationSensitivity: Number(document.getElementById('localization-sensitivity')?.value)
+  };
+  card.classList.toggle('hidden', !isDeepSeekIntimateModeAvailable(draft));
+  refreshAdvancedValueLabels();
 }
 
 function updateContextStatus() {
@@ -1545,16 +1568,15 @@ function openPanel(id, options = {}) {
     prepareGroupEditor(options);
     renderGroupMemberPicker();
   }
-  if (id === 'memory-node-panel') renderMemoryNodePanel();
+  if (id === 'memory-node-panel') openMemoryNodePanel();
 }
 
 function closePanel(id) {
-  document.getElementById(id)?.classList.add('hidden');
   if (id === 'memory-node-panel') {
-    document.getElementById('memory-search-results')?.classList.add('hidden');
-    closeMemoryArchivePopover();
-    closeMemorySettingsPopover();
+    closeMemoryNodePanel();
+    return;
   }
+  document.getElementById(id)?.classList.add('hidden');
 }
 
 function showSettingsSection(section) {

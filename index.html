@@ -70,6 +70,9 @@
           <p id="chat-subtitle">导入角色后会像好友一样出现在列表里</p>
         </div>
         <div class="chat-head__actions">
+          <button class="icon-btn roundtable-error-btn hidden" id="roundtable-error-btn" type="button" title="圆桌密语异常" aria-label="查看圆桌密语异常">
+            <img src="src/_logo/icons/circle-alert.svg" alt="">
+          </button>
           <button class="icon-btn" type="button" title="语音通话占位">
             <img src="src/_logo/icons/phone.svg" alt="">
           </button>
@@ -81,6 +84,14 @@
           </button>
         </div>
       </header>
+
+      <aside id="roundtable-error-popover" class="roundtable-error-popover hidden" aria-live="polite">
+        <div class="roundtable-error-head">
+          <strong id="roundtable-error-title">圆桌密语异常</strong>
+          <button id="roundtable-error-close" class="memory-mini-close" type="button" aria-label="关闭异常详情">×</button>
+        </div>
+        <pre id="roundtable-error-detail"></pre>
+      </aside>
 
       <section id="message-list" class="message-list" aria-live="polite">
         <div class="empty-state">
@@ -400,9 +411,107 @@
 
           <div class="settings-view" data-settings-view="advanced">
             <div class="panel-title"><h3>高级设置</h3><p>面向移动端占用和群聊调度的运行参数。</p></div>
-            <label><span>知识库分块长度</span><input id="adv-kb-chunk-size" type="number" min="200" max="1600"></label>
-            <label><span>群聊最大角色数</span><input id="adv-roundtable-max" type="number" min="2" max="12"></label>
-            <label><span>上下文消息上限</span><input id="adv-history-limit" type="number" min="4" max="80"></label>
+            <section class="advanced-config-card">
+              <div class="advanced-config-head">
+                <img src="src/_logo/icons/database.svg" alt="">
+                <div>
+                  <h4>上下文与知识库</h4>
+                  <p>控制 RAG 分块、知识库召回与上下文窗口。</p>
+                </div>
+              </div>
+              <div class="advanced-setting-list">
+                <label class="advanced-setting-row" for="adv-kb-chunk-size">
+                  <span class="advanced-setting-copy"><strong>知识库分块长度 <em>(KB_CHUNK_SIZE)</em></strong><small>单个文档分块的最大字符数。</small></span>
+                  <output id="adv-kb-chunk-size-value" class="advanced-value-pill">512</output>
+                  <input id="adv-kb-chunk-size" type="number" min="200" max="1600">
+                </label>
+                <label class="advanced-setting-row" for="adv-kb-overlap">
+                  <span class="advanced-setting-copy"><strong>知识库分块重叠 <em>(KB_CHUNK_OVERLAP)</em></strong><small>相邻分块保留的重叠字符数。</small></span>
+                  <output id="adv-kb-overlap-value" class="advanced-value-pill">50</output>
+                  <input id="adv-kb-overlap" type="number" min="0" max="400">
+                </label>
+                <label class="advanced-setting-row" for="adv-kb-candidate-limit">
+                  <span class="advanced-setting-copy"><strong>候选分块数量 <em>(KB_CANDIDATE_LIMIT)</em></strong><small>检索阶段参与排序的候选分块数。</small></span>
+                  <output id="adv-kb-candidate-limit-value" class="advanced-value-pill">50</output>
+                  <input id="adv-kb-candidate-limit" type="number" min="10" max="200">
+                </label>
+                <label class="advanced-setting-row" for="adv-kb-inject-limit">
+                  <span class="advanced-setting-copy"><strong>注入分块数量 <em>(KB_INJECT_LIMIT)</em></strong><small>每次请求最多注入的知识库分块数。</small></span>
+                  <output id="adv-kb-inject-limit-value" class="advanced-value-pill">6</output>
+                  <input id="adv-kb-inject-limit" type="number" min="1" max="12">
+                </label>
+                <label class="advanced-setting-row" for="adv-history-limit">
+                  <span class="advanced-setting-copy"><strong>上下文消息上限 <em>(HISTORY_LIMIT)</em></strong><small>发送给模型的最近聊天消息数量。</small></span>
+                  <output id="adv-history-limit-value" class="advanced-value-pill">24</output>
+                  <input id="adv-history-limit" type="number" min="4" max="80">
+                </label>
+                <label class="advanced-setting-row" for="adv-memory-limit">
+                  <span class="advanced-setting-copy"><strong>长期记忆条数 <em>(MEMORY_LIMIT)</em></strong><small>长期记忆检索时最多返回的原文记忆。</small></span>
+                  <output id="adv-memory-limit-value" class="advanced-value-pill">5</output>
+                  <input id="adv-memory-limit" type="number" min="1" max="12">
+                </label>
+                <label class="advanced-setting-row" for="adv-edge-limit">
+                  <span class="advanced-setting-copy"><strong>关系记忆条数 <em>(EDGE_LIMIT)</em></strong><small>长期记忆检索时最多返回的关系边。</small></span>
+                  <output id="adv-edge-limit-value" class="advanced-value-pill">8</output>
+                  <input id="adv-edge-limit" type="number" min="1" max="20">
+                </label>
+              </div>
+            </section>
+            <section class="advanced-config-card">
+              <div class="advanced-config-head">
+                <img src="src/_logo/icons/messages-square.svg" alt="">
+                <div>
+                  <h4>圆桌密语</h4>
+                  <p>继承旧项目圆桌群聊的 3 分钟窗口限流与自动接话参数。</p>
+                </div>
+              </div>
+              <div class="advanced-setting-list">
+                <label class="advanced-setting-row" for="adv-roundtable-max">
+                  <span class="advanced-setting-copy"><strong>群聊中的最大成员数量 <em>(MAX_SELECTED_PARTICIPANTS)</em></strong><small>过大的值可能导致群聊系统不稳定。</small></span>
+                  <output id="adv-roundtable-max-value" class="advanced-value-pill">6</output>
+                  <input id="adv-roundtable-max" type="number" min="2" max="12">
+                </label>
+                <label class="advanced-setting-row" for="adv-roundtable-token-limit">
+                  <span class="advanced-setting-copy"><strong>3 分钟内最大 token 消耗总量 <em>(TOKEN_HARD_LIMIT_10M)</em></strong><small>更大的值会产生更高的用量。</small></span>
+                  <output id="adv-roundtable-token-limit-value" class="advanced-value-pill">300000</output>
+                  <input id="adv-roundtable-token-limit" type="number" min="1000" max="1000000" step="1000">
+                </label>
+                <label class="advanced-setting-row" for="adv-roundtable-call-limit">
+                  <span class="advanced-setting-copy"><strong>3 分钟内最大发言次数 <em>(TOTAL_CALL_LIMIT_10M)</em></strong><small>更大的值会产生更高的用量，并可能导致 API 请求拥塞。</small></span>
+                  <output id="adv-roundtable-call-limit-value" class="advanced-value-pill">15</output>
+                  <input id="adv-roundtable-call-limit" type="number" min="1" max="60" step="1">
+                </label>
+                <label class="advanced-setting-row advanced-setting-row--slider" for="adv-roundtable-follow-up-rate">
+                  <span class="advanced-setting-copy"><strong>自动接话概率 <em>(FOLLOW_UP_RATE)</em></strong><small>更大的值会产生更频繁的 bot-to-bot 接话。</small></span>
+                  <output id="adv-roundtable-follow-up-rate-value" class="advanced-value-pill">55%</output>
+                  <input id="adv-roundtable-follow-up-rate" type="range" min="0" max="1" step="0.05">
+                </label>
+              </div>
+            </section>
+            <section class="advanced-config-card">
+              <div class="advanced-config-head">
+                <img src="src/_logo/icons/monitor-up.svg" alt="">
+                <div>
+                  <h4>本地化</h4>
+                  <p>控制 Localization 强度。</p>
+                </div>
+              </div>
+              <div class="advanced-setting-list">
+                <label class="advanced-setting-row advanced-setting-row--slider" for="localization-sensitivity">
+                  <span class="advanced-setting-copy"><strong>Localization 强度 <em>(LOCALIZATION_SENSITIVITY)</em></strong><small>控制模型的本地化响应能力。</small></span>
+                  <output id="localization-sensitivity-value" class="advanced-value-pill">0.50x</output>
+                  <input id="localization-sensitivity" type="range" min="0.5" max="2" step="0.05">
+                </label>
+                <label id="deepseek-intimate-mode-card" class="advanced-setting-row advanced-setting-row--toggle hidden" for="deepseek-intimate-mode">
+                  <span class="advanced-setting-copy"><strong>亲密模式 <em>(DEEPSEEK_INTIMATE_MODE)</em></strong><small>开启后，在符合条件的对话请求中，追加 DeepSeek 专用用户提示。</small></span>
+                  <output id="deepseek-intimate-mode-value" class="advanced-value-pill">OFF</output>
+                  <span class="advanced-ios-switch">
+                    <input id="deepseek-intimate-mode" type="checkbox">
+                    <span aria-hidden="true"></span>
+                  </span>
+                </label>
+              </div>
+            </section>
             <div class="form-actions">
               <button id="advanced-save" class="btn btn-primary" type="button">保存高级设置</button>
             </div>
@@ -430,9 +539,13 @@
         </div>
         <div class="modal-head-actions">
           <span id="memory-node-stats" class="status-pill">0 条记忆 · 0 条关系</span>
-          <button id="memory-archive-btn" class="btn" type="button">记忆档案</button>
-          <button id="memory-settings-btn" class="btn" type="button">设置</button>
-          <button class="icon-btn" type="button" data-panel-close="memory-node-panel">
+          <button id="memory-archive-btn" class="icon-btn" type="button" aria-label="打开记忆档案" title="记忆档案">
+            <img src="src/_logo/icons/database.svg" alt="">
+          </button>
+          <button id="memory-settings-btn" class="icon-btn" type="button" aria-label="打开长期记忆设置" title="设置">
+            <img src="src/_logo/icons/settings.svg" alt="">
+          </button>
+          <button id="memory-node-close" class="icon-btn" type="button" data-panel-close="memory-node-panel" aria-label="关闭记忆节点" title="关闭">
             <img src="src/_logo/icons/x.svg" alt="">
           </button>
         </div>
@@ -446,7 +559,9 @@
                 <img src="src/_logo/icons/search.svg" alt="">
               </button>
               <input id="memory-search-input" placeholder="搜索实体或关系">
-              <button id="memory-search-btn" class="btn btn-primary" type="button">搜索</button>
+              <button id="memory-search-btn" class="icon-btn memory-search-submit" type="button" aria-label="搜索实体或关系" title="搜索">
+                <img src="src/_logo/icons/search.svg" alt="">
+              </button>
             </div>
           </div>
           <section class="memory-node-card">
@@ -461,14 +576,18 @@
         <aside id="memory-search-results" class="memory-result-panel hidden" aria-live="polite">
           <div class="memory-result-head">
             <strong id="memory-result-title">搜索结果</strong>
-            <button id="memory-result-close" class="memory-mini-close" type="button" aria-label="关闭搜索结果">×</button>
+            <button id="memory-result-close" class="memory-mini-close" type="button" aria-label="关闭搜索结果">
+              <img src="src/_logo/icons/x.svg" alt="">
+            </button>
           </div>
           <div id="memory-result-list" class="memory-result-list"></div>
         </aside>
         <aside id="memory-archive-popover" class="memory-archive-popover hidden" aria-live="polite">
           <div class="memory-result-head">
             <strong>记忆档案</strong>
-            <button id="memory-archive-close" class="memory-mini-close" type="button" aria-label="关闭记忆档案">×</button>
+            <button id="memory-archive-close" class="memory-mini-close" type="button" aria-label="关闭记忆档案">
+              <img src="src/_logo/icons/x.svg" alt="">
+            </button>
           </div>
           <div class="memory-archive-toolbar">
             <label class="memory-archive-search-field" for="memory-archive-search">
@@ -487,7 +606,9 @@
         <aside id="memory-settings-popover" class="memory-settings-popover hidden">
           <div class="memory-result-head">
             <strong>长期记忆设置</strong>
-            <button id="memory-settings-close" class="memory-mini-close" type="button" aria-label="关闭长期记忆设置">×</button>
+            <button id="memory-settings-close" class="memory-mini-close" type="button" aria-label="关闭长期记忆设置">
+              <img src="src/_logo/icons/x.svg" alt="">
+            </button>
           </div>
           <label class="memory-toggle-row">
             <input id="memory-setting-enabled" type="checkbox">

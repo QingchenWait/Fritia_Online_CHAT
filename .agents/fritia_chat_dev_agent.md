@@ -14,13 +14,12 @@
 
 Prefer PowerShell 7 using this executable:
 
-"C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.3.0_x64__8wekyb3d8bbwe\pwsh.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "<command>"
+"C:\Program Files\PowerShell\7\pwsh.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "<command>"
 
 If that fails, try:
 
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "<command>"
 
-Do not use "pwsl".
 Do not silently switch to cmd.exe unless both PowerShell 7 attempts fail.
 
 ## UI 准则：

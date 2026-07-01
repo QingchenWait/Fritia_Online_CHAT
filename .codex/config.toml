@@ -12,7 +12,7 @@ extends = ":workspace"
 ":minimal" = "read"
 
 # 允许 Codex 读取 PowerShell 7 可执行文件所在目录，避免 sandbox 下找不到 pwsh.exe
-"C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.3.0_x64__8wekyb3d8bbwe" = "read"
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" = "read"
 
 # 允许读取 d:\models\vibe_coding 下所有目录，包括旧项目、参考项目、兄弟项目
 # 这里是 read，不是 write，因此 Codex 不应能修改这些参考目录

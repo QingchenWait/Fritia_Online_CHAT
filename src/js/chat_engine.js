@@ -3,6 +3,7 @@ import { getSettings, getAdvancedSettings } from './settings.js';
 import { buildRagReferenceMessage } from './knowledge_base.js';
 import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_term_memory.js';
 import { characterDisplayName } from './characters.js';
+import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -34,16 +35,20 @@ export async function sendPrivateMessage({ store, conversation, character, text,
   onStore?.(nextStore);
 
   try {
-    const reply = await requestCharacterReply({
+    const result = await requestCharacterReply({
       store: nextStore,
       conversation,
       character,
       userText: text
     });
+    const reply = typeof result === 'string' ? result : result.text;
     nextStore = replaceMessage(nextStore, conversation.id, typingId, {
       text: reply,
       status: 'sent',
-      createdAt: now()
+      createdAt: now(),
+      meta: {
+        deepseekIntimateMode: typeof result === 'object' && result?.deepseekIntimateMode === true
+      }
     });
     recordLongTermMemoryTurn({
       source: 'private',
@@ -51,7 +56,8 @@ export async function sendPrivateMessage({ store, conversation, character, text,
       characterName: character.name,
       userText: text,
       assistantText: reply,
-      sourceMessageIds: [userMessage.id, typingId]
+      sourceMessageIds: [userMessage.id, typingId],
+      deepseekIntimateMode: typeof result === 'object' && result?.deepseekIntimateMode === true
     });
     onStore?.(nextStore);
     return reply;
@@ -72,8 +78,11 @@ export async function requestCharacterReply({ store, conversation, character, us
   if (!settings.apiKey) {
     return localFallbackReply(character, userText, mode);
   }
-  const history = getConversationMessages(store, conversation.id).filter(item => item.status !== 'typing');
+  const history = getConversationMessages(store, conversation.id)
+    .filter(item => item.status !== 'typing')
+    .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, settings));
   const advanced = getAdvancedSettings();
+  const intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
   const ragMessage = await buildRagReferenceMessage({
     mode,
     query: userText,
@@ -94,15 +103,19 @@ export async function requestCharacterReply({ store, conversation, character, us
     userText,
     ragMessage,
     memoryMessage,
+    intimateMessage,
     historyLimit: advanced.historyLimit,
     mode,
     event
   });
   const responseText = await requestOpenAICompatible(settings, messages);
-  return sanitizeReply(responseText, character.name);
+  return {
+    text: sanitizeReply(responseText, character.name),
+    deepseekIntimateMode: Boolean(intimateMessage)
+  };
 }
 
-function buildMessages({ character, history, userText, ragMessage, memoryMessage, historyLimit, mode, event }) {
+function buildMessages({ character, history, userText, ragMessage, memoryMessage, intimateMessage, historyLimit, mode, event }) {
   const system = [
     `你正在一个 QQ / Telegram 风格的角色扮演聊天软件中发言。`,
     `本次你只扮演：${character.name}。不要代替用户或其他角色发言。`,
@@ -125,6 +138,7 @@ function buildMessages({ character, history, userText, ragMessage, memoryMessage
     { role: 'system', content: system },
     ...(ragMessage ? [ragMessage] : []),
     ...(memoryMessage ? [memoryMessage] : []),
+    ...(intimateMessage ? [intimateMessage] : []),
     ...recent,
     { role: 'user', content: `${PLAYER_NAME}：${userText}` }
   ];

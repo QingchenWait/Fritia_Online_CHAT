@@ -1,5 +1,35 @@
 # STRUCTURE
 
+## 2026-07-02 Advanced Settings And Localization Mapping
+
+- 新增 `src/js/deepseek_intimate_mode.js`：导出 `buildDeepSeekIntimateUserMessage()`、`isDeepSeekIntimateReply()`、`shouldKeepMessageForCurrentDeepSeekMode()`。
+- `src/js/settings.js` 新增主设置字段：`localizationSensitivity`、`deepseekIntimateMode`、`deepseekIntimateModeStartedAt`、`deepseekIntimateModeDisabledAt`；新增导出 `isDeepSeekIntimateModeAvailable()`、`shouldUseDeepSeekIntimateMode()`。
+- `src/_queries/deepseek_special_prompt.txt`：DeepSeek 亲密模式追加提示词，运行时作为额外 `user` 消息读取。
+- 新增高级设置 DOM：`#adv-kb-overlap`、`#adv-kb-candidate-limit`、`#adv-kb-inject-limit`、`#adv-memory-limit`、`#adv-edge-limit`、`#localization-sensitivity`、`#localization-sensitivity-value`、`#deepseek-intimate-mode-card`、`#deepseek-intimate-mode`、`#deepseek-intimate-mode-value`。
+- 高级设置 UI 类：`.advanced-config-card`、`.advanced-config-head`、`.advanced-setting-list`、`.advanced-setting-row`、`.advanced-setting-copy`、`.advanced-value-pill`、`.advanced-ios-switch`。
+- 私聊 `src/js/chat_engine.js` 和群聊 `src/js/roundtable.js` 会在条件满足时插入 DeepSeek 亲密模式 user 消息，并用 `meta.deepseekIntimateMode` 标记回复；长期记忆由 `includeIntimate` 决定是否录入这些回复。
+
+## 2026-07-02 Long-Term Memory Node Rewrite Mapping
+
+- `src/js/long_term_memory.js` 由旧项目 `js/long_term_memory.js` 重新迁移，负责 `fritia_long_term_memory` 的 store normalize/save、记忆抽取、关系边生成、topic promotion、生命周期维护、检索、档案、设置和 canvas 图谱绘制。
+- `src/js/long_term_memory.js` 新增/恢复面板导出：`initLongTermMemoryPanel()`、`openMemoryNodePanel()`、`closeMemoryNodePanel()`、`isMemoryNodePanelVisible()`；同时导出 `buildGraphData()` 以兼容本项目旧 UI 插槽。
+- `src/js/ui.js` 的 `bindMemoryPanel()` 只初始化迁移模块，`openPanel('memory-node-panel')` 和 `closePanel('memory-node-panel')` 改为调用迁移模块的打开/关闭函数。
+- `#memory-node-close`：记忆节点关闭按钮 id，兼容迁移模块 `ui.close`。
+- `#memory-archive-btn`、`#memory-settings-btn`、`#memory-search-btn`、`#memory-result-close`、`#memory-archive-close`、`#memory-settings-close`：改为图标按钮。
+- 新增/更新 CSS：`.memory-search-submit`、`.memory-danger-icon`、`.memory-edge-pill`、`.memory-archive-body`、`.memory-archive-meta`；`.memory-settings-popover .memory-toggle-row input[type="checkbox"]` 负责 iOS 风格自绘开关。
+
+## 2026-07-02 Roundtable Core Refactor Mapping
+
+- 新增 `src/_logo/icons/circle-alert.svg`：聊天头圆桌异常感叹号图标。
+- 新增聊天头 DOM：`#roundtable-error-btn`、`#roundtable-error-popover`、`#roundtable-error-title`、`#roundtable-error-detail`、`#roundtable-error-close`。
+- 新增高级设置 DOM：`#adv-roundtable-token-limit`、`#adv-roundtable-call-limit`、`#adv-roundtable-follow-up-rate`，位于“设置 / 高级 / 圆桌密语”子栏目。
+- `src/js/settings.js` 新增高级设置字段：`roundtableCallLimit`、`roundtableTokenHardLimit`、`roundtableFollowUpRate`。
+- `src/js/roundtable.js` 新增导出：`buildRequestBody()`、`getRoundtableError()`、`clearRoundtableError()`；群聊请求由 `buildRequestBody().messages` 直接生成，不再使用通用私聊/群聊 prompt。
+- `src/js/roundtable.js` 内部保留圆桌常量：`BUILTIN_DEFS`、`FALLBACK_PROMPTS`、`SAFE_FALLBACKS`、`HOSTILE_PATTERNS`，并包含 3 分钟预算窗口、流式读取、JSON 提取修复、敌意内容过滤和 handoff 回退。
+- `src/js/ui.js` 监听 `fritia-roundtable-error-updated`，调用 `renderRoundtableErrorIndicator()` 渲染错误按钮与详情浮层。
+- 新增事件：`fritia-roundtable-error-updated`，detail 为当前圆桌错误对象或 `null`。
+- 新增 CSS：`.roundtable-error-btn`、`.roundtable-error-popover`、`.roundtable-error-head`、`.advanced-section`、`.advanced-section-head`；`.settings-content` 增加自绘滚动条。
+
 更新时间：2026-07-01
 
 本文记录当前插件完整文件结构、内部 API、页面元素映射和主要函数职责。
@@ -444,3 +474,8 @@ fritia_online_next_chat/
 - `.kb-management-grid`：宽屏知识库文件列表和分块预览等宽双栏。
 - `.kb-icon-btn`：知识库操作图标按钮，复用 `src/_logo/icons` 中的 `plus.svg`、`database.svg`、`x.svg`、`trash-2.svg`。
 - `#kb-upload-status`：旧上传等待横条保留兼容但隐藏，状态提示转由 `#kb-active-status` 展示。
+
+## 2026-07-02 Settings Save Flow Mapping
+
+- `#memory-settings-save`：保存设置页“长期记忆”配置后关闭 `#settings-panel`。
+- `#advanced-save`：保存高级设置和本地化配置后关闭 `#settings-panel`。
