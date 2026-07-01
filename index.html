@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1677ff">
+  <title>Fritia Online NEXT Chat</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="src/styles/app.css">
+</head>
+<body>
+  <div id="app" class="app-shell" data-view="chat">
+    <aside class="rail" aria-label="主导航">
+      <div class="rail-brand">
+        <img src="src/_logo/emoji/speech_balloon_3d.png" alt="" class="rail-brand__img">
+      </div>
+      <button class="rail-btn is-active" type="button" data-view-btn="chat" title="聊天">
+        <img src="src/_logo/icons/message-circle.svg" alt="">
+      </button>
+      <button class="rail-btn" type="button" data-view-btn="contacts" title="好友">
+        <img src="src/_logo/icons/users.svg" alt="">
+      </button>
+      <button class="rail-btn" type="button" data-panel-open="character-import-panel" title="导入角色">
+        <img src="src/_logo/icons/user-plus.svg" alt="">
+      </button>
+      <button class="rail-btn" type="button" data-panel-open="memory-node-panel" title="记忆节点">
+        <img src="src/_logo/icons/network.svg" alt="">
+      </button>
+      <button class="rail-btn" type="button" data-panel-open="settings-panel" title="设置">
+        <img src="src/_logo/icons/settings.svg" alt="">
+      </button>
+    </aside>
+
+    <section class="conversation-list" aria-label="会话列表">
+      <header class="list-top">
+        <div class="profile-chip">
+          <img src="src/_char/Profile_Adjutant.png" alt="分析员" class="profile-chip__avatar">
+          <div>
+            <strong>分析员</strong>
+            <small>Role-play AI Chat</small>
+          </div>
+        </div>
+        <button class="icon-btn" id="mobile-menu-btn" type="button" title="菜单">
+          <img src="src/_logo/icons/menu.svg" alt="">
+        </button>
+      </header>
+      <div class="search-row">
+        <img src="src/_logo/icons/search.svg" alt="">
+        <input id="conversation-search" type="search" placeholder="搜索角色、群聊或消息">
+        <button class="icon-btn" id="quick-new-group" type="button" title="创建群聊">
+          <img src="src/_logo/icons/plus.svg" alt="">
+        </button>
+      </div>
+      <div class="list-tabs" role="tablist" aria-label="列表切换">
+        <button class="tab-btn is-active" type="button" data-list-tab="chats">会话</button>
+        <button class="tab-btn" type="button" data-list-tab="friends">好友</button>
+        <button class="tab-btn" type="button" data-list-tab="groups">群聊</button>
+      </div>
+      <div id="conversation-list" class="list-scroll"></div>
+    </section>
+
+    <main class="chat-pane" aria-label="聊天窗口">
+      <header class="chat-head">
+        <button class="icon-btn mobile-back" id="mobile-back-btn" type="button" title="返回">
+          <span aria-hidden="true">‹</span>
+        </button>
+        <img id="chat-avatar" src="src/_logo/emoji/robot_3d.png" alt="" class="chat-head__avatar">
+        <div class="chat-head__titles">
+          <h1 id="chat-title">选择一个角色开始聊天</h1>
+          <p id="chat-subtitle">导入角色后会像好友一样出现在列表里</p>
+        </div>
+        <div class="chat-head__actions">
+          <button class="icon-btn" type="button" title="语音通话占位">
+            <img src="src/_logo/icons/phone.svg" alt="">
+          </button>
+          <button class="icon-btn" type="button" title="视频通话占位">
+            <img src="src/_logo/icons/video.svg" alt="">
+          </button>
+          <button class="icon-btn" type="button" data-panel-open="group-editor-panel" title="群聊成员">
+            <img src="src/_logo/icons/users.svg" alt="">
+          </button>
+        </div>
+      </header>
+
+      <section id="message-list" class="message-list" aria-live="polite">
+        <div class="empty-state">
+          <img src="src/_logo/emoji/sparkles_3d.png" alt="">
+          <h2>NEXT Chat</h2>
+          <p>私聊、群聊、图片消息、角色导入、知识库和长期记忆都在这里。</p>
+        </div>
+      </section>
+
+      <footer class="composer">
+        <div id="attachment-preview" class="attachment-preview hidden"></div>
+        <div class="composer-tools">
+          <button class="icon-btn" type="button" title="表情">
+            <img src="src/_logo/icons/smile.svg" alt="">
+          </button>
+          <label class="icon-btn" title="发送图片">
+            <img src="src/_logo/icons/image.svg" alt="">
+            <input id="image-input" type="file" accept="image/*" hidden>
+          </label>
+          <label class="icon-btn" title="发送文件">
+            <img src="src/_logo/icons/paperclip.svg" alt="">
+            <input id="file-input" type="file" hidden>
+          </label>
+          <button class="icon-btn" type="button" title="语音输入占位">
+            <img src="src/_logo/icons/mic.svg" alt="">
+          </button>
+        </div>
+        <textarea id="message-input" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
+        <button id="send-btn" class="send-btn" type="button">
+          <span>发送</span>
+          <img src="src/_logo/icons/send.svg" alt="">
+        </button>
+      </footer>
+    </main>
+
+    <aside class="detail-pane" aria-label="详情">
+      <section class="detail-card detail-profile">
+        <img id="detail-avatar" src="src/_logo/emoji/robot_3d.png" alt="" class="detail-profile__avatar">
+        <h2 id="detail-name">NEXT Chat</h2>
+        <p id="detail-description">跨平台角色扮演 AI 聊天客户端。</p>
+        <div id="detail-tags" class="tag-row"></div>
+      </section>
+      <section class="detail-card">
+        <div class="section-head">
+          <h3>快速操作</h3>
+        </div>
+        <div class="quick-grid">
+          <button type="button" data-panel-open="character-import-panel">
+            <img src="src/_logo/icons/user-plus.svg" alt="">
+            <span>导入角色</span>
+          </button>
+          <button type="button" data-panel-open="settings-panel" data-settings-section-jump="knowledge">
+            <img src="src/_logo/icons/database.svg" alt="">
+            <span>知识库</span>
+          </button>
+          <button type="button" data-panel-open="memory-node-panel">
+            <img src="src/_logo/icons/network.svg" alt="">
+            <span>记忆节点</span>
+          </button>
+          <button type="button" data-panel-open="group-editor-panel">
+            <img src="src/_logo/icons/messages-square.svg" alt="">
+            <span>群聊成员</span>
+          </button>
+        </div>
+      </section>
+      <section class="detail-card">
+        <div class="section-head">
+          <h3>上下文状态</h3>
+        </div>
+        <dl class="context-list">
+          <div><dt>RAG</dt><dd id="rag-status">未加载</dd></div>
+          <div><dt>长期记忆</dt><dd id="ltm-status">启用</dd></div>
+          <div><dt>模型</dt><dd id="model-status">未配置</dd></div>
+        </dl>
+      </section>
+    </aside>
+  </div>
+
+  <div id="character-import-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="character-import-title">
+    <div class="modal-shell">
+      <header class="modal-head">
+        <div>
+          <small>ADD FRIEND</small>
+          <h2 id="character-import-title">导入角色</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="character-import-panel">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <form id="character-form" class="form-grid">
+        <label>
+          <span>角色名称</span>
+          <input id="char-name" name="name" required placeholder="例如：芙提雅">
+        </label>
+        <label>
+          <span>角色简介</span>
+          <input id="char-description" name="description" placeholder="显示在好友列表中的一句话">
+        </label>
+        <label>
+          <span>头像</span>
+          <input id="char-avatar-file" type="file" accept="image/*">
+        </label>
+        <label>
+          <span>TTS 参考语音</span>
+          <input id="char-voice-file" type="file" accept="audio/*">
+        </label>
+        <label class="wide">
+          <span>人格设定提示词</span>
+          <textarea id="char-prompt" required rows="8" placeholder="粘贴 system prompt 或上传 txt"></textarea>
+        </label>
+        <label class="wide">
+          <span>示例对话</span>
+          <textarea id="char-examples" rows="5" placeholder="用户：...\n角色：..."></textarea>
+        </label>
+        <div class="form-actions wide">
+          <button type="button" class="btn" id="char-load-prompt-file">从 txt 读取提示词</button>
+          <input id="char-prompt-file" type="file" accept=".txt,.md" hidden>
+          <button type="submit" class="btn btn-primary">保存为好友</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="group-editor-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="group-editor-title">
+    <div class="modal-shell">
+      <header class="modal-head">
+        <div>
+          <small>ROUND TABLE</small>
+          <h2 id="group-editor-title">群聊与成员</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="group-editor-panel">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <div class="group-editor">
+        <label>
+          <span>群聊名称</span>
+          <input id="group-name" placeholder="圆桌密语">
+        </label>
+        <div id="group-member-list" class="member-picker"></div>
+        <div class="form-actions">
+          <button id="create-group-btn" class="btn btn-primary" type="button">创建 / 更新群聊</button>
+          <button id="roundtable-autoplay-btn" class="btn" type="button">让角色接话</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="settings-panel" class="modal hidden settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="modal-shell modal-shell-wide">
+      <header class="modal-head">
+        <div>
+          <small>SETTINGS</small>
+          <h2 id="settings-title">设置</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="settings-panel">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <div class="settings-layout">
+        <nav class="settings-nav" aria-label="设置分组">
+          <button class="is-active" type="button" data-settings-section="model">大模型</button>
+          <button type="button" data-settings-section="knowledge">知识库</button>
+          <button type="button" data-settings-section="memory">长期记忆</button>
+          <button type="button" data-settings-section="advanced">高级</button>
+          <button type="button" data-settings-section="about">关于</button>
+        </nav>
+        <section class="settings-content">
+          <div class="settings-view is-active" data-settings-view="model">
+            <div class="panel-title"><h3>模型连接</h3><p>密钥仅保存在当前浏览器。</p></div>
+            <label><span>API Key</span><input id="api-key" type="password" autocomplete="off"></label>
+            <label><span>Base URL</span><input id="base-url" placeholder="https://api.openai.com/v1"></label>
+            <label><span>模型名称</span><input id="model-name" placeholder="gpt-4.1-mini"></label>
+            <div class="form-actions">
+              <button id="settings-save" class="btn btn-primary" type="button">保存设置</button>
+            </div>
+          </div>
+
+          <div class="settings-view" data-settings-view="knowledge">
+            <div class="panel-title"><h3>知识库</h3><p>继承旧项目 IndexedDB + BM25/CJK 分块组织方式。</p></div>
+            <div class="kb-toolbar">
+              <input id="kb-name-input" placeholder="新知识库名称">
+              <button id="kb-create-btn" class="btn" type="button">创建</button>
+              <label class="btn">
+                上传 txt/md
+                <input id="kb-file-input" type="file" accept=".txt,.md" multiple hidden>
+              </label>
+            </div>
+            <div class="kb-layout">
+              <aside id="kb-list" class="kb-list"></aside>
+              <section class="kb-detail">
+                <div id="kb-detail-head" class="kb-detail-head">选择一个知识库查看文件与分块。</div>
+                <div id="kb-file-list" class="kb-files-panel"></div>
+                <div id="kb-chunk-preview" class="kb-chunks-panel"></div>
+              </section>
+            </div>
+          </div>
+
+          <div class="settings-view" data-settings-view="memory">
+            <div class="panel-title"><h3>长期记忆</h3><p>继承旧项目文本记忆、关系边与记忆节点入口。</p></div>
+            <label class="switch-row">
+              <input id="memory-enabled" type="checkbox">
+              <span>启用长期记忆采集与检索</span>
+            </label>
+            <label><span>保留天数</span><input id="memory-retention" type="number" min="1" max="3650"></label>
+            <label><span>屏蔽关键词</span><input id="memory-blocked" placeholder="用逗号分隔"></label>
+            <div class="form-actions">
+              <button id="memory-settings-save" class="btn btn-primary" type="button">保存长期记忆设置</button>
+              <button class="btn" type="button" data-panel-open="memory-node-panel">打开记忆节点</button>
+            </div>
+          </div>
+
+          <div class="settings-view" data-settings-view="advanced">
+            <div class="panel-title"><h3>高级设置</h3><p>面向移动端占用和群聊调度的运行参数。</p></div>
+            <label><span>知识库分块长度</span><input id="adv-kb-chunk-size" type="number" min="200" max="1600"></label>
+            <label><span>群聊最大角色数</span><input id="adv-roundtable-max" type="number" min="2" max="12"></label>
+            <label><span>上下文消息上限</span><input id="adv-history-limit" type="number" min="4" max="80"></label>
+            <div class="form-actions">
+              <button id="advanced-save" class="btn btn-primary" type="button">保存高级设置</button>
+            </div>
+          </div>
+
+          <div class="settings-view" data-settings-view="about">
+            <div class="about-panel">
+              <img src="src/_logo/emoji/robot_3d.png" alt="">
+              <h3>Fritia Online NEXT Chat</h3>
+              <p>静态 PWA 首版，预留 Tauri / Capacitor 跨平台壳层，数据默认保存在本机浏览器。</p>
+              <p>图标来自 Lucide，表情美术来自 Microsoft Fluent UI Emoji。</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="memory-node-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="memory-node-title">
+    <div class="modal-shell modal-shell-wide memory-shell">
+      <header class="modal-head">
+        <div>
+          <small>LONG TERM MEMORY</small>
+          <h2 id="memory-node-title">记忆节点</h2>
+        </div>
+        <div class="modal-head-actions">
+          <span id="memory-node-stats" class="status-pill">0 条记忆 · 0 条关系</span>
+          <button class="icon-btn" type="button" data-panel-close="memory-node-panel">
+            <img src="src/_logo/icons/x.svg" alt="">
+          </button>
+        </div>
+      </header>
+      <div class="memory-layout">
+        <aside class="memory-command-panel">
+          <div class="memory-search-console">
+            <input id="memory-search-input" placeholder="搜索实体或关系">
+            <button id="memory-search-btn" class="btn" type="button">搜索</button>
+          </div>
+          <div id="memory-result-list" class="memory-result-list"></div>
+          <div class="memory-archive">
+            <div class="section-head"><h3>记忆档案</h3></div>
+            <div id="memory-archive-list" class="memory-archive-list"></div>
+          </div>
+        </aside>
+        <section class="memory-graph-wrap">
+          <canvas id="memory-graph-canvas" width="960" height="620"></canvas>
+          <aside id="memory-node-detail" class="memory-node-detail">点击节点查看关系。</aside>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <template id="conversation-item-template">
+    <button class="conversation-item" type="button">
+      <img class="conversation-item__avatar" alt="">
+      <span class="conversation-item__body">
+        <span class="conversation-item__name"></span>
+        <span class="conversation-item__preview"></span>
+      </span>
+      <span class="conversation-item__meta"></span>
+    </button>
+  </template>
+
+  <script type="module" src="src/js/main.js"></script>
+</body>
+</html>

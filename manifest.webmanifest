@@ -1,0 +1,18 @@
+{
+  "name": "Fritia Online NEXT Chat",
+  "short_name": "NEXT Chat",
+  "description": "QQ / Telegram style role-play AI chat client with private chats, group chats, RAG and long-term memory.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#1677ff",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "src/_logo/emoji/speech_balloon_3d.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
