@@ -51,6 +51,29 @@ http://127.0.0.1:3000/
 
 不能直接双击 `index.html`，因为预置角色提示词、知识库 JSON 和 ES Module 需要通过 HTTP 加载。
 
+## 部署
+
+本项目是静态站点，统一通过 `npm run build` 生成 `dist/`。构建产物会自动包含 `.nojekyll`，确保 GitHub Pages 正常发布 `src/_char`、`src/_logo`、`src/_rag_data` 等下划线目录。
+
+### GitHub Pages
+
+1. 将仓库上传到 GitHub，并推送到 `main` 或 `master`。
+2. 在仓库 `Settings / Pages` 中把 Source 设为 `GitHub Actions`。
+3. `.github/workflows/deploy-pages.yml` 会自动运行 `npm run check`、`npm run build`，并把 `dist` 发布到 GitHub Pages。
+
+也可以在 Actions 页面手动运行 `Deploy GitHub Pages` workflow。
+
+### Cloudflare Pages
+
+在 Cloudflare Pages 中选择 `Connect to Git` 并链接该 GitHub 仓库：
+
+- Framework preset：`None` 或静态站点。
+- Build command：`npm run build`
+- Build output directory：`dist`
+- Node.js：使用仓库 `.nvmrc` 中的 `22`。
+
+仓库根目录的 `wrangler.toml` 已声明 `pages_build_output_dir = "dist"`，用于 Cloudflare Pages 识别同一构建产物。
+
 ## 模型设置
 
 打开右侧快捷操作或左侧设置按钮，进入“设置 / 大模型”：

@@ -239,3 +239,10 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 
 - 仅在 `@media (max-width: 760px) and (orientation: portrait)` 下新增 `#memory-node-panel` 专用覆盖规则，迁移旧项目“记忆节点”移动端竖屏布局。
 - 保持横屏和其他窗口布局不变；compact 搜索继续复用 `long_term_memory.js` 中旧项目同源的 `.is-compact-open` 切换逻辑。
+
+## 2026-07-02 Static Hosting Deployment
+
+- 新增 `tools/build_static.mjs`，以无第三方依赖方式复制 `index.html`、`manifest.webmanifest`、`sw.js` 和 `src/` 到 `dist/`，并写入 `dist/.nojekyll`。
+- `package.json` 新增 `build` 与 `preview` 脚本，`tools/static_server.mjs` 支持通过命令参数指定静态根目录。
+- 新增 GitHub Pages workflow：push 到 `main` / `master` 或手动触发时运行检查、构建并发布 `dist/`。
+- 新增 `wrangler.toml` 和 `.nvmrc`，Cloudflare Pages 通过 GitHub 仓库部署时使用 `npm run build` 与 `dist`。

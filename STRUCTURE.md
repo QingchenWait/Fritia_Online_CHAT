@@ -1,5 +1,14 @@
 # STRUCTURE
 
+## 2026-07-02 Static Hosting Deployment Mapping
+
+- `.github/workflows/deploy-pages.yml`：GitHub Pages 自动部署 workflow，push 到 `main` / `master` 或手动触发后发布 `dist/`。
+- `tools/build_static.mjs`：静态构建脚本，复制站点文件到 `dist/` 并生成 `.nojekyll`。
+- `wrangler.toml`：Cloudflare Pages Git 集成配置，声明 `pages_build_output_dir = "dist"`。
+- `.nvmrc`：部署环境 Node.js 版本提示，当前为 `22`。
+- `.gitignore`：忽略 `node_modules/`、`dist/` 和本地 `.env*`。
+- `package.json` 新增脚本：`build` 生成静态产物，`preview` 预览 `dist/`。
+
 ## 2026-07-02 Advanced Settings And Localization Mapping
 
 - 新增 `src/js/deepseek_intimate_mode.js`：导出 `buildDeepSeekIntimateUserMessage()`、`isDeepSeekIntimateReply()`、`shouldKeepMessageForCurrentDeepSeekMode()`。
@@ -38,11 +47,18 @@
 
 ```text
 fritia_online_next_chat/
+├── .github/
+│   └── workflows/
+│       └── deploy-pages.yml
+├── .gitignore
+├── .nvmrc
 ├── index.html
 ├── manifest.webmanifest
 ├── package.json
+├── wrangler.toml
 ├── sw.js
 ├── tools/
+│   ├── build_static.mjs
 │   └── static_server.mjs
 ├── README.md
 ├── DEVELOP.md
