@@ -47,8 +47,19 @@ import { getRoundtableError, runRoundtableTurn, sendGroupPlayerMessage } from '.
 const MAX_KB_PREVIEW_CHUNKS = 80;
 const MAX_KB_PREVIEW_CHARS = 360;
 const ROUNDTABLE_IDLE_DELAY_MS = 45000;
+const CONVERSATION_LIST_WIDTH_KEY = 'fritia_conversation_list_width';
+const CONVERSATION_LIST_DEFAULT_WIDTH = 360;
+const CONVERSATION_LIST_MIN_WIDTH = 272;
+const CONVERSATION_LIST_MAX_WIDTH = 560;
+const CONVERSATION_LIST_MIN_CHAT_WIDTH = 420;
+const DESKTOP_LANDSCAPE_QUERY = '(min-width: 761px) and (orientation: landscape)';
+const MOBILE_LAYOUT_QUERY = '(max-width: 760px)';
+const MOBILE_EDGE_BACK_START = 48;
+const MOBILE_EDGE_BACK_DISTANCE = 76;
 
 let roundtableIdleTimer = 0;
+let layoutResizeFrame = 0;
+let mobileEdgeSwipe = null;
 
 const state = {
   store: loadAppStore(),
@@ -86,8 +97,10 @@ const state = {
 export function initUi() {
   state.store = loadAppStore();
   bindGlobalEvents();
+  applyStoredConversationListWidth();
   syncSettingsToForm();
   renderAll();
+  syncMobileBackAvailability();
   ensurePreloadedKnowledgeBases().then(() => {
     refreshKnowledgePanel();
     updateContextStatus();
@@ -121,6 +134,12 @@ function bindGlobalEvents() {
   document.addEventListener('fritia-stickers-updated', () => {
     renderStickerPopover();
     renderStickerManager();
+  });
+  bindConversationListResizer();
+  bindMobileBackGesture();
+  window.addEventListener('resize', () => {
+    scheduleConversationListWidthSync();
+    syncMobileBackAvailability();
   });
 
   document.querySelectorAll('[data-panel-open]').forEach(button => {
@@ -169,9 +188,10 @@ function bindGlobalEvents() {
   });
   document.getElementById('detail-close-btn')?.addEventListener('click', () => {
     document.getElementById('app')?.classList.remove('is-detail-open');
+    syncMobileBackAvailability();
   });
   document.getElementById('mobile-back-btn')?.addEventListener('click', () => {
-    document.getElementById('app')?.classList.remove('is-chat-open');
+    closeMobileChatPage();
   });
   document.getElementById('quick-new-group')?.addEventListener('click', () => openPanel('group-editor-panel', { fresh: true }));
   document.addEventListener('click', event => {
@@ -392,6 +412,7 @@ function bindGroupInfoPanel() {
   });
   document.getElementById('group-info-invite-btn')?.addEventListener('click', () => openGroupInfoEditor());
   document.getElementById('group-info-remove-btn')?.addEventListener('click', () => openGroupInfoEditor());
+  document.getElementById('group-info-name-row')?.addEventListener('click', renameActiveGroupConversation);
   document.getElementById('group-info-cancel-members')?.addEventListener('click', () => {
     state.groupInfoEditing = false;
     renderGroupInfoPanel();
@@ -575,6 +596,285 @@ function bindMemoryPanel() {
   initLongTermMemoryPanel();
 }
 
+function bindConversationListResizer() {
+  const resizer = document.getElementById('conversation-resizer');
+  if (!resizer) return;
+  resizer.addEventListener('pointerdown', event => {
+    if (!isDesktopLandscapeLayout() || event.button !== 0) return;
+    const app = document.getElementById('app');
+    if (!app) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = getCurrentConversationListWidth();
+    app.classList.add('is-resizing-list');
+    resizer.setPointerCapture?.(event.pointerId);
+
+    const handleMove = moveEvent => {
+      if (moveEvent.pointerId !== event.pointerId) return;
+      const nextWidth = startWidth + moveEvent.clientX - startX;
+      setConversationListWidth(nextWidth);
+    };
+    const handleEnd = endEvent => {
+      if (endEvent.pointerId !== event.pointerId) return;
+      document.removeEventListener('pointermove', handleMove);
+      document.removeEventListener('pointerup', handleEnd);
+      document.removeEventListener('pointercancel', handleEnd);
+      app.classList.remove('is-resizing-list');
+      saveConversationListWidth(getCurrentConversationListWidth());
+      resizer.releasePointerCapture?.(event.pointerId);
+    };
+    document.addEventListener('pointermove', handleMove);
+    document.addEventListener('pointerup', handleEnd);
+    document.addEventListener('pointercancel', handleEnd);
+  });
+  resizer.addEventListener('keydown', event => {
+    if (!isDesktopLandscapeLayout()) return;
+    const step = event.shiftKey ? 48 : 16;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      const direction = event.key === 'ArrowRight' ? 1 : -1;
+      const width = setConversationListWidth(getCurrentConversationListWidth() + direction * step);
+      saveConversationListWidth(width);
+    }
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      const bounds = getConversationListWidthBounds();
+      const width = setConversationListWidth(event.key === 'Home' ? bounds.min : bounds.max);
+      saveConversationListWidth(width);
+    }
+  });
+}
+
+function bindMobileBackGesture() {
+  window.addEventListener('pointerdown', event => {
+    if (!canStartMobileEdgeSwipe(event.clientX)) return;
+    if (!isAllowedMobileBackPointer(event)) return;
+    startMobileEdgeSwipe(`pointer:${event.pointerId}`, event.clientX, event.clientY);
+  }, { passive: true, capture: true });
+  window.addEventListener('pointermove', event => {
+    if (!isActiveMobileEdgeSwipe(`pointer:${event.pointerId}`)) return;
+    handleMobileBackGestureMove(event.clientX, event.clientY, event);
+  }, { passive: false, capture: true });
+  window.addEventListener('pointerup', event => {
+    handleMobileBackGestureEnd(`pointer:${event.pointerId}`, event.clientX, event.clientY, event);
+  }, { passive: false, capture: true });
+  window.addEventListener('pointercancel', event => {
+    if (!isActiveMobileEdgeSwipe(`pointer:${event.pointerId}`)) return;
+    mobileEdgeSwipe = null;
+  }, { passive: true, capture: true });
+
+  window.addEventListener('touchstart', event => {
+    const touch = event.changedTouches[0];
+    if (!touch || !canStartMobileEdgeSwipe(touch.clientX)) return;
+    startMobileEdgeSwipe(`touch:${touch.identifier}`, touch.clientX, touch.clientY);
+  }, { passive: true, capture: true });
+  window.addEventListener('touchmove', event => {
+    const touch = findActiveMobileEdgeTouch(event.changedTouches);
+    if (!touch) return;
+    handleMobileBackGestureMove(touch.clientX, touch.clientY, event);
+  }, { passive: false, capture: true });
+  window.addEventListener('touchend', event => {
+    const touch = findActiveMobileEdgeTouch(event.changedTouches);
+    if (!touch) return;
+    handleMobileBackGestureEnd(`touch:${touch.identifier}`, touch.clientX, touch.clientY, event);
+  }, { passive: false, capture: true });
+  window.addEventListener('touchcancel', event => {
+    const touch = findActiveMobileEdgeTouch(event.changedTouches);
+    if (!touch) return;
+    mobileEdgeSwipe = null;
+  }, { passive: true, capture: true });
+}
+
+function canStartMobileEdgeSwipe(clientX) {
+  return isMobilePortraitLayout() && clientX <= MOBILE_EDGE_BACK_START && hasMobileBackDestination() && !mobileEdgeSwipe;
+}
+
+function isAllowedMobileBackPointer(event) {
+  if (event.pointerType === 'touch' || event.pointerType === 'pen') return true;
+  return event.pointerType === 'mouse' && event.button === 0;
+}
+
+function startMobileEdgeSwipe(id, startX, startY) {
+  mobileEdgeSwipe = { id, startX, startY };
+}
+
+function isActiveMobileEdgeSwipe(id) {
+  return Boolean(mobileEdgeSwipe && mobileEdgeSwipe.id === id);
+}
+
+function findActiveMobileEdgeTouch(touches) {
+  if (!mobileEdgeSwipe?.id?.startsWith('touch:')) return null;
+  const id = Number(mobileEdgeSwipe.id.slice('touch:'.length));
+  return Array.from(touches).find(touch => touch.identifier === id) || null;
+}
+
+function handleMobileBackGestureMove(clientX, clientY, event) {
+  if (!mobileEdgeSwipe) return;
+  const deltaX = clientX - mobileEdgeSwipe.startX;
+  const deltaY = Math.abs(clientY - mobileEdgeSwipe.startY);
+  if (deltaX < -8 || (deltaY > 58 && deltaY > Math.abs(deltaX) * 1.2)) {
+    mobileEdgeSwipe = null;
+    return;
+  }
+  if (deltaX > 14 && deltaX > deltaY) event.preventDefault();
+}
+
+function handleMobileBackGestureEnd(id, clientX, clientY, event) {
+  if (!isActiveMobileEdgeSwipe(id)) return;
+  const deltaX = clientX - mobileEdgeSwipe.startX;
+  const deltaY = Math.abs(clientY - mobileEdgeSwipe.startY);
+  mobileEdgeSwipe = null;
+  if (deltaX < MOBILE_EDGE_BACK_DISTANCE || deltaX < deltaY * 1.35 || deltaY > 90) return;
+  event.preventDefault();
+  performMobileBackGesture();
+}
+
+function scheduleConversationListWidthSync() {
+  if (layoutResizeFrame) cancelAnimationFrame(layoutResizeFrame);
+  layoutResizeFrame = requestAnimationFrame(() => {
+    layoutResizeFrame = 0;
+    applyStoredConversationListWidth();
+  });
+}
+
+function applyStoredConversationListWidth() {
+  const stored = readStoredConversationListWidth();
+  setConversationListWidth(stored || CONVERSATION_LIST_DEFAULT_WIDTH);
+}
+
+function setConversationListWidth(width) {
+  const app = document.getElementById('app');
+  if (!app) return width;
+  const bounds = getConversationListWidthBounds();
+  const nextWidth = Math.round(clampNumber(Number(width) || CONVERSATION_LIST_DEFAULT_WIDTH, bounds.min, bounds.max));
+  app.style.setProperty('--list-width', `${nextWidth}px`);
+  const resizer = document.getElementById('conversation-resizer');
+  if (resizer) {
+    resizer.setAttribute('aria-valuemin', String(bounds.min));
+    resizer.setAttribute('aria-valuemax', String(bounds.max));
+    resizer.setAttribute('aria-valuenow', String(nextWidth));
+  }
+  return nextWidth;
+}
+
+function getConversationListWidthBounds() {
+  const app = document.getElementById('app');
+  const rail = document.querySelector('.rail');
+  const resizer = document.getElementById('conversation-resizer');
+  const appWidth = app?.getBoundingClientRect().width || window.innerWidth || 0;
+  const railWidth = rail?.getBoundingClientRect().width || 0;
+  const resizerWidth = isDesktopLandscapeLayout() ? (resizer?.getBoundingClientRect().width || 10) : 0;
+  const available = appWidth - railWidth - resizerWidth - CONVERSATION_LIST_MIN_CHAT_WIDTH;
+  const max = Math.max(CONVERSATION_LIST_MIN_WIDTH, Math.min(CONVERSATION_LIST_MAX_WIDTH, available));
+  return { min: CONVERSATION_LIST_MIN_WIDTH, max: Math.round(max) };
+}
+
+function getCurrentConversationListWidth() {
+  const list = document.querySelector('.conversation-list');
+  const current = list?.getBoundingClientRect().width || readStoredConversationListWidth() || CONVERSATION_LIST_DEFAULT_WIDTH;
+  return clampNumber(current, getConversationListWidthBounds().min, getConversationListWidthBounds().max);
+}
+
+function readStoredConversationListWidth() {
+  try {
+    return Number(localStorage.getItem(CONVERSATION_LIST_WIDTH_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveConversationListWidth(width) {
+  try {
+    localStorage.setItem(CONVERSATION_LIST_WIDTH_KEY, String(Math.round(width)));
+  } catch {
+    // Browser storage may be unavailable in private contexts.
+  }
+}
+
+function isDesktopLandscapeLayout() {
+  return window.matchMedia(DESKTOP_LANDSCAPE_QUERY).matches;
+}
+
+function isMobilePortraitLayout() {
+  return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+}
+
+function hasMobileBackDestination() {
+  const app = document.getElementById('app');
+  const groupInfo = document.getElementById('group-info-panel');
+  const groupInfoOpen = Boolean(groupInfo && !groupInfo.classList.contains('hidden'));
+  return Boolean(getTopOpenModalId() || groupInfoOpen || app?.classList.contains('is-detail-open') || app?.classList.contains('is-chat-open'));
+}
+
+function syncMobileBackAvailability() {
+  const app = document.getElementById('app');
+  app?.classList.toggle('is-mobile-back-available', isMobilePortraitLayout() && hasMobileBackDestination());
+}
+
+function performMobileBackGesture() {
+  let handled = false;
+  const openModalId = getTopOpenModalId();
+  if (openModalId) {
+    closePanel(openModalId);
+    syncMobileBackAvailability();
+    handled = true;
+    clearMobileTouchActivationState();
+    return handled;
+  }
+  const groupInfo = document.getElementById('group-info-panel');
+  if (groupInfo && !groupInfo.classList.contains('hidden')) {
+    closeGroupInfoPanel();
+    syncMobileBackAvailability();
+    handled = true;
+    clearMobileTouchActivationState();
+    return handled;
+  }
+  const app = document.getElementById('app');
+  if (app?.classList.contains('is-detail-open')) {
+    app.classList.remove('is-detail-open');
+    syncMobileBackAvailability();
+    handled = true;
+    clearMobileTouchActivationState();
+    return handled;
+  }
+  if (app?.classList.contains('is-chat-open')) {
+    closeMobileChatPage();
+    handled = true;
+    clearMobileTouchActivationState();
+    return handled;
+  }
+  syncMobileBackAvailability();
+  return false;
+}
+
+function clearMobileTouchActivationState() {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  const app = document.getElementById('app');
+  app?.classList.add('is-clearing-touch-activation');
+  window.setTimeout(() => {
+    app?.classList.remove('is-clearing-touch-activation');
+  }, 220);
+}
+
+function closeMobileChatPage() {
+  closeMentionPicker();
+  closeStickerPopover();
+  state.roundtableErrorPopoverOpen = false;
+  renderRoundtableErrorIndicator();
+  document.getElementById('app')?.classList.remove('is-chat-open');
+  syncMobileBackAvailability();
+}
+
+function getTopOpenModalId() {
+  const panels = [...document.querySelectorAll('.modal:not(.hidden)')];
+  const panel = panels[panels.length - 1];
+  return panel?.id || '';
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function setListTab(tab) {
   state.listTab = tab;
   document.querySelectorAll('[data-list-tab]').forEach(button => {
@@ -594,6 +894,7 @@ function renderAll() {
   updateContextStatus();
   renderRoundtableErrorIndicator();
   scheduleRoundtableIdle();
+  syncMobileBackAvailability();
 }
 
 function renderConversationList() {
@@ -1000,12 +1301,14 @@ function openGroupInfoPanel() {
   document.getElementById('group-info-panel')?.classList.remove('hidden');
   document.getElementById('group-info-backdrop')?.classList.remove('hidden');
   renderGroupInfoPanel();
+  syncMobileBackAvailability();
 }
 
 function closeGroupInfoPanel() {
   document.getElementById('group-info-panel')?.classList.add('hidden');
   document.getElementById('group-info-backdrop')?.classList.add('hidden');
   state.groupInfoEditing = false;
+  syncMobileBackAvailability();
 }
 
 function openGroupInfoEditor() {
@@ -1030,6 +1333,7 @@ function renderGroupInfoPanel() {
   const settings = normalizeGroupSettings(conversation.groupSettings);
   const members = getGroupMembers(conversation);
   setText('group-info-count', `查看${members.length}名群成员`);
+  setText('group-info-name-label', conversation.title || conversationTitle(conversation));
   setText('group-info-max-label', `${settings.maxParticipants} 人`);
   const maxInput = document.getElementById('group-setting-max-members');
   if (maxInput) {
@@ -1112,7 +1416,8 @@ function renderGroupInfoMemberEditor() {
   if (save) {
     const count = selected.size;
     save.disabled = count < 2;
-    save.textContent = `保存成员(${count})`;
+    save.title = `保存成员(${count})`;
+    save.setAttribute('aria-label', `保存成员(${count})`);
   }
 }
 
@@ -1120,6 +1425,18 @@ function getGroupMembers(conversation) {
   return conversation.memberIds
     .map(id => getCharacterById(state.store.characters, id))
     .filter(Boolean);
+}
+
+function renameActiveGroupConversation() {
+  const conversation = getActiveConversation();
+  if (!conversation || conversation.type !== 'group') return;
+  const currentTitle = conversation.title || conversationTitle(conversation);
+  const nextTitle = window.prompt('修改群聊名称', currentTitle);
+  if (nextTitle === null) return;
+  const title = nextTitle.trim();
+  if (!title || title === currentTitle) return;
+  updateStore(updateGroupConversation(state.store, conversation.id, { title }));
+  renderGroupInfoPanel();
 }
 
 function updateMentionPicker() {
@@ -1760,14 +2077,17 @@ function openPanel(id, options = {}) {
     showStickerManagerSection('manage');
     renderStickerManager();
   }
+  syncMobileBackAvailability();
 }
 
 function closePanel(id) {
   if (id === 'memory-node-panel') {
     closeMemoryNodePanel();
+    syncMobileBackAvailability();
     return;
   }
   document.getElementById(id)?.classList.add('hidden');
+  syncMobileBackAvailability();
 }
 
 function showSettingsSection(section) {
@@ -1796,6 +2116,7 @@ function selectConversation(id) {
   closeStickerPopover();
   updateStore(next);
   document.getElementById('app')?.classList.add('is-chat-open');
+  syncMobileBackAvailability();
 }
 
 function updateStore(store) {
@@ -1864,6 +2185,7 @@ function handleChatInfoToggle() {
   }
   document.getElementById('app')?.classList.toggle('is-detail-open');
   renderDetail();
+  syncMobileBackAvailability();
 }
 
 function updateConversationChrome(conversation) {

@@ -59,6 +59,8 @@
       <div id="conversation-list" class="list-scroll"></div>
     </section>
 
+    <div id="conversation-resizer" class="conversation-resizer" role="separator" aria-label="调整列表宽度" aria-orientation="vertical" tabindex="0"></div>
+
     <main class="chat-pane" aria-label="聊天窗口">
       <header class="chat-head">
         <button class="icon-btn mobile-back" id="mobile-back-btn" type="button" title="返回">
@@ -176,6 +178,7 @@
         </dl>
       </section>
     </aside>
+    <div id="mobile-edge-back-zone" class="mobile-edge-back-zone" aria-hidden="true"></div>
   </div>
 
   <div id="group-info-backdrop" class="group-info-backdrop hidden"></div>
@@ -193,13 +196,25 @@
       <section class="group-info-card">
         <div id="group-info-member-grid" class="group-info-member-grid"></div>
         <div id="group-info-member-editor" class="group-info-member-editor hidden">
-          <input id="group-info-member-search" type="search" placeholder="搜索好友">
-          <div id="group-info-member-list" class="group-info-member-list"></div>
-          <div class="group-info-editor-actions">
-            <button id="group-info-cancel-members" class="btn" type="button">取消</button>
-            <button id="group-info-save-members" class="btn btn-primary" type="button">保存成员</button>
+          <div class="group-info-editor-toolbar">
+            <input id="group-info-member-search" type="search" placeholder="搜索好友">
+            <div class="group-info-editor-actions">
+              <button id="group-info-cancel-members" class="group-info-action-btn" type="button" title="取消" aria-label="取消">
+                <img src="src/_logo/icons/x.svg" alt="">
+              </button>
+              <button id="group-info-save-members" class="group-info-action-btn group-info-action-primary" type="button" title="保存成员" aria-label="保存成员">
+                <img src="src/_logo/icons/users.svg" alt="">
+              </button>
+            </div>
           </div>
+          <div id="group-info-member-list" class="group-info-member-list"></div>
         </div>
+      </section>
+      <section class="group-info-section group-info-rows">
+        <button id="group-info-name-row" class="group-setting-row group-setting-button group-name-row" type="button">
+          <span>群聊名称</span>
+          <small id="group-info-name-label">未命名群聊</small>
+        </button>
       </section>
       <section class="group-info-section">
         <h3>聊天设置</h3>

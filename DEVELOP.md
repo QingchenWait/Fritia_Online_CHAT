@@ -254,3 +254,26 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - 表情缩略图按图片比例切换 `contain` / `cover`，只影响表情窗口和管理窗口显示，不改变发送的原图。
 - 表情附件会记录 `source: "sticker"` 与原始宽高；消息渲染时用 `.message-image-sticker` 按原图比例缩略显示，短边复用 `--sticker-thumb-size`。
 - 表情包弹窗使用无横向溢出的响应式 Grid：桌面端根据可用宽度在 4-6 列间自适应，移动竖屏固定最多 5 列。
+
+## 2026-07-02 Responsive Navigation Gestures
+
+- 桌面横屏主布局新增 `#conversation-resizer`，允许拖拽或用方向键调整消息/好友/群聊列表宽度，并写入 `localStorage.fritia_conversation_list_width`。
+- 列表宽度下限为 272px，并同步约束列表项正文列和时间列，保证最小宽度下仍能显示“5 个全角字符 + 省略号 + 时间”的摘要结构。
+- 移动竖屏新增触控左缘右滑返回规则：打开全屏二级页面时关闭最上层 modal；没有二级页面时从聊天页返回列表页。
+- 分隔条视觉改为单线窄边框，拖拽热区与可见边框分离；移动返回手势改为 Pointer Events + Touch Events 双路径，并扩大左缘触发区。
+- 修复移动返回手势的结构性失效点：新增透明 `#mobile-edge-back-zone` 作为左缘触控目标，并让 JS 手势判定使用与移动布局一致的 `max-width: 760px` 断点。
+- 手势关闭二级页面后会调用触控态清理：主动 blur 当前焦点，并短暂添加 `.is-clearing-touch-activation`，移动端普通按钮 hover 不再留下灰色激活背景。
+- 修复移动端聊天头部返回按钮被透明手势热区遮挡的问题：`#mobile-edge-back-zone` 从聊天头部下方开始覆盖，顶部返回按钮点击与手势返回共用 `closeMobileChatPage()`。
+
+## 2026-07-02 Group Rename
+
+- 群聊成员悬浮面板新增“群聊名称”配置行，位于成员宫格和聊天设置之间，当前标题会在右侧以省略号形式展示。
+- 点击该配置行会调用 `renameActiveGroupConversation()`，通过 `updateGroupConversation(..., { title })` 写入当前群聊标题。
+- 群聊名称作为 `conversation.title` 持久化保存；保存后通过 `updateStore()` 立即刷新聊天头、会话列表和群聊成员面板。
+
+## 2026-07-02 Group Info Scroll
+
+- 群聊成员悬浮面板的 `.group-info-shell` 明确作为内部滚动容器，限制在当前视口高度内滚动，不再依赖页面滚动。
+- 面板和成员编辑列表统一使用蓝紫 Soft UI 自绘滚动条，支持内容超出时上下滑动。
+- 修复低高度窗口下 flex 子块被压缩成细条的问题：面板头部、成员卡片、设置区和底部按钮均固定为不收缩，由 `.group-info-shell` 统一滚动。
+- 成员编辑模式下，搜索框右侧同一行显示“取消 / 保存成员”图标按钮，并设置 sticky 展示，避免低高度窗口或长列表场景下无法应用成员更改。

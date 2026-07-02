@@ -1,5 +1,12 @@
 # STRUCTURE
 
+## 2026-07-02 Responsive Navigation Mapping
+
+- 新增 DOM：`#conversation-resizer` 位于 `.conversation-list` 和 `.chat-pane` 之间，作为横屏列表宽度拖拽分隔条；`#mobile-edge-back-zone` 作为移动端左缘返回手势透明热区，竖屏下从聊天头部下方开始覆盖，避免挡住左上角返回按钮。
+- 新增 CSS 变量和类：`--list-min-width`、`--list-resizer-width`、`.conversation-resizer`、`.app-shell.is-resizing-list`、`.app-shell.is-clearing-touch-activation`；分隔条保留可拖动热区，但只渲染单线窄边框；`@media (orientation: portrait)` 和 `@media (max-width: 760px)` 会隐藏分隔条。
+- `src/js/ui.js` 新增布局交互：`bindConversationListResizer()`、`applyStoredConversationListWidth()`、`setConversationListWidth()`、`bindMobileBackGesture()`、`syncMobileBackAvailability()`、`performMobileBackGesture()`、`clearMobileTouchActivationState()`、`closeMobileChatPage()`；移动返回手势同时监听 Pointer Events 和 Touch Events，且判定断点与 `@media (max-width: 760px)` 移动布局一致。
+- 列表宽度保存到 `localStorage.fritia_conversation_list_width`；移动竖屏左缘右滑优先关闭最上层 `.modal`，然后关闭聊天页返回列表。
+
 ## 2026-07-02 Static Hosting Deployment Mapping
 
 - `.github/workflows/deploy-pages.yml`：GitHub Pages 自动部署 workflow，push 到 `main` / `master` 或手动触发后发布 `dist/`。
@@ -166,6 +173,8 @@ fritia_online_next_chat/
 - `#group-info-backdrop`：群聊信息侧边面板背景遮罩。
 - `#group-info-panel`：群聊成员与规则侧边悬浮面板。
 - `#group-info-member-grid`：当前群成员头像宫格，包含邀请和移出入口。
+- `#group-info-name-row`：群聊名称配置行，点击后修改当前群聊标题。
+- `#group-info-name-label`：群聊名称配置行右侧当前标题显示。
 - `#group-info-member-editor`：当前群聊成员增减编辑区。
 - `#group-info-member-search`：侧边面板内好友搜索输入。
 - `#group-info-member-list`：侧边面板内所有好友单列多选列表。
@@ -444,7 +453,8 @@ fritia_online_next_chat/
 - `handleChatInfoToggle()`：私聊时切换角色卡片，群聊时打开成员与规则侧边面板。
 - `renderGroupMemberPicker()`：渲染单列好友多选列表。
 - `openGroupInfoPanel()` / `closeGroupInfoPanel()`：打开/关闭群聊侧边悬浮面板。
-- `renderGroupInfoPanel()`：刷新群聊成员宫格、圆桌规则开关和最大人数。
+- `renderGroupInfoPanel()`：刷新群聊成员宫格、群聊名称、圆桌规则开关和最大人数。
+- `renameActiveGroupConversation()`：修改当前群聊 `conversation.title`，通过 `updateGroupConversation()` 持久化并刷新 UI。
 - `renderGroupInfoMemberEditor()`：渲染当前群聊成员增减列表。
 - `updateMentionPicker()` / `renderMentionPicker()`：根据输入框光标前 `@` token 渲染候选列表。
 - `insertMentionText(name, options)`：向群聊输入框插入或替换 `@成员名`。
@@ -492,6 +502,13 @@ fritia_online_next_chat/
 - `.rail`：桌面端为左侧导航栏，移动端列表页转为底部悬浮 Tab Bar。
 - `.detail-pane`：私聊角色卡片右侧悬浮窗口，与群聊成员侧边窗口保持同类玻璃卡片样式。
 - `#detail-close-btn`：关闭私聊角色卡片悬浮窗口。
+
+## 2026-07-02 Group Info Scroll Mapping
+
+- `.group-info-shell`：群聊成员悬浮面板的内部滚动容器，使用 `overflow-y: auto`、`scrollbar-gutter: stable` 和自绘滚动条；直接子块设置为 `flex: 0 0 auto`，避免低高度时被压缩。
+- `.group-info-member-list`：群聊成员编辑列表滚动容器，与 `.group-info-shell` 共享滚动条样式。
+- `.group-info-editor-toolbar`：群聊成员编辑顶部工具栏，左侧为搜索框，右侧为取消和保存成员图标按钮，sticky 保持可见。
+- `.group-info-editor-actions` / `.group-info-action-btn`：群聊成员编辑图标动作区与图标按钮，用于取消或保存成员更改。
 
 ## 2026-07-02 Knowledge UI Refinement Mapping
 

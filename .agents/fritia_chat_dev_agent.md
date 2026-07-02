@@ -9,6 +9,7 @@
 - 本项目是 `D:\Models\vibe_coding\fritia_online_v3 (dev)` 中“芙提雅 ONLINE NEXT”的衍生版本；遇到相近功能时，优先参考该项目既有实现方式。
 - 新功能实现前，优先联网检索成熟开源实现、库或方案，能复用则不要重复造轮子。
 - 调试和命令执行优先使用 PowerShell 7 (`pwsh`) 或 `cmd`，不要使用 Windows PowerShell 5。
+- 必须以最小修改的方式进行编码，修改仅限于用户明确提及的模块和功能，避免对其他模块的干涉，导致出现额外的 bug。
 
 ## Windows command policy
 
@@ -33,6 +34,7 @@ Do not silently switch to cmd.exe unless both PowerShell 7 attempts fail.
 ## 必须规避的行为
 - 在处理 LLM 返回结果的相关函数中，必须必须非常谨慎地应用“截断” (如设置 max_tokens) 处理。例如，当要求 LLM 输出 JSON 格式文本的时候，禁止对返回文本进行任何形式的截断，否则这会导致 JSON 结构错误。
 - 不能够大量使用纯文字按钮，禁止使用自行绘制 SVG 的方式代替外部图标资源。
+- 在单轮对话中，禁止随意修改用户提示词中未提及的功能。除非用户明确要求，或者确实有关联修改的必要。
 
 ## 文档维护：
 - 每次功能变更后同步维护 `README.md`：面向用户记录功能说明和使用方式。

@@ -22,6 +22,8 @@
   --radius: 16px;
   --rail-width: clamp(3.75rem, 4.5vw, 5rem);
   --list-width: 360px;
+  --list-min-width: 272px;
+  --list-resizer-width: 10px;
   --detail-width: 312px;
   --sticker-thumb-size: clamp(64px, 5vw, 78px);
   --sticker-grid-gap: 12px;
@@ -66,13 +68,13 @@ img {
   width: 100vw;
   height: 100dvh;
   display: grid;
-  grid-template-columns: var(--rail-width) var(--list-width) minmax(0, 1fr);
+  grid-template-columns: var(--rail-width) minmax(var(--list-min-width), var(--list-width)) var(--list-resizer-width) minmax(0, 1fr);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.82);
 }
 
 .app-shell.is-detail-open {
-  grid-template-columns: var(--rail-width) var(--list-width) minmax(0, 1fr);
+  grid-template-columns: var(--rail-width) minmax(var(--list-min-width), var(--list-width)) var(--list-resizer-width) minmax(0, 1fr);
 }
 
 .rail {
@@ -131,11 +133,46 @@ img {
 
 .conversation-list {
   min-width: 0;
-  border-right: 1px solid var(--line);
   background: var(--surface-soft);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.conversation-resizer {
+  position: relative;
+  min-width: var(--list-resizer-width);
+  width: var(--list-resizer-width);
+  height: 100dvh;
+  background: var(--surface-soft);
+  cursor: col-resize;
+  touch-action: none;
+  outline: 0;
+  z-index: 4;
+}
+
+.conversation-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 1px;
+  background: var(--line);
+  transition: background 160ms ease;
+}
+
+.conversation-resizer:hover::before,
+.conversation-resizer:focus-visible::before,
+.app-shell.is-resizing-list .conversation-resizer::before {
+  background: rgba(79, 99, 255, 0.42);
+}
+
+.app-shell.is-resizing-list {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.mobile-edge-back-zone {
+  display: none;
 }
 
 .list-top {
@@ -271,7 +308,7 @@ img {
   border-radius: var(--radius);
   background: transparent;
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto;
+  grid-template-columns: 52px minmax(7.5em, 1fr) 3.4rem;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
@@ -321,7 +358,9 @@ img {
   color: var(--faint);
   font-size: 12px;
   align-self: start;
+  justify-self: end;
   padding-top: 7px;
+  white-space: nowrap;
 }
 
 .chat-pane {
@@ -2125,8 +2164,15 @@ select:focus {
 
 .group-info-shell {
   height: 100%;
+  min-height: 0;
+  max-height: 100%;
   pointer-events: auto;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 91, 255, 0.42) transparent;
   border: 1px solid rgba(120, 140, 180, 0.18);
   border-radius: 20px;
   background: rgba(247, 248, 250, 0.96);
@@ -2140,16 +2186,31 @@ select:focus {
 
 .group-info-shell::-webkit-scrollbar,
 .group-info-member-list::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
+  height: 10px;
+}
+
+.group-info-shell::-webkit-scrollbar-track,
+.group-info-member-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .group-info-shell::-webkit-scrollbar-thumb,
 .group-info-member-list::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
   border-radius: 999px;
-  background: #b8c4d0;
+  background: rgba(99, 91, 255, 0.42);
+  background-clip: padding-box;
+}
+
+.group-info-shell::-webkit-scrollbar-thumb:hover,
+.group-info-member-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(79, 99, 255, 0.62);
+  background-clip: padding-box;
 }
 
 .group-info-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -2176,6 +2237,7 @@ select:focus {
 
 .group-info-card,
 .group-info-section {
+  flex: 0 0 auto;
   border: 1px solid rgba(120, 140, 180, 0.14);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
@@ -2247,6 +2309,23 @@ select:focus {
   gap: 10px;
 }
 
+.group-info-editor-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 4px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+}
+
+.group-info-editor-toolbar input {
+  min-width: 0;
+}
+
 .group-info-member-list {
   max-height: 280px;
   overflow: auto;
@@ -2314,8 +2393,48 @@ select:focus {
 
 .group-info-editor-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(2, 36px);
+  gap: 6px;
+}
+
+.group-info-action-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.group-info-action-btn:hover {
+  background: var(--surface-soft);
+}
+
+.group-info-action-btn img {
+  width: 18px;
+  height: 18px;
+}
+
+.group-info-action-primary {
+  border-color: var(--brand);
+  background: var(--brand-gradient);
+}
+
+.group-info-action-primary:hover {
+  background: linear-gradient(135deg, #6171ff, #7568ff);
+  box-shadow: 0 10px 20px rgba(79, 99, 255, 0.22);
+}
+
+.group-info-action-primary img {
+  filter: brightness(0) invert(1);
+}
+
+.group-info-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+  box-shadow: none;
 }
 
 .group-info-section h3 {
@@ -2414,13 +2533,25 @@ select:focus {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.group-name-row small {
+  max-width: min(14rem, 56vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-name-row small::after {
+  content: "›";
+  margin-left: 6px;
+}
+
 .group-setting-button:hover {
   background: var(--surface-soft);
 }
 
 .group-leave-btn {
-  margin-top: auto;
+  margin-top: 8px;
   min-height: 46px;
+  flex: 0 0 auto;
   border: 0;
   border-radius: 12px;
   background: #fff;
@@ -2867,11 +2998,11 @@ select:focus {
 
 @media (max-width: 1180px) {
   .app-shell {
-    grid-template-columns: var(--rail-width) 340px minmax(0, 1fr);
+    grid-template-columns: var(--rail-width) minmax(var(--list-min-width), var(--list-width)) var(--list-resizer-width) minmax(0, 1fr);
   }
 
   .app-shell.is-detail-open {
-    grid-template-columns: var(--rail-width) 340px minmax(0, 1fr);
+    grid-template-columns: var(--rail-width) minmax(var(--list-min-width), var(--list-width)) var(--list-resizer-width) minmax(0, 1fr);
   }
 
   .detail-pane,
@@ -2881,6 +3012,17 @@ select:focus {
 
   .memory-layout {
     grid-template-columns: 260px minmax(0, 1fr);
+  }
+}
+
+@media (orientation: portrait) {
+  .app-shell,
+  .app-shell.is-detail-open {
+    grid-template-columns: var(--rail-width) minmax(var(--list-min-width), var(--list-width)) minmax(0, 1fr);
+  }
+
+  .conversation-resizer {
+    display: none;
   }
 }
 
@@ -2906,14 +3048,37 @@ select:focus {
   html,
   body {
     overflow: hidden;
+    overscroll-behavior-x: contain;
   }
 
   .app-shell {
     grid-template-columns: 1fr;
+    overscroll-behavior-x: contain;
   }
 
   .app-shell.is-detail-open {
     grid-template-columns: 1fr;
+  }
+
+  .conversation-resizer {
+    display: none;
+  }
+
+  .mobile-edge-back-zone {
+    position: fixed;
+    top: 66px;
+    left: 0;
+    bottom: 0;
+    z-index: 80;
+    display: block;
+    width: 28px;
+    background: transparent;
+    pointer-events: none;
+    touch-action: none;
+  }
+
+  .app-shell.is-mobile-back-available .mobile-edge-back-zone {
+    pointer-events: auto;
   }
 
   .detail-pane,
@@ -2965,6 +3130,18 @@ select:focus {
 
   .rail-btn.is-active img {
     filter: brightness(0) invert(1);
+  }
+
+  .rail-btn:hover:not(.is-active),
+  .icon-btn:hover {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .app-shell.is-clearing-touch-activation .rail-btn:not(.is-active),
+  .app-shell.is-clearing-touch-activation .icon-btn {
+    background: transparent;
+    box-shadow: none;
   }
 
   .conversation-list,
