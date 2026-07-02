@@ -1,7 +1,11 @@
 import { ensurePresetCharacters } from './characters.js';
 import { initUi } from './ui.js';
+import { migrateLegacyAppMediaToIndexedDb } from './storage.js';
+import { migrateLegacyStickersToIndexedDb } from './stickers.js';
 
 async function boot() {
+  await migrateLegacyAppMediaToIndexedDb();
+  await migrateLegacyStickersToIndexedDb();
   await ensurePresetCharacters();
   initUi();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

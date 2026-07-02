@@ -1,5 +1,20 @@
 # STRUCTURE
 
+## 2026-07-03 Preset Character Voice Mapping
+
+- `src/js/characters.js`：`PRESET_CHARACTER_SOURCES` 为芙提雅、芬妮、琴诺补齐 `voiceSample`，路径分别指向各自 `src/_char/<角色>/..._Voice.mp3`。
+- 芙提雅预置 `examples` 示例对话；芬妮、琴诺示例对话为空，保持与用户导入角色相同的字段结构。
+- `ensurePresetCharacters()` 会在已有预置角色启动同步时比较并保存 `examples`、`voiceSample` 等字段，确保旧 store 中的预置角色也完成配置迁移。
+
+## 2026-07-02 Model Provider Settings Mapping
+
+- `src/js/settings.js`：设置结构新增 `chatProviders`、`ttsProviders`、三个默认模型 id，并继续输出兼容字段 `apiKey/baseUrl/model`。
+- `src/js/tts_engine.js`：预留 `getActiveTtsProvider()` 和 `buildMimoVoiceCloneRequest()`，用于后续把角色参考声音文件传给 MiMO TTS。
+- 新增大模型 DOM：`[data-model-tab]`、`[data-model-pane]`、`#model-chat-provider-list`、`#model-tts-provider-list`、`#model-chat-provider-select`、`#model-tts-provider-select`、`#chat-provider-*`、`#tts-provider-*`、`#default-chat-provider`、`#default-tts-provider`、`#default-image-caption-provider`。
+- 新增 UI 函数：`renderModelSettings()`、`showModelProviderTab()`、`addModelProvider()`、`deleteModelProvider()`、`saveCurrentModelProvider()`、`saveModelSettings()`。
+- 新增 UI 函数：`enhanceCustomSelects()`、`updateCustomSelect()`、`closeCustomSelects()`，负责把原生 select 渲染为自绘下拉菜单。
+- 新增 CSS：`.model-settings-shell`、`.model-tabs`、`.model-provider-workbench`、`.model-provider-sidebar`、`.model-provider-detail`、`.model-provider-form`、`.model-defaults-card`、`.custom-select`；移动端下默认模型卡片作为第三个同级标签页显示。
+
 ## 2026-07-02 Responsive Navigation Mapping
 
 - 新增 DOM：`#conversation-resizer` 位于 `.conversation-list` 和 `.chat-pane` 之间，作为横屏列表宽度拖拽分隔条；`#mobile-edge-back-zone` 作为移动端左缘返回手势透明热区，竖屏下从聊天头部下方开始覆盖，避免挡住左上角返回按钮。
@@ -18,11 +33,20 @@
 
 ## 2026-07-02 Sticker Packs Mapping
 
-- 新增 `src/js/stickers.js`：导出 `listStickers()`、`addStickerFiles()`、`deleteSticker()`、`stickerToAttachment()`、`isWideSticker()`。
+- 新增 `src/js/stickers.js`：导出 `listStickers()`、`addStickerFiles()`、`deleteSticker()`、`stickerToAttachment()`、`isWideSticker()`、`migrateLegacyStickersToIndexedDb()`。
 - 新增 DOM：`#sticker-toggle-btn`、`#sticker-popover`、`#sticker-popover-grid`、`#sticker-upload-input`。
 - 新增表情包管理窗口：`#sticker-manager-panel`，内部使用 `[data-sticker-section]` / `[data-sticker-view]` 切换“表情管理”和“自动标签”。
 - 新增 CSS：`.sticker-popover`、`.sticker-grid`、`.sticker-tile`、`.sticker-action-tile`、`.sticker-manager-grid`、`.sticker-manager-item`；表情弹窗网格桌面端 4-6 列自适应且禁用横向滚动，移动竖屏最多 5 列。
 - 新增消息表情样式：`.message-image-sticker`、`.is-sticker-square`、`.is-sticker-landscape`、`.is-sticker-portrait`、`.message-content--sticker-only`。
+- 表情原图保存到 IndexedDB 媒体库，`localStorage.fritia_sticker_store` 只保存轻量元数据和 `dataRef`。
+
+## 2026-07-03 Persistent Media Storage Mapping
+
+- 新增 `src/js/media_store.js`：导出 `saveFileAsMedia()`、`saveDataUrlAsMedia()`、`getMediaDataUrl()`、`deleteMedia()`、`isMediaRef()`，使用 IndexedDB `fritia_media_store/media` 存储大体积媒体。
+- `src/js/storage.js`：`normalizeAttachment()` 新增 `dataRef`；有 `dataRef` 时不会把 `dataUrl` 写入 `localStorage`。`saveAppStore()` 必须成功写入 localStorage，否则调用方会停止发送。
+- `src/js/storage.js`：新增 `migrateLegacyAppMediaToIndexedDb()`，启动时迁移旧 app store 中的 data URL 附件、角色头像、角色声音和会话头像。
+- `src/js/main.js`：启动顺序先执行 app/store 和表情包媒体迁移，再确保预置角色和初始化 UI。
+- `src/js/ui.js`：新增 `setImageSource()` 解析 `idb-media:*` 引用；附件上传、角色导入和表情发送会先写 IndexedDB，再写轻量消息或角色元数据。
 
 ## 2026-07-02 Advanced Settings And Localization Mapping
 
@@ -85,12 +109,16 @@ fritia_online_next_chat/
     │   ├── Profile_GroupChat.png
     │   ├── Fritia/
     │   │   ├── Profile_Fritia.png
+    │   │   ├── Firtia_Voice.mp3
     │   │   └── fritia_prompt.txt
     │   ├── Fenny/
     │   │   ├── Profile_Fenny.png
+    │   │   ├── Fenny_Voice.mp3
+    │   │   ├── char_fenny_dialog_sample.txt
     │   │   └── char_fenny_prompt.txt
     │   └── Cherno/
     │       ├── Profile_Cherno.png
+    │       ├── Cherno_Voice.mp3
     │       └── char_cherno_prompt.txt
     ├── _logo/
     │   ├── emoji/
@@ -108,7 +136,9 @@ fritia_online_next_chat/
     │   ├── characters.js
     │   ├── knowledge_base.js
     │   ├── long_term_memory.js
+    │   ├── media_store.js
     │   ├── stickers.js
+    │   ├── tts_engine.js
     │   ├── chat_engine.js
     │   ├── roundtable.js
     │   └── ui.js
@@ -192,9 +222,10 @@ fritia_online_next_chat/
 - `#settings-panel`：设置弹窗。
 - `[data-settings-section]`：左侧设置分组按钮。
 - `[data-settings-view]`：设置内容页。
-- `#api-key`：模型 API Key。
-- `#base-url`：模型 Base URL。
-- `#model-name`：模型名称。
+- `[data-model-tab]`：大模型页内“对话 / 文字转语音 / 默认模型”切换按钮。
+- `#chat-provider-id` / `#chat-provider-api-key` / `#chat-provider-base-url` / `#chat-provider-model`：当前对话提供商源表单。
+- `#tts-provider-id` / `#tts-provider-api-key` / `#tts-provider-base-url` / `#tts-provider-model` / `#tts-provider-speed`：当前文字转语音提供商源表单。
+- `#default-chat-provider` / `#default-tts-provider` / `#default-image-caption-provider`：默认对话、默认文字转语音和默认图像转述模型选择。
 - `#settings-save`：保存模型设置。
 - `#adv-kb-chunk-size`：知识库分块长度。
 - `#adv-roundtable-max`：群聊最大角色数。
@@ -371,8 +402,14 @@ fritia_online_next_chat/
 
 - `getSettings()` / `saveSettings(next)`：读取/保存模型设置。
 - `getAdvancedSettings()` / `saveAdvancedSettings(next)`：读取/保存高级设置。
-- `normalizeSettings(raw)`：规范化模型设置。
+- `normalizeSettings(raw)`：规范化模型设置，迁移旧版扁平模型配置为 `chatProviders`。
+- `getDefaultChatProvider()` / `getDefaultTtsProvider()` / `getDefaultImageCaptionProvider()`：读取三个默认模型提供商源。
 - `normalizeAdvancedSettings(raw)`：规范化高级设置。
+
+### `src/js/tts_engine.js`
+
+- `getActiveTtsProvider(settings)`：读取默认文字转语音提供商源。
+- `buildMimoVoiceCloneRequest({ text, voiceSample, provider })`：构造 MiMO voice clone TTS 请求，输出格式固定为 MP3。
 
 ### `src/js/characters.js`
 

@@ -1,4 +1,5 @@
-import { createId, readFileAsDataUrl } from './storage.js';
+import { createId } from './storage.js';
+import { deleteMedia, saveDataUrlAsMedia, saveFileAsMedia } from './media_store.js';
 
 const STICKER_STORE_KEY = 'fritia_sticker_store';
 const MAX_STICKERS = 240;
@@ -16,8 +17,9 @@ function clampText(value, maxLength) {
 }
 
 function normalizeSticker(raw = {}) {
-  const dataUrl = clampText(raw.dataUrl, 12000000);
-  if (!dataUrl) return null;
+  const dataRef = clampText(raw.dataRef || raw.mediaRef, 180);
+  const dataUrl = dataRef ? '' : clampText(raw.dataUrl, 12000000);
+  if (!dataRef && !dataUrl) return null;
   const id = clampText(raw.id, 80) || createId('sticker');
   const width = Math.max(0, Number(raw.width) || 0);
   const height = Math.max(0, Number(raw.height) || 0);
@@ -27,6 +29,7 @@ function normalizeSticker(raw = {}) {
     mime: clampText(raw.mime, 120) || 'image/png',
     size: Math.max(0, Number(raw.size) || 0),
     dataUrl,
+    dataRef,
     width,
     height,
     createdAt: Number(raw.createdAt) || now()
@@ -49,6 +52,30 @@ export function listStickers() {
   return loadStickerStore().stickers;
 }
 
+export async function migrateLegacyStickersToIndexedDb() {
+  const current = loadStickerStore();
+  let changed = false;
+  const stickers = [];
+  for (const sticker of current.stickers) {
+    if (!sticker.dataRef && sticker.dataUrl) {
+      const media = await saveDataUrlAsMedia(sticker.dataUrl, {
+        id: sticker.id,
+        name: sticker.name,
+        mime: sticker.mime,
+        size: sticker.size,
+        category: 'sticker',
+        prefix: 'sticker'
+      });
+      stickers.push(normalizeSticker({ ...sticker, dataUrl: '', dataRef: media.ref }));
+      changed = true;
+    } else {
+      stickers.push(sticker);
+    }
+  }
+  if (changed) saveStickerStore({ stickers });
+  return changed;
+}
+
 function saveStickerStore(next) {
   const normalized = {
     stickers: Array.isArray(next?.stickers)
@@ -66,14 +93,14 @@ export async function addStickerFiles(files = []) {
   const current = loadStickerStore();
   const additions = [];
   for (const file of imageFiles) {
-    const dataUrl = await readFileAsDataUrl(file);
-    const dimensions = await readImageDimensions(dataUrl);
+    const media = await saveFileAsMedia(file, { category: 'sticker', prefix: 'sticker' });
+    const dimensions = await readImageDimensions(media.dataUrl);
     additions.push(normalizeSticker({
-      id: createId('sticker'),
+      id: media.id,
       name: file.name || '表情包',
       mime: file.type || 'image/png',
       size: file.size || 0,
-      dataUrl,
+      dataRef: media.ref,
       width: dimensions.width,
       height: dimensions.height,
       createdAt: now()
@@ -84,23 +111,40 @@ export async function addStickerFiles(files = []) {
   });
 }
 
-export function deleteSticker(id) {
+export async function deleteSticker(id) {
   const current = loadStickerStore();
+  const sticker = current.stickers.find(item => item.id === id);
+  if (sticker?.dataRef) await deleteMedia(sticker.dataRef);
   return saveStickerStore({
     stickers: current.stickers.filter(item => item.id !== id)
   });
 }
 
-export function stickerToAttachment(sticker) {
-  const normalized = normalizeSticker(sticker);
+export async function stickerToAttachment(sticker) {
+  let normalized = normalizeSticker(sticker);
   if (!normalized) return null;
+  if (!normalized.dataRef && normalized.dataUrl) {
+    const media = await saveDataUrlAsMedia(normalized.dataUrl, {
+      id: normalized.id,
+      name: normalized.name,
+      mime: normalized.mime,
+      size: normalized.size,
+      category: 'sticker',
+      prefix: 'sticker'
+    });
+    normalized = normalizeSticker({ ...normalized, dataUrl: '', dataRef: media.ref });
+    const current = loadStickerStore();
+    saveStickerStore({
+      stickers: current.stickers.map(item => item.id === normalized.id ? normalized : item)
+    });
+  }
   return {
     id: createId('att'),
     type: 'image',
     name: normalized.name,
     mime: normalized.mime,
     size: normalized.size,
-    dataUrl: normalized.dataUrl,
+    dataRef: normalized.dataRef,
     source: 'sticker',
     width: normalized.width,
     height: normalized.height

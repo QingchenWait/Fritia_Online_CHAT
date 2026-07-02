@@ -4,6 +4,26 @@ export const DEFAULT_SETTINGS = {
   apiKey: '',
   baseUrl: 'https://api.openai.com/v1',
   model: 'gpt-4.1-mini',
+  chatProviders: [
+    {
+      id: 'openai',
+      apiKey: '',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4.1-mini'
+    }
+  ],
+  ttsProviders: [
+    {
+      id: 'mimo-tts',
+      apiKey: '',
+      baseUrl: 'https://api.xiaomimimo.com/v1',
+      model: 'mimo-v2.5-tts-voiceclone',
+      speed: 1
+    }
+  ],
+  defaultChatProviderId: 'openai',
+  defaultTtsProviderId: 'mimo-tts',
+  defaultImageCaptionProviderId: 'openai',
   temperature: 0.8,
   stream: true,
   localizationSensitivity: 0.5,
@@ -53,10 +73,23 @@ export function saveSettings(next) {
 }
 
 export function normalizeSettings(raw = {}) {
+  const chatProviders = normalizeChatProviders(raw);
+  const ttsProviders = normalizeTtsProviders(raw);
+  const defaultChatProviderId = normalizeProviderId(raw.defaultChatProviderId, chatProviders[0]?.id || 'openai');
+  const defaultTtsProviderId = normalizeProviderId(raw.defaultTtsProviderId, ttsProviders[0]?.id || 'mimo-tts');
+  const defaultImageCaptionProviderId = normalizeProviderId(raw.defaultImageCaptionProviderId, defaultChatProviderId);
+  const selectedChat = findProviderById(chatProviders, defaultChatProviderId) || chatProviders[0] || DEFAULT_SETTINGS.chatProviders[0];
+  const selectedTts = findProviderById(ttsProviders, defaultTtsProviderId) || ttsProviders[0] || DEFAULT_SETTINGS.ttsProviders[0];
+  const selectedImageCaption = findProviderById(chatProviders, defaultImageCaptionProviderId) || selectedChat;
   return {
-    apiKey: String(raw.apiKey || '').trim(),
-    baseUrl: String(raw.baseUrl || DEFAULT_SETTINGS.baseUrl).trim().replace(/\/+$/, ''),
-    model: String(raw.model || DEFAULT_SETTINGS.model).trim(),
+    apiKey: selectedChat.apiKey,
+    baseUrl: selectedChat.baseUrl,
+    model: selectedChat.model,
+    chatProviders,
+    ttsProviders,
+    defaultChatProviderId: selectedChat.id,
+    defaultTtsProviderId: selectedTts.id,
+    defaultImageCaptionProviderId: selectedImageCaption.id,
     temperature: clampNumber(raw.temperature, 0, 2, DEFAULT_SETTINGS.temperature),
     stream: raw.stream !== false,
     localizationSensitivity: clampLocalizationSensitivity(raw.localizationSensitivity),
@@ -74,6 +107,22 @@ export function isDeepSeekIntimateModeAvailable(settings = getSettings()) {
 
 export function shouldUseDeepSeekIntimateMode(settings = getSettings()) {
   return Boolean(settings?.deepseekIntimateMode) && isDeepSeekIntimateModeAvailable(settings);
+}
+
+export function getDefaultChatProvider(settings = getSettings()) {
+  const normalized = normalizeSettings(settings);
+  return findProviderById(normalized.chatProviders, normalized.defaultChatProviderId) || normalized.chatProviders[0] || null;
+}
+
+export function getDefaultTtsProvider(settings = getSettings()) {
+  const normalized = normalizeSettings(settings);
+  return findProviderById(normalized.ttsProviders, normalized.defaultTtsProviderId) || normalized.ttsProviders[0] || null;
+}
+
+export function getDefaultImageCaptionProvider(settings = getSettings()) {
+  const normalized = normalizeSettings(settings);
+  return findProviderById(normalized.chatProviders, normalized.defaultImageCaptionProviderId)
+    || getDefaultChatProvider(normalized);
 }
 
 export function getAdvancedSettings() {
@@ -107,6 +156,87 @@ function clampNumber(value, min, max, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.max(min, Math.min(max, number));
+}
+
+function normalizeChatProviders(raw = {}) {
+  const legacyProvider = normalizeChatProvider({
+    id: raw.providerId || raw.defaultChatProviderId || 'openai',
+    apiKey: raw.apiKey,
+    baseUrl: raw.baseUrl,
+    model: raw.model
+  }, 0);
+  const source = Array.isArray(raw.chatProviders) && raw.chatProviders.length
+    ? raw.chatProviders
+    : [legacyProvider];
+  return normalizeProviderList(source, normalizeChatProvider);
+}
+
+function normalizeTtsProviders(raw = {}) {
+  const source = Array.isArray(raw.ttsProviders) && raw.ttsProviders.length
+    ? raw.ttsProviders
+    : DEFAULT_SETTINGS.ttsProviders;
+  return normalizeProviderList(source, normalizeTtsProvider);
+}
+
+function normalizeProviderList(source, normalizer) {
+  const used = new Set();
+  const providers = [];
+  for (const item of source) {
+    const provider = normalizer(item, providers.length);
+    provider.id = uniqueProviderId(provider.id, used);
+    used.add(provider.id);
+    providers.push(provider);
+  }
+  if (!providers.length) {
+    const fallback = normalizer({}, 0);
+    fallback.id = uniqueProviderId(fallback.id, used);
+    providers.push(fallback);
+  }
+  return providers;
+}
+
+function normalizeChatProvider(raw = {}, index = 0) {
+  const fallback = DEFAULT_SETTINGS.chatProviders[0];
+  const id = normalizeProviderId(raw.id, index === 0 ? fallback.id : `openai-${index + 1}`);
+  return {
+    id,
+    apiKey: String(raw.apiKey || '').trim(),
+    baseUrl: normalizeBaseUrl(raw.baseUrl || fallback.baseUrl),
+    model: String(raw.model || fallback.model).trim()
+  };
+}
+
+function normalizeTtsProvider(raw = {}, index = 0) {
+  const fallback = DEFAULT_SETTINGS.ttsProviders[0];
+  const id = normalizeProviderId(raw.id, index === 0 ? fallback.id : `mimo-tts-${index + 1}`);
+  return {
+    id,
+    apiKey: String(raw.apiKey || raw.mimoApiKey || '').trim(),
+    baseUrl: normalizeBaseUrl(raw.baseUrl || fallback.baseUrl),
+    model: String(raw.model || fallback.model).trim(),
+    speed: clampNumber(raw.speed, 0.25, 4, fallback.speed)
+  };
+}
+
+function normalizeProviderId(value, fallback) {
+  const id = String(value || '').trim().replace(/\s+/g, '-').slice(0, 80);
+  return id || String(fallback || 'provider');
+}
+
+function uniqueProviderId(id, used) {
+  const base = normalizeProviderId(id, 'provider');
+  if (!used.has(base)) return base;
+  let index = 2;
+  while (used.has(`${base}-${index}`)) index += 1;
+  return `${base}-${index}`;
+}
+
+function normalizeBaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function findProviderById(providers, id) {
+  return providers.find(provider => provider.id === id) || null;
 }
 
 function clampLocalizationSensitivity(value) {

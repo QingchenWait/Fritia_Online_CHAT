@@ -346,11 +346,144 @@
         <section class="settings-content">
           <div class="settings-view is-active" data-settings-view="model">
             <div class="panel-title"><h3>模型连接</h3><p>密钥仅保存在当前浏览器。</p></div>
-            <label><span>API Key</span><input id="api-key" type="password" autocomplete="off"></label>
-            <label><span>Base URL</span><input id="base-url" placeholder="https://api.openai.com/v1"></label>
-            <label><span>模型名称</span><input id="model-name" placeholder="gpt-4.1-mini"></label>
+            <div class="model-settings-shell">
+              <div class="model-tabs" role="tablist" aria-label="模型类型">
+                <button class="is-active" type="button" data-model-tab="chat">
+                  <img src="src/_logo/icons/message-circle.svg" alt="">
+                  <span>对话</span>
+                </button>
+                <button type="button" data-model-tab="tts">
+                  <img src="src/_logo/icons/mic.svg" alt="">
+                  <span>文字转语音</span>
+                </button>
+                <button class="model-default-tab" type="button" data-model-tab="defaults">
+                  <img src="src/_logo/icons/settings.svg" alt="">
+                  <span>默认模型</span>
+                </button>
+              </div>
+
+              <section class="model-provider-pane is-active" data-model-pane="chat">
+                <div class="model-provider-workbench">
+                  <aside class="model-provider-sidebar">
+                    <div class="model-provider-head">
+                      <strong>提供商源</strong>
+                      <button id="model-chat-add" class="model-icon-text-btn" type="button">
+                        <img src="src/_logo/icons/plus.svg" alt="">
+                        <span>新增</span>
+                      </button>
+                    </div>
+                    <div class="model-mobile-picker">
+                      <select id="model-chat-provider-select" aria-label="选择对话提供商"></select>
+                      <button id="model-chat-delete" class="model-icon-btn model-danger-btn" type="button" title="删除提供商" aria-label="删除对话提供商">
+                        <img src="src/_logo/icons/trash-2.svg" alt="">
+                      </button>
+                      <button id="model-chat-add-mobile" class="model-icon-text-btn" type="button">
+                        <img src="src/_logo/icons/plus.svg" alt="">
+                        <span>新增</span>
+                      </button>
+                    </div>
+                    <div id="model-chat-provider-list" class="model-provider-list"></div>
+                  </aside>
+                  <section class="model-provider-detail">
+                    <header class="model-provider-detail-head">
+                      <div class="model-provider-title">
+                        <img src="src/_logo/icons/bot.svg" alt="">
+                        <div>
+                          <h4 id="model-chat-title">openai</h4>
+                          <p id="model-chat-subtitle">https://api.openai.com/v1</p>
+                        </div>
+                      </div>
+                      <div class="model-provider-actions">
+                        <button id="model-chat-delete-detail" class="model-icon-btn model-danger-btn" type="button" title="删除提供商" aria-label="删除对话提供商">
+                          <img src="src/_logo/icons/trash-2.svg" alt="">
+                        </button>
+                        <button id="model-chat-save" class="model-save-config-btn" type="button">
+                          <img src="src/_logo/icons/upload.svg" alt="">
+                          <span>保存配置</span>
+                        </button>
+                      </div>
+                    </header>
+                    <div class="model-provider-form">
+                      <label><span>ID</span><small>提供商源唯一 ID</small><input id="chat-provider-id" autocomplete="off"></label>
+                      <label><span>API Key</span><small>OpenAI Compatible API 密钥</small><input id="chat-provider-api-key" type="password" autocomplete="off"></label>
+                      <label><span>API Base URL</span><small>自定义 API 端点 URL</small><input id="chat-provider-base-url" placeholder="https://api.openai.com/v1"></label>
+                      <label><span>模型名称</span><small>OpenAI Compatible 模型 ID</small><input id="chat-provider-model" placeholder="gpt-4.1-mini"></label>
+                    </div>
+                  </section>
+                </div>
+              </section>
+
+              <section class="model-provider-pane" data-model-pane="tts">
+                <div class="model-provider-workbench">
+                  <aside class="model-provider-sidebar">
+                    <div class="model-provider-head">
+                      <strong>提供商源</strong>
+                      <button id="model-tts-add" class="model-icon-text-btn" type="button">
+                        <img src="src/_logo/icons/plus.svg" alt="">
+                        <span>新增</span>
+                      </button>
+                    </div>
+                    <div class="model-mobile-picker">
+                      <select id="model-tts-provider-select" aria-label="选择文字转语音提供商"></select>
+                      <button id="model-tts-delete" class="model-icon-btn model-danger-btn" type="button" title="删除提供商" aria-label="删除文字转语音提供商">
+                        <img src="src/_logo/icons/trash-2.svg" alt="">
+                      </button>
+                      <button id="model-tts-add-mobile" class="model-icon-text-btn" type="button">
+                        <img src="src/_logo/icons/plus.svg" alt="">
+                        <span>新增</span>
+                      </button>
+                    </div>
+                    <div id="model-tts-provider-list" class="model-provider-list"></div>
+                  </aside>
+                  <section class="model-provider-detail">
+                    <header class="model-provider-detail-head">
+                      <div class="model-provider-title">
+                        <img src="src/_logo/icons/mic.svg" alt="">
+                        <div>
+                          <h4 id="model-tts-title">mimo-tts</h4>
+                          <p id="model-tts-subtitle">https://api.xiaomimimo.com/v1</p>
+                        </div>
+                      </div>
+                      <div class="model-provider-actions">
+                        <button id="model-tts-delete-detail" class="model-icon-btn model-danger-btn" type="button" title="删除提供商" aria-label="删除文字转语音提供商">
+                          <img src="src/_logo/icons/trash-2.svg" alt="">
+                        </button>
+                        <button id="model-tts-save" class="model-save-config-btn" type="button">
+                          <img src="src/_logo/icons/upload.svg" alt="">
+                          <span>保存配置</span>
+                        </button>
+                      </div>
+                    </header>
+                    <div class="model-provider-form">
+                      <label><span>ID</span><small>提供商源唯一 ID</small><input id="tts-provider-id" autocomplete="off"></label>
+                      <label><span>MiMO TTS API Key</span><small>MiMO 文字转语音密钥</small><input id="tts-provider-api-key" type="password" autocomplete="off"></label>
+                      <label><span>Base URL</span><small>MiMO TTS API 端点</small><input id="tts-provider-base-url" placeholder="https://api.xiaomimimo.com/v1"></label>
+                      <label><span>TTS 模型名称</span><small>默认 mimo-v2.5-tts-voiceclone</small><input id="tts-provider-model" placeholder="mimo-v2.5-tts-voiceclone"></label>
+                      <label class="model-speed-row"><span>语音速度</span><small id="tts-provider-speed-value">1.00x</small><input id="tts-provider-speed" type="range" min="0.25" max="4" step="0.05"></label>
+                    </div>
+                  </section>
+                </div>
+              </section>
+
+              <section class="model-defaults-card" data-model-pane="defaults">
+                <div class="model-default-item">
+                  <span>默认对话模型</span>
+                  <select id="default-chat-provider"></select>
+                </div>
+                <div class="model-default-item">
+                  <span>默认文字转语音模型</span>
+                  <select id="default-tts-provider"></select>
+                </div>
+                <div class="model-default-item">
+                  <span>默认图像转述模型</span>
+                  <select id="default-image-caption-provider"></select>
+                </div>
+              </section>
+            </div>
             <div class="form-actions">
-              <button id="settings-save" class="btn btn-primary" type="button">保存设置</button>
+              <button id="settings-save" class="btn btn-primary model-main-save" type="button">
+                <span>保存模型设置</span>
+              </button>
             </div>
           </div>
 

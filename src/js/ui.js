@@ -8,7 +8,7 @@ import {
   loadAppStore,
   normalizeGroupSettings,
   normalizeCharacterRecord,
-  readFileAsDataUrl,
+  now,
   readFileAsText,
   saveAppStore,
   upsertCharacter,
@@ -41,8 +41,9 @@ import {
   updateLongTermMemorySettings
 } from './long_term_memory.js';
 import { addStickerFiles, deleteSticker, isWideSticker, listStickers, stickerToAttachment } from './stickers.js';
-import { sendPrivateMessage } from './chat_engine.js';
-import { getRoundtableError, runRoundtableTurn, sendGroupPlayerMessage } from './roundtable.js';
+import { completePrivateMessageReply } from './chat_engine.js';
+import { getRoundtableError, runRoundtableTurn } from './roundtable.js';
+import { getMediaDataUrl, isMediaRef, saveFileAsMedia } from './media_store.js';
 
 const MAX_KB_PREVIEW_CHUNKS = 80;
 const MAX_KB_PREVIEW_CHARS = 360;
@@ -72,6 +73,9 @@ const state = {
   groupEditorMode: 'create',
   groupInfoEditing: false,
   groupInfoMemberSearch: '',
+  modelProviderTab: 'chat',
+  selectedChatProviderId: '',
+  selectedTtsProviderId: '',
   roundtableErrorPopoverOpen: false,
   stickerPopoverOpen: false,
   mention: {
@@ -209,6 +213,12 @@ function bindGlobalEvents() {
     if (popover?.contains(event.target) || button?.contains(event.target)) return;
     closeStickerPopover();
   });
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.custom-select')) closeCustomSelects();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeCustomSelects();
+  });
 
   bindComposer();
   bindStickers();
@@ -251,13 +261,15 @@ function bindComposer() {
   imageInput?.addEventListener('change', async () => {
     const file = imageInput.files?.[0];
     if (!file) return;
+    const media = await saveFileAsMedia(file, { category: 'attachment', prefix: 'att' });
     state.selectedAttachment = {
       id: createId('att'),
       type: 'image',
       name: file.name,
       mime: file.type,
       size: file.size,
-      dataUrl: await readFileAsDataUrl(file)
+      dataRef: media.ref,
+      dataUrl: media.dataUrl
     };
     renderAttachmentPreview();
     imageInput.value = '';
@@ -265,13 +277,15 @@ function bindComposer() {
   fileInput?.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
     if (!file) return;
+    const media = await saveFileAsMedia(file, { category: 'attachment', prefix: 'att' });
     state.selectedAttachment = {
       id: createId('att'),
       type: file.type.startsWith('audio/') ? 'audio' : 'file',
       name: file.name,
       mime: file.type,
       size: file.size,
-      dataUrl: await readFileAsDataUrl(file)
+      dataRef: media.ref,
+      dataUrl: media.dataUrl
     };
     renderAttachmentPreview();
     fileInput.value = '';
@@ -283,46 +297,105 @@ async function handleSend() {
   const text = input?.value.trim() || '';
   const attachments = state.selectedAttachment ? [state.selectedAttachment] : [];
   if (!text && !attachments.length) return;
-  const sent = await sendMessageToActiveConversation(text, attachments);
+  const sent = sendMessageToActiveConversation(text, attachments);
   if (!sent) return;
-  input.value = '';
-  input.style.height = 'auto';
+  clearComposerDraft(input);
+  closeStickerPopover();
+}
+
+function clearComposerDraft(input = document.getElementById('message-input')) {
+  if (input) {
+    input.value = '';
+    input.style.height = 'auto';
+  }
   state.selectedAttachment = null;
   renderAttachmentPreview();
   closeMentionPicker();
 }
 
-async function sendMessageToActiveConversation(text, attachments = []) {
+function sendMessageToActiveConversation(text, attachments = []) {
+  let committed = null;
+  try {
+    committed = commitOutgoingMessage(text, attachments);
+  } catch (error) {
+    console.warn('[ui] outgoing message commit failed', error);
+    notifyPersistenceFailure(error);
+  }
+  if (!committed) return null;
+  continueConversationAfterOutgoing(committed);
+  return committed;
+}
+
+function notifyPersistenceFailure(error) {
+  window.alert([
+    '本地持久化失败，消息没有发送。',
+    '为避免刷新后丢失对话，当前发送已停止。',
+    `错误详情：${error?.message || '未知错误'}`
+  ].join('\n'));
+}
+
+function commitOutgoingMessage(text, attachments = []) {
   const conversation = getActiveConversation();
   if (!conversation) return null;
+  const message = {
+    id: createId('msg'),
+    role: 'user',
+    speakerId: 'player',
+    speakerName: '分析员',
+    text,
+    attachments: attachments.map(prepareAttachmentForPersistence),
+    createdAt: now()
+  };
+  const store = appendMessage(state.store, conversation.id, message);
+  updateStore(store);
+  return {
+    store,
+    conversation: store.conversations.find(item => item.id === conversation.id) || conversation,
+    message
+  };
+}
+
+function prepareAttachmentForPersistence(attachment = {}) {
+  const next = { ...attachment };
+  if (next.dataRef) next.dataUrl = '';
+  return next;
+}
+
+function continueConversationAfterOutgoing(committed) {
+  const { store, conversation, message } = committed;
+  if (!conversation) return;
   if (conversation.type === 'group') {
-    const sent = await sendGroupPlayerMessage({
-      store: state.store,
+    runRoundtableTurn({
+      store,
       conversation,
-      text,
-      attachments,
+      characters: store.characters,
+      triggerText: message.text,
       onStore: updateStore
+    }).catch(error => {
+      console.warn('[ui] roundtable turn failed', error);
     });
-    const latestConversation = sent.store.conversations.find(item => item.id === conversation.id) || conversation;
-    await runRoundtableTurn({
-      store: sent.store,
-      conversation: latestConversation,
-      characters: sent.store.characters,
-      triggerText: text,
-      onStore: updateStore
-    });
-    return sent;
+    return;
   }
-  const character = getCharacterById(state.store.characters, conversation.memberIds[0]);
-  if (!character) return null;
-  return sendPrivateMessage({
-    store: state.store,
+  const character = getCharacterById(store.characters, conversation.memberIds[0]);
+  if (!character) return;
+  completePrivateMessageReply({
+    store,
     conversation,
     character,
-    text,
-    attachments,
+    text: message.text,
+    userMessage: message,
     onStore: updateStore
+  }).catch(error => {
+    console.warn('[ui] private reply failed', error);
   });
+}
+
+async function sendSticker(sticker) {
+  const attachment = await stickerToAttachment(sticker);
+  if (!attachment) return;
+  const sent = sendMessageToActiveConversation('', [attachment]);
+  if (!sent) return;
+  closeStickerPopover();
 }
 
 function bindStickers() {
@@ -355,6 +428,8 @@ function bindCharacterForm() {
     event.preventDefault();
     const avatarFile = document.getElementById('char-avatar-file').files?.[0];
     const voiceFile = document.getElementById('char-voice-file').files?.[0];
+    const avatarMedia = avatarFile ? await saveFileAsMedia(avatarFile, { category: 'avatar', prefix: 'avatar' }) : null;
+    const voiceMedia = voiceFile ? await saveFileAsMedia(voiceFile, { category: 'voice', prefix: 'voice' }) : null;
     const name = document.getElementById('char-name').value.trim();
     const character = normalizeCharacterRecord({
       id: `char_${name.toLowerCase().replace(/\s+/g, '_')}_${Date.now().toString(36)}`,
@@ -362,8 +437,8 @@ function bindCharacterForm() {
       description: document.getElementById('char-description').value.trim(),
       prompt: document.getElementById('char-prompt').value.trim(),
       examples: document.getElementById('char-examples').value.trim(),
-      avatar: avatarFile ? await readFileAsDataUrl(avatarFile) : 'src/_logo/emoji/robot_3d.png',
-      voiceSample: voiceFile ? await readFileAsDataUrl(voiceFile) : '',
+      avatar: avatarMedia ? avatarMedia.ref : 'src/_logo/emoji/robot_3d.png',
+      voiceSample: voiceMedia ? voiceMedia.ref : '',
       source: 'custom',
       tags: ['自定义'],
       createdAt: Date.now(),
@@ -475,14 +550,36 @@ function bindGroupSettingToggle(id, key) {
 }
 
 function bindSettings() {
+  enhanceCustomSelects();
+  document.querySelectorAll('[data-model-tab]').forEach(button => {
+    button.addEventListener('click', () => showModelProviderTab(button.dataset.modelTab));
+  });
+  document.getElementById('model-chat-add')?.addEventListener('click', () => addModelProvider('chat'));
+  document.getElementById('model-chat-add-mobile')?.addEventListener('click', () => addModelProvider('chat'));
+  document.getElementById('model-tts-add')?.addEventListener('click', () => addModelProvider('tts'));
+  document.getElementById('model-tts-add-mobile')?.addEventListener('click', () => addModelProvider('tts'));
+  document.getElementById('model-chat-delete')?.addEventListener('click', () => deleteModelProvider('chat'));
+  document.getElementById('model-chat-delete-detail')?.addEventListener('click', () => deleteModelProvider('chat'));
+  document.getElementById('model-tts-delete')?.addEventListener('click', () => deleteModelProvider('tts'));
+  document.getElementById('model-tts-delete-detail')?.addEventListener('click', () => deleteModelProvider('tts'));
+  document.getElementById('model-chat-save')?.addEventListener('click', () => saveCurrentModelProvider('chat'));
+  document.getElementById('model-tts-save')?.addEventListener('click', () => saveCurrentModelProvider('tts'));
+  document.getElementById('model-chat-provider-select')?.addEventListener('change', event => {
+    selectModelProvider('chat', event.target.value);
+  });
+  document.getElementById('model-tts-provider-select')?.addEventListener('change', event => {
+    selectModelProvider('tts', event.target.value);
+  });
+  document.getElementById('tts-provider-speed')?.addEventListener('input', event => {
+    setText('tts-provider-speed-value', `${Number(event.target.value || 1).toFixed(2)}x`);
+  });
+  document.getElementById('chat-provider-id')?.addEventListener('input', () => updateModelDraftHeader('chat'));
+  document.getElementById('chat-provider-base-url')?.addEventListener('input', () => updateModelDraftHeader('chat'));
+  document.getElementById('tts-provider-id')?.addEventListener('input', () => updateModelDraftHeader('tts'));
+  document.getElementById('tts-provider-base-url')?.addEventListener('input', () => updateModelDraftHeader('tts'));
   document.getElementById('settings-save')?.addEventListener('click', () => {
-    saveSettings({
-      apiKey: document.getElementById('api-key').value,
-      baseUrl: document.getElementById('base-url').value,
-      model: document.getElementById('model-name').value
-    });
+    saveModelSettings({ closeAfterSave: true });
     updateDeepSeekIntimateVisibility();
-    closePanel('settings-panel');
   });
   document.getElementById('advanced-save')?.addEventListener('click', () => {
     const localizationSensitivity = Number(document.getElementById('localization-sensitivity').value);
@@ -525,7 +622,7 @@ function bindSettings() {
       if (id === 'localization-sensitivity') updateDeepSeekIntimateVisibility();
     });
   });
-  document.getElementById('model-name')?.addEventListener('input', updateDeepSeekIntimateVisibility);
+  document.getElementById('chat-provider-model')?.addEventListener('input', updateDeepSeekIntimateVisibility);
   document.getElementById('deepseek-intimate-mode')?.addEventListener('change', refreshAdvancedValueLabels);
   document.getElementById('memory-settings-save')?.addEventListener('click', () => {
     updateLongTermMemorySettings({
@@ -897,6 +994,25 @@ function renderAll() {
   syncMobileBackAvailability();
 }
 
+function setImageSource(image, source, fallback = 'src/_logo/emoji/robot_3d.png') {
+  if (!image) return;
+  const value = String(source || fallback);
+  image.dataset.mediaSource = value;
+  image.src = fallback;
+  if (!isMediaRef(value)) {
+    image.src = value || fallback;
+    return;
+  }
+  getMediaDataUrl(value)
+    .then(dataUrl => {
+      if (image.dataset.mediaSource === value) image.src = dataUrl || fallback;
+    })
+    .catch(error => {
+      console.warn('[ui] failed to load media image', error);
+      if (image.dataset.mediaSource === value) image.src = fallback;
+    });
+}
+
 function renderConversationList() {
   const container = document.getElementById('conversation-list');
   if (!container) return;
@@ -907,8 +1023,9 @@ function renderConversationList() {
   for (const item of items) {
     const node = template.content.firstElementChild.cloneNode(true);
     node.classList.toggle('is-active', item.id === state.store.activeConversationId || item.conversationId === state.store.activeConversationId);
-    node.querySelector('.conversation-item__avatar').src = item.avatar;
-    node.querySelector('.conversation-item__avatar').alt = item.title;
+    const avatar = node.querySelector('.conversation-item__avatar');
+    setImageSource(avatar, item.avatar);
+    avatar.alt = item.title;
     node.querySelector('.conversation-item__name').textContent = item.title;
     node.querySelector('.conversation-item__preview').textContent = item.preview;
     node.querySelector('.conversation-item__meta').textContent = item.meta || '';
@@ -982,9 +1099,9 @@ function createMessageNode(message) {
   const avatar = document.createElement('img');
   avatar.className = 'message-avatar';
   avatar.alt = message.speakerName || '';
-  avatar.src = message.role === 'user'
+  setImageSource(avatar, message.role === 'user'
     ? 'src/_char/Profile_Adjutant.png'
-    : characterAvatar(getCharacterById(state.store.characters, message.speakerId));
+    : characterAvatar(getCharacterById(state.store.characters, message.speakerId)));
   if (message.role !== 'user' && message.speakerName) {
     avatar.classList.add('message-avatar--mentionable');
     avatar.title = `@${message.speakerName}`;
@@ -1006,11 +1123,11 @@ function createMessageNode(message) {
     if (stickerOnly) content.classList.add('message-content--sticker-only');
     if (text.trim()) renderMessageText(content, text);
     for (const attachment of attachments) {
-      if (attachment.type === 'image' && attachment.dataUrl) {
+      if (attachment.type === 'image' && (attachment.dataRef || attachment.dataUrl)) {
         const image = document.createElement('img');
         const stickerMeta = resolveStickerAttachmentMeta(attachment);
         image.className = `message-image${stickerMeta ? ` message-image-sticker ${getStickerAttachmentOrientation(stickerMeta)}` : ''}`;
-        image.src = attachment.dataUrl;
+        setImageSource(image, attachment.dataRef || attachment.dataUrl);
         image.alt = attachment.name || '图片';
         if (content.childNodes.length) content.appendChild(document.createElement('br'));
         content.appendChild(image);
@@ -1043,8 +1160,8 @@ function renderDetail() {
   if (!conversation) return;
   const title = conversation.title || conversationTitle(conversation);
   const icon = conversationAvatar(conversation);
-  avatar.src = icon;
-  headAvatar.src = icon;
+  setImageSource(avatar, icon);
+  setImageSource(headAvatar, icon);
   name.textContent = title;
   headTitle.textContent = title;
   if (conversation.type === 'private') {
@@ -1100,7 +1217,7 @@ function renderAttachmentPreview() {
   chip.className = 'attachment-chip';
   if (att.type === 'image') {
     const image = document.createElement('img');
-    image.src = att.dataUrl;
+    setImageSource(image, att.dataRef || att.dataUrl);
     image.alt = att.name;
     chip.appendChild(image);
   }
@@ -1185,7 +1302,7 @@ function renderStickerManager() {
     deleteButton.innerHTML = '<img src="src/_logo/icons/trash-2.svg" alt="">';
     deleteButton.addEventListener('click', () => {
       if (!confirm(`确认删除「${sticker.name || '表情包'}」？`)) return;
-      deleteSticker(sticker.id);
+      deleteSticker(sticker.id).catch(error => console.warn('[ui] delete sticker failed', error));
     });
     item.append(preview, name, meta, deleteButton);
     grid.appendChild(item);
@@ -1195,7 +1312,10 @@ function renderStickerManager() {
 function resolveStickerAttachmentMeta(attachment) {
   if (!attachment || attachment.type !== 'image') return null;
   if (attachment.source === 'sticker') return attachment;
-  return listStickers().find(item => item.dataUrl === attachment.dataUrl) || null;
+  return listStickers().find(item => {
+    if (attachment.dataRef && item.dataRef) return item.dataRef === attachment.dataRef;
+    return item.dataUrl && attachment.dataUrl && item.dataUrl === attachment.dataUrl;
+  }) || null;
 }
 
 function isStickerOnlyMessage(text, attachments = []) {
@@ -1233,7 +1353,7 @@ function createStickerTile(sticker, options = {}) {
   button.type = 'button';
   button.title = sticker.name || '表情包';
   const image = document.createElement('img');
-  image.src = sticker.dataUrl;
+  setImageSource(image, sticker.dataRef || sticker.dataUrl);
   image.alt = sticker.name || '表情包';
   image.className = isWideSticker(sticker) ? 'is-crop' : 'is-contain';
   button.appendChild(image);
@@ -1244,14 +1364,6 @@ function createStickerTile(sticker, options = {}) {
     });
   }
   return button;
-}
-
-async function sendSticker(sticker) {
-  const attachment = stickerToAttachment(sticker);
-  if (!attachment) return;
-  const sent = await sendMessageToActiveConversation('', [attachment]);
-  if (!sent) return;
-  closeStickerPopover();
 }
 
 function closeStickerPopover() {
@@ -1276,9 +1388,10 @@ function renderGroupMemberPicker() {
     item.dataset.characterId = character.id;
     item.innerHTML = `
       <span class="member-check" aria-hidden="true"></span>
-      <img src="${escapeHtml(characterAvatar(character))}" alt="">
+      <img alt="">
       <span class="member-text"><strong>${escapeHtml(character.name)}</strong><small>${escapeHtml(character.description || character.source)}</small></span>
     `;
+    setImageSource(item.querySelector('img'), characterAvatar(character));
     item.addEventListener('click', () => {
       if (selected.has(character.id)) selected.delete(character.id);
     else selected.add(character.id);
@@ -1360,9 +1473,10 @@ function renderGroupInfoMemberGrid(members) {
     item.type = 'button';
     item.title = character.name;
     item.innerHTML = `
-      <img src="${escapeHtml(characterAvatar(character))}" alt="">
+      <img alt="">
       <span>${escapeHtml(compactLabel(character.name, 4))}</span>
     `;
+    setImageSource(item.querySelector('img'), characterAvatar(character));
     item.addEventListener('click', () => insertMentionText(character.name));
     grid.appendChild(item);
   }
@@ -1400,9 +1514,10 @@ function renderGroupInfoMemberEditor() {
     item.type = 'button';
     item.innerHTML = `
       <span class="member-check" aria-hidden="true"></span>
-      <img src="${escapeHtml(characterAvatar(character))}" alt="">
+      <img alt="">
       <span><strong>${escapeHtml(character.name)}</strong><small>${escapeHtml(character.description || character.source)}</small></span>
     `;
+    setImageSource(item.querySelector('img'), characterAvatar(character));
     item.addEventListener('click', () => {
       if (selected.has(character.id)) selected.delete(character.id);
       else selected.add(character.id);
@@ -1504,9 +1619,10 @@ function renderMentionPicker() {
     row.className = `mention-row${index === state.mention.selectedIndex ? ' is-active' : ''}`;
     row.type = 'button';
     row.innerHTML = `
-      <img src="${escapeHtml(candidate.avatar)}" alt="">
+      <img alt="">
       <span><strong>@${escapeHtml(candidate.name)}</strong><small>${escapeHtml(candidate.description || '群成员')}</small></span>
     `;
+    setImageSource(row.querySelector('img'), candidate.avatar);
     row.addEventListener('mousedown', event => {
       event.preventDefault();
       insertMentionText(candidate.insertName || candidate.name, { replaceToken: true });
@@ -1996,13 +2112,328 @@ function renderMemoryNodeDetail() {
   });
 }
 
+function enhanceCustomSelects(root = document) {
+  root.querySelectorAll('select').forEach(enhanceCustomSelect);
+}
+
+function enhanceCustomSelect(select) {
+  if (!select || select.dataset.customSelectBound === 'true') return;
+  select.dataset.customSelectBound = 'true';
+  select.classList.add('native-custom-select');
+  const custom = document.createElement('div');
+  custom.className = 'custom-select';
+  custom.innerHTML = `
+    <button class="custom-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+      <span></span>
+      <img src="src/_logo/icons/chevron-down.svg" alt="">
+    </button>
+    <div class="custom-select-menu" role="listbox"></div>
+  `;
+  select.insertAdjacentElement('afterend', custom);
+  custom.querySelector('.custom-select-trigger')?.addEventListener('click', event => {
+    event.stopPropagation();
+    const willOpen = !custom.classList.contains('is-open');
+    closeCustomSelects();
+    custom.classList.toggle('is-open', willOpen);
+    custom.querySelector('.custom-select-trigger')?.setAttribute('aria-expanded', String(willOpen));
+  });
+  select.addEventListener('change', () => updateCustomSelect(select));
+  updateCustomSelect(select);
+}
+
+function updateCustomSelect(select) {
+  enhanceCustomSelect(select);
+  const custom = select.nextElementSibling?.classList?.contains('custom-select') ? select.nextElementSibling : null;
+  if (!custom) return;
+  const triggerText = custom.querySelector('.custom-select-trigger span');
+  const menu = custom.querySelector('.custom-select-menu');
+  const selected = select.selectedOptions?.[0] || select.options?.[select.selectedIndex];
+  if (triggerText) triggerText.textContent = selected?.textContent || '';
+  if (!menu) return;
+  menu.innerHTML = '';
+  [...select.options].forEach(option => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = `custom-select-option${option.value === select.value ? ' is-selected' : ''}`;
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', String(option.value === select.value));
+    item.textContent = option.textContent;
+    item.addEventListener('click', event => {
+      event.stopPropagation();
+      select.value = option.value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      closeCustomSelects();
+    });
+    menu.appendChild(item);
+  });
+}
+
+function closeCustomSelects() {
+  document.querySelectorAll('.custom-select.is-open').forEach(custom => {
+    custom.classList.remove('is-open');
+    custom.querySelector('.custom-select-trigger')?.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function showModelProviderTab(tab = 'chat') {
+  const nextTab = ['chat', 'tts', 'defaults'].includes(tab) ? tab : 'chat';
+  state.modelProviderTab = nextTab;
+  document.querySelectorAll('[data-model-tab]').forEach(button => {
+    button.classList.toggle('is-active', button.dataset.modelTab === nextTab);
+  });
+  document.querySelectorAll('[data-model-pane]').forEach(pane => {
+    pane.classList.toggle('is-active', pane.dataset.modelPane === nextTab);
+  });
+}
+
+function renderModelSettings(settings = getSettings()) {
+  const chatProviders = settings.chatProviders || [];
+  const ttsProviders = settings.ttsProviders || [];
+  if (!chatProviders.some(provider => provider.id === state.selectedChatProviderId)) {
+    state.selectedChatProviderId = settings.defaultChatProviderId || chatProviders[0]?.id || '';
+  }
+  if (!ttsProviders.some(provider => provider.id === state.selectedTtsProviderId)) {
+    state.selectedTtsProviderId = settings.defaultTtsProviderId || ttsProviders[0]?.id || '';
+  }
+  renderModelProviderGroup('chat', chatProviders, state.selectedChatProviderId);
+  renderModelProviderGroup('tts', ttsProviders, state.selectedTtsProviderId);
+  fillProviderSelect('default-chat-provider', chatProviders, settings.defaultChatProviderId);
+  fillProviderSelect('default-tts-provider', ttsProviders, settings.defaultTtsProviderId);
+  fillProviderSelect('default-image-caption-provider', chatProviders, settings.defaultImageCaptionProviderId);
+  showModelProviderTab(state.modelProviderTab);
+}
+
+function renderModelProviderGroup(kind, providers, selectedId) {
+  const provider = providers.find(item => item.id === selectedId) || providers[0] || null;
+  if (provider) {
+    if (kind === 'chat') state.selectedChatProviderId = provider.id;
+    else state.selectedTtsProviderId = provider.id;
+  }
+  renderModelProviderList(kind, providers, provider?.id || '');
+  fillProviderSelect(`model-${kind}-provider-select`, providers, provider?.id || '');
+  fillModelProviderForm(kind, provider);
+}
+
+function renderModelProviderList(kind, providers, selectedId) {
+  const container = document.getElementById(`model-${kind}-provider-list`);
+  if (!container) return;
+  const icon = kind === 'chat' ? 'bot.svg' : 'mic.svg';
+  container.innerHTML = '';
+  for (const provider of providers) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = `model-provider-item${provider.id === selectedId ? ' is-active' : ''}`;
+    item.innerHTML = `
+      <img src="src/_logo/icons/${icon}" alt="">
+      <span><strong>${escapeHtml(provider.id)}</strong><small>${escapeHtml(provider.baseUrl)}</small></span>
+    `;
+    item.addEventListener('click', () => selectModelProvider(kind, provider.id));
+    container.appendChild(item);
+  }
+}
+
+function fillProviderSelect(id, providers, selectedId) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  select.innerHTML = providers
+    .map(provider => `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.id)}</option>`)
+    .join('');
+  select.value = providers.some(provider => provider.id === selectedId) ? selectedId : (providers[0]?.id || '');
+  updateCustomSelect(select);
+}
+
+function fillModelProviderForm(kind, provider) {
+  const prefix = kind === 'chat' ? 'chat' : 'tts';
+  if (!provider) return;
+  setValue(`${prefix}-provider-id`, provider.id);
+  setValue(`${prefix}-provider-api-key`, provider.apiKey);
+  setValue(`${prefix}-provider-base-url`, provider.baseUrl);
+  setValue(`${prefix}-provider-model`, provider.model);
+  if (kind === 'tts') {
+    setValue('tts-provider-speed', provider.speed);
+    setText('tts-provider-speed-value', `${Number(provider.speed || 1).toFixed(2)}x`);
+  }
+  updateModelDraftHeader(kind);
+}
+
+function updateModelDraftHeader(kind) {
+  const prefix = kind === 'chat' ? 'chat' : 'tts';
+  setText(`model-${kind}-title`, document.getElementById(`${prefix}-provider-id`)?.value || (kind === 'chat' ? 'openai' : 'mimo-tts'));
+  setText(`model-${kind}-subtitle`, document.getElementById(`${prefix}-provider-base-url`)?.value || (kind === 'chat' ? 'https://api.openai.com/v1' : 'https://api.xiaomimimo.com/v1'));
+}
+
+function selectModelProvider(kind, id) {
+  if (kind === 'chat') state.selectedChatProviderId = id;
+  else state.selectedTtsProviderId = id;
+  renderModelSettings(getSettings());
+}
+
+function addModelProvider(kind) {
+  const settings = getSettings();
+  const defaults = normalizeDefaultModelSelection(readDefaultModelSelection(), settings);
+  if (kind === 'chat') {
+    const id = createUniqueProviderId('openai', settings.chatProviders);
+    state.selectedChatProviderId = id;
+    saveSettings({
+      chatProviders: [
+        ...settings.chatProviders,
+        { id, apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1-mini' }
+      ],
+      ...defaults
+    });
+    return;
+  }
+  const id = createUniqueProviderId('mimo-tts', settings.ttsProviders);
+  state.selectedTtsProviderId = id;
+  saveSettings({
+    ttsProviders: [
+      ...settings.ttsProviders,
+      { id, apiKey: '', baseUrl: 'https://api.xiaomimimo.com/v1', model: 'mimo-v2.5-tts-voiceclone', speed: 1 }
+    ],
+    ...defaults
+  });
+}
+
+function deleteModelProvider(kind) {
+  const settings = getSettings();
+  const defaults = normalizeDefaultModelSelection(readDefaultModelSelection(), settings);
+  const providers = kind === 'chat' ? settings.chatProviders : settings.ttsProviders;
+  const selectedId = kind === 'chat' ? state.selectedChatProviderId : state.selectedTtsProviderId;
+  const nextProviders = providers.filter(provider => provider.id !== selectedId);
+  const fallback = nextProviders[0] || (kind === 'chat'
+    ? { id: 'openai', apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1-mini' }
+    : { id: 'mimo-tts', apiKey: '', baseUrl: 'https://api.xiaomimimo.com/v1', model: 'mimo-v2.5-tts-voiceclone', speed: 1 });
+  if (!nextProviders.length) nextProviders.push(fallback);
+  if (kind === 'chat') {
+    state.selectedChatProviderId = fallback.id;
+    saveSettings({
+      chatProviders: nextProviders,
+      ...remapProviderDefaults(defaults, kind, selectedId, fallback.id)
+    });
+    return;
+  }
+  state.selectedTtsProviderId = fallback.id;
+  saveSettings({
+    ttsProviders: nextProviders,
+    ...remapProviderDefaults(defaults, kind, selectedId, fallback.id)
+  });
+}
+
+function saveCurrentModelProvider(kind, options = {}) {
+  const settings = getSettings();
+  const selectedId = kind === 'chat' ? state.selectedChatProviderId : state.selectedTtsProviderId;
+  const provider = readModelProviderForm(kind);
+  const defaults = remapProviderDefaults(
+    normalizeDefaultModelSelection(options.defaultSelection || readDefaultModelSelection(), settings),
+    kind,
+    selectedId,
+    provider.id
+  );
+  if (kind === 'chat') {
+    const saved = saveSettings({
+      chatProviders: replaceProvider(settings.chatProviders, selectedId, provider),
+      ...defaults
+    });
+    state.selectedChatProviderId = provider.id;
+    if (!options.skipRender) renderModelSettings(saved);
+    return saved;
+  }
+  const saved = saveSettings({
+    ttsProviders: replaceProvider(settings.ttsProviders, selectedId, provider),
+    ...defaults
+  });
+  state.selectedTtsProviderId = provider.id;
+  if (!options.skipRender) renderModelSettings(saved);
+  return saved;
+}
+
+function saveModelSettings({ closeAfterSave = false } = {}) {
+  const defaults = readDefaultModelSelection();
+  if (state.modelProviderTab === 'chat') {
+    const selectedId = state.selectedChatProviderId;
+    const provider = readModelProviderForm('chat');
+    saveCurrentModelProvider('chat', { skipRender: true, defaultSelection: defaults });
+    if (defaults.defaultChatProviderId === selectedId) defaults.defaultChatProviderId = provider.id;
+    if (defaults.defaultImageCaptionProviderId === selectedId) defaults.defaultImageCaptionProviderId = provider.id;
+  }
+  if (state.modelProviderTab === 'tts') {
+    const selectedId = state.selectedTtsProviderId;
+    const provider = readModelProviderForm('tts');
+    saveCurrentModelProvider('tts', { skipRender: true, defaultSelection: defaults });
+    if (defaults.defaultTtsProviderId === selectedId) defaults.defaultTtsProviderId = provider.id;
+  }
+  const saved = saveSettings(defaults);
+  renderModelSettings(saved);
+  if (closeAfterSave) closePanel('settings-panel');
+  return saved;
+}
+
+function readDefaultModelSelection() {
+  return {
+    defaultChatProviderId: document.getElementById('default-chat-provider')?.value,
+    defaultTtsProviderId: document.getElementById('default-tts-provider')?.value,
+    defaultImageCaptionProviderId: document.getElementById('default-image-caption-provider')?.value
+  };
+}
+
+function normalizeDefaultModelSelection(defaults = {}, settings = getSettings()) {
+  return {
+    defaultChatProviderId: defaults.defaultChatProviderId || settings.defaultChatProviderId,
+    defaultTtsProviderId: defaults.defaultTtsProviderId || settings.defaultTtsProviderId,
+    defaultImageCaptionProviderId: defaults.defaultImageCaptionProviderId || settings.defaultImageCaptionProviderId || settings.defaultChatProviderId
+  };
+}
+
+function remapProviderDefaults(defaults, kind, previousId, nextId) {
+  const next = { ...defaults };
+  if (!previousId || !nextId) return next;
+  if (kind === 'chat') {
+    if (next.defaultChatProviderId === previousId) next.defaultChatProviderId = nextId;
+    if (next.defaultImageCaptionProviderId === previousId) next.defaultImageCaptionProviderId = nextId;
+  }
+  if (kind === 'tts' && next.defaultTtsProviderId === previousId) {
+    next.defaultTtsProviderId = nextId;
+  }
+  return next;
+}
+
+function readModelProviderForm(kind) {
+  if (kind === 'chat') {
+    return {
+      id: document.getElementById('chat-provider-id')?.value || state.selectedChatProviderId || 'openai',
+      apiKey: document.getElementById('chat-provider-api-key')?.value || '',
+      baseUrl: document.getElementById('chat-provider-base-url')?.value || 'https://api.openai.com/v1',
+      model: document.getElementById('chat-provider-model')?.value || 'gpt-4.1-mini'
+    };
+  }
+  return {
+    id: document.getElementById('tts-provider-id')?.value || state.selectedTtsProviderId || 'mimo-tts',
+    apiKey: document.getElementById('tts-provider-api-key')?.value || '',
+    baseUrl: document.getElementById('tts-provider-base-url')?.value || 'https://api.xiaomimimo.com/v1',
+    model: document.getElementById('tts-provider-model')?.value || 'mimo-v2.5-tts-voiceclone',
+    speed: Number(document.getElementById('tts-provider-speed')?.value || 1)
+  };
+}
+
+function replaceProvider(providers, selectedId, provider) {
+  const next = providers.map(item => (item.id === selectedId ? provider : item));
+  if (!next.some(item => item.id === provider.id)) next.push(provider);
+  return next;
+}
+
+function createUniqueProviderId(prefix, providers) {
+  const used = new Set(providers.map(provider => provider.id));
+  if (!used.has(prefix)) return prefix;
+  let index = 2;
+  while (used.has(`${prefix}-${index}`)) index += 1;
+  return `${prefix}-${index}`;
+}
+
 function syncSettingsToForm() {
   const settings = getSettings();
   const advanced = getAdvancedSettings();
   const memory = getLongTermMemorySettings();
-  setValue('api-key', settings.apiKey);
-  setValue('base-url', settings.baseUrl);
-  setValue('model-name', settings.model);
+  renderModelSettings(settings);
   setValue('adv-kb-chunk-size', advanced.kbChunkSize);
   setValue('adv-kb-overlap', advanced.kbChunkOverlap);
   setValue('adv-kb-candidate-limit', advanced.kbCandidateLimit);
@@ -2048,9 +2479,13 @@ function refreshAdvancedValueLabels() {
 function updateDeepSeekIntimateVisibility() {
   const card = document.getElementById('deepseek-intimate-mode-card');
   if (!card) return;
+  const settings = getSettings();
+  const selectedChat = settings.chatProviders.find(provider => provider.id === state.selectedChatProviderId)
+    || settings.chatProviders.find(provider => provider.id === settings.defaultChatProviderId)
+    || settings.chatProviders[0];
   const draft = {
-    ...getSettings(),
-    model: document.getElementById('model-name')?.value || getSettings().model,
+    ...settings,
+    model: document.getElementById('chat-provider-model')?.value || selectedChat?.model || settings.model,
     localizationSensitivity: Number(document.getElementById('localization-sensitivity')?.value)
   };
   card.classList.toggle('hidden', !isDeepSeekIntimateModeAvailable(draft));
@@ -2229,9 +2664,18 @@ function renderGroupSelectionSummary() {
   if (total) total.textContent = String(state.store.characters.length);
   if (title) title.textContent = state.groupEditorMode === 'edit' ? '群聊成员' : '创建群聊';
   if (strip) {
-    strip.innerHTML = selectedCharacters.length
-      ? selectedCharacters.map(character => `<img src="${escapeHtml(characterAvatar(character))}" alt="${escapeHtml(character.name)}" title="${escapeHtml(character.name)}">`).join('')
-      : '<span>选择至少 2 位好友</span>';
+    strip.innerHTML = '';
+    if (selectedCharacters.length) {
+      selectedCharacters.forEach(character => {
+        const image = document.createElement('img');
+        image.alt = character.name;
+        image.title = character.name;
+        setImageSource(image, characterAvatar(character));
+        strip.appendChild(image);
+      });
+    } else {
+      strip.innerHTML = '<span>选择至少 2 位好友</span>';
+    }
   }
   if (create) {
     const count = selectedCharacters.length;

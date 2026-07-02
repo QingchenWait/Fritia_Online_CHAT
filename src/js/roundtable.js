@@ -333,7 +333,9 @@ async function runSpeakerReply({
     finalText = payload.text;
     clearRoundtableBug();
   } catch (err) {
-    const replyTarget = target?.id === speaker.id ? { id: PLAYER_ID, name: PLAYER_NAME } : target;
+    const replyTarget = target?.id && target.id !== speaker.id
+      ? target
+      : { id: PLAYER_ID, name: PLAYER_NAME };
     handleRoundtableError(err, speaker, requestEvent, conversation.id);
     payload = {
       target: replyTarget,
@@ -348,6 +350,9 @@ async function runSpeakerReply({
     finalText = ensureTargetPrefix(randomItem(SAFE_FALLBACKS.error), replyTarget);
     status = 'error';
   }
+  const payloadTarget = payload?.target?.id
+    ? payload.target
+    : { id: PLAYER_ID, name: PLAYER_NAME };
 
   nextStore = replaceMessage(nextStore, conversation.id, typingId, {
     role: 'assistant',
@@ -358,7 +363,7 @@ async function runSpeakerReply({
     status,
     meta: {
       eventType,
-      targetId: payload.target.id,
+      targetId: payloadTarget.id,
       intent: payload.intent,
       emotion: payload.emotion,
       wantsFollowUp: payload.wantsFollowUp,
@@ -378,8 +383,8 @@ async function runSpeakerReply({
       sourceMessageIds: [typingId],
       speakerId: speaker.id,
       speakerName: speaker.name,
-      addresseeId: payload.target.id,
-      addresseeName: payload.target.name,
+      addresseeId: payloadTarget.id,
+      addresseeName: payloadTarget.name,
       deepseekIntimateMode: Boolean(intimateMessage)
     });
   }

@@ -1,5 +1,16 @@
 # DEVELOP
 
+## 2026-07-02 Model Provider Settings
+
+- “设置 / 大模型”重做为多提供商模型连接工作台，分为“对话”“文字转语音”和移动端可见的“默认模型”标签。
+- `src/js/settings.js` 扩展 `chatProviders`、`ttsProviders`、`defaultChatProviderId`、`defaultTtsProviderId`、`defaultImageCaptionProviderId`；旧版 `apiKey/baseUrl/model` 会在无 `chatProviders` 时迁移为首个对话提供商源。
+- 兼容字段 `settings.apiKey`、`settings.baseUrl`、`settings.model` 继续由默认对话提供商派生，私聊、群聊、DeepSeek 亲密模式和圆桌密语请求无需改入口即可使用默认对话模型。
+- 新增 `src/js/tts_engine.js`，预留 MiMO `mimo-v2.5-tts-voiceclone` 请求构造接口，固定 `response_format: "mp3"`，接收角色导入时保存的参考声音文件对象。
+- 桌面端模型页使用左侧提供商列表、右侧配置表单、下方默认模型三列选择；移动端隐藏列表，使用下拉选择提供商，并把默认模型作为同级标签页。
+- 模型详情头部新增桌面端垃圾桶图标删除按钮；底部“保存模型设置”改回纯文字按钮，避免图标导致换行。
+- 原生 `<select>` 保留为数据源，但统一通过 `enhanceCustomSelect()` 渲染为自绘悬浮下拉菜单，选项点击后继续派发原生 `change` 事件。
+- 修复“保存模型设置”时三个默认模型被重置的问题：保存前先缓存默认模型选择，再保存当前提供商，避免 `fritia-settings-updated` 重绘表单后覆盖用户刚选的默认值；当前提供商改 ID 时会同步重映射默认模型 id。
+
 ## 2026-07-02 Advanced Settings And Localization
 
 - `src/js/settings.js` 迁移旧项目 DeepSeek 亲密模式字段：`localizationSensitivity`、`deepseekIntimateMode`、`deepseekIntimateModeStartedAt`、`deepseekIntimateModeDisabledAt`，并恢复 `isDeepSeekIntimateModeAvailable()` / `shouldUseDeepSeekIntimateMode()`。
@@ -277,3 +288,25 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - 面板和成员编辑列表统一使用蓝紫 Soft UI 自绘滚动条，支持内容超出时上下滑动。
 - 修复低高度窗口下 flex 子块被压缩成细条的问题：面板头部、成员卡片、设置区和底部按钮均固定为不收缩，由 `.group-info-shell` 统一滚动。
 - 成员编辑模式下，搜索框右侧同一行显示“取消 / 保存成员”图标按钮，并设置 sticky 展示，避免低高度窗口或长列表场景下无法应用成员更改。
+
+## 2026-07-03 Send And Model Save Fixes
+
+- 大模型页的单个 provider “保存配置”、新增和删除操作都会携带当前默认对话 / TTS / 图像转述模型选择，避免设置刷新时回滚到旧默认值。
+- 发送流程拆为统一出站提交和异步 bot 回复两个阶段；文字、图片、附件、表情包都会先通过 `commitOutgoingMessage()` 写入当前会话。
+- 输入区、附件预览、提及浮层和表情包弹窗只在本地消息提交成功后清理；如果本地提交失败，草稿会保留，避免静默吞消息。
+- 私聊回复拆出 `completePrivateMessageReply()`，群聊圆桌回复和私聊回复都在用户消息成功展示后后台执行；API 失败不会阻塞下一次发送。
+- 群聊圆桌回复异常被限制在本轮 bot 回复内：错误目标缺失时统一回落到“分析员”。
+
+## 2026-07-03 Persistent Media Storage
+
+- 新增 `src/js/media_store.js`，使用 IndexedDB `fritia_media_store/media` 持久化图片、附件、表情包、角色头像和参考声音等大体积媒体。
+- `localStorage` 继续作为必须成功的元数据存储，只保存会话、消息文本、角色字段和 `idb-media:*` 引用；`saveAppStore()` 不再提供运行时兜底，写入失败会让发送停止并保留草稿。
+- `src/js/storage.js` 新增 `migrateLegacyAppMediaToIndexedDb()`，启动时把旧消息附件、旧角色头像/音频、会话头像中的 data URL 搬到 IndexedDB。
+- `src/js/stickers.js` 新增 `migrateLegacyStickersToIndexedDb()`，表情包原图不再写入 `localStorage.fritia_sticker_store`，发送表情包时消息只记录 `dataRef`。
+- `src/js/ui.js` 的附件选择、角色导入、表情包发送统一先保存媒体数据，再提交轻量消息元数据；图片渲染通过 `setImageSource()` 异步解析 IndexedDB 引用。
+
+## 2026-07-03 Preset Character Voice Samples
+
+- `src/js/characters.js` 的 `PRESET_CHARACTER_SOURCES` 为芙提雅、芬妮、琴诺补齐 `voiceSample` 字段，使预置角色与用户导入角色共用同一角色数据结构。
+- 芙提雅预置 `examples` 示例对话；芬妮和琴诺保留空示例对话。
+- `ensurePresetCharacters()` 现在会把已有预置角色的 `examples` 和 `voiceSample` 更新写回 `fritia_next_chat_store`，避免旧用户数据启动后仍缺少参考语音字段。

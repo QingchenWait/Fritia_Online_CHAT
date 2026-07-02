@@ -1,3 +1,5 @@
+import { saveDataUrlAsMedia } from './media_store.js';
+
 export const STORAGE_KEYS = {
   settings: 'fritia-settings',
   advanced: 'fritia_advanced_settings',
@@ -90,6 +92,62 @@ export function saveAppStore(store) {
   return normalized;
 }
 
+export async function migrateLegacyAppMediaToIndexedDb() {
+  const store = loadAppStore();
+  let changed = false;
+  for (const character of store.characters) {
+    if (isDataUrl(character.avatar)) {
+      const media = await saveDataUrlAsMedia(character.avatar, {
+        prefix: 'avatar',
+        category: 'avatar',
+        name: `${character.name || character.id || 'character'}-avatar`
+      });
+      character.avatar = media.ref;
+      changed = true;
+    }
+    if (isDataUrl(character.voiceSample)) {
+      const media = await saveDataUrlAsMedia(character.voiceSample, {
+        prefix: 'voice',
+        category: 'voice',
+        name: `${character.name || character.id || 'character'}-voice`
+      });
+      character.voiceSample = media.ref;
+      changed = true;
+    }
+  }
+  for (const conversation of store.conversations) {
+    if (isDataUrl(conversation.avatar)) {
+      const media = await saveDataUrlAsMedia(conversation.avatar, {
+        prefix: 'avatar',
+        category: 'conversation-avatar',
+        name: `${conversation.title || conversation.id || 'conversation'}-avatar`
+      });
+      conversation.avatar = media.ref;
+      changed = true;
+    }
+  }
+  for (const list of Object.values(store.messages || {})) {
+    for (const message of Array.isArray(list) ? list : []) {
+      for (const attachment of message.attachments || []) {
+        if (!attachment.dataRef && isDataUrl(attachment.dataUrl)) {
+          const media = await saveDataUrlAsMedia(attachment.dataUrl, {
+            prefix: 'att',
+            category: 'attachment',
+            name: attachment.name || attachment.id || 'attachment',
+            mime: attachment.mime,
+            size: attachment.size
+          });
+          attachment.dataRef = media.ref;
+          attachment.dataUrl = '';
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed) saveAppStore(store);
+  return changed;
+}
+
 export function normalizeAppStore(raw = {}) {
   const conversations = Array.isArray(raw.conversations) ? raw.conversations.map(normalizeConversation).filter(Boolean) : [];
   const messages = raw.messages && typeof raw.messages === 'object' ? raw.messages : {};
@@ -178,14 +236,16 @@ export function normalizeMessage(raw = {}) {
 
 export function normalizeAttachment(raw = {}) {
   const type = ['image', 'audio', 'file'].includes(raw.type) ? raw.type : 'file';
-  const dataUrl = clampText(raw.dataUrl, 8000000);
+  const dataRef = clampText(raw.dataRef || raw.mediaRef, 180);
+  const dataUrl = dataRef ? '' : clampText(raw.dataUrl, 8000000);
   const name = clampText(raw.name, 180);
-  if (!dataUrl && !name) return null;
+  if (!dataRef && !dataUrl && !name) return null;
   return {
     id: clampText(raw.id, 80) || createId('att'),
     type,
     name,
     dataUrl,
+    dataRef,
     mime: clampText(raw.mime, 120),
     size: Math.max(0, Number(raw.size) || 0),
     source: clampText(raw.source, 40),
@@ -344,6 +404,10 @@ function clampNumber(value, min, max, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.max(min, Math.min(max, Math.round(number)));
+}
+
+function isDataUrl(value) {
+  return typeof value === 'string' && value.startsWith('data:');
 }
 
 export function formatTime(ts) {

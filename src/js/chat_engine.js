@@ -22,8 +22,20 @@ export async function sendPrivateMessage({ store, conversation, character, text,
   let nextStore = appendMessage(store, conversation.id, userMessage);
   onStore?.(nextStore);
 
+  return completePrivateMessageReply({
+    store: nextStore,
+    conversation,
+    character,
+    text,
+    userMessage,
+    onStore
+  });
+}
+
+export async function completePrivateMessageReply({ store, conversation, character, text, userMessage = null, onStore }) {
+  if (!store || !conversation || !character) return null;
   const typingId = createId('typing');
-  nextStore = appendMessage(nextStore, conversation.id, {
+  let nextStore = appendMessage(store, conversation.id, {
     id: typingId,
     role: 'assistant',
     speakerId: character.id,
@@ -56,7 +68,7 @@ export async function sendPrivateMessage({ store, conversation, character, text,
       characterName: character.name,
       userText: text,
       assistantText: reply,
-      sourceMessageIds: [userMessage.id, typingId],
+      sourceMessageIds: [userMessage?.id, typingId].filter(Boolean),
       deepseekIntimateMode: typeof result === 'object' && result?.deepseekIntimateMode === true
     });
     onStore?.(nextStore);

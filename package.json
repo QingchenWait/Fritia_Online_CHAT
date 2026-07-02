@@ -11,6 +11,6 @@
     "dev": "node tools/static_server.mjs",
     "preview": "node tools/static_server.mjs dist",
     "start": "npm run dev",
-    "check": "node --check tools/build_static.mjs && node --check tools/static_server.mjs && node --check src/js/main.js && node --check src/js/storage.js && node --check src/js/characters.js && node --check src/js/settings.js && node --check src/js/deepseek_intimate_mode.js && node --check src/js/knowledge_base.js && node --check src/js/long_term_memory.js && node --check src/js/stickers.js && node --check src/js/chat_engine.js && node --check src/js/roundtable.js && node --check src/js/ui.js"
+    "check": "node --check tools/build_static.mjs && node --check tools/static_server.mjs && node --check src/js/main.js && node --check src/js/storage.js && node --check src/js/characters.js && node --check src/js/settings.js && node --check src/js/deepseek_intimate_mode.js && node --check src/js/knowledge_base.js && node --check src/js/long_term_memory.js && node --check src/js/media_store.js && node --check src/js/stickers.js && node --check src/js/tts_engine.js && node --check src/js/chat_engine.js && node --check src/js/roundtable.js && node --check src/js/ui.js"
   }
 }
