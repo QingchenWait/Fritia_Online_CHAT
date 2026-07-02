@@ -1,5 +1,12 @@
 # STRUCTURE
 
+## 2026-07-03 LLM Media Payload Mapping
+
+- 新增 `src/js/llm_media.js`：导出 `resolveMediaDataUrl()`、`buildModelMessageContent()`、`buildAttachmentContentParts()`、`attachmentLabelText()`，负责在请求模型前把 `idb-media:*`、data URL 和静态资源路径解析成真实模型输入数据。
+- `src/js/chat_engine.js`：私聊请求的当前用户消息和近期历史消息会调用 `buildModelMessageContent()`，图片作为 `image_url` content part 发送给 OpenAI-compatible LLM。
+- `src/js/roundtable.js`：圆桌请求在 `buildRequestBody().messages` 的最后一个 user message 中追加 `buildAttachmentContentParts()` 输出的真实媒体内容；`runRoundtableTurn()` 新增 `triggerAttachments`，只发图片/表情也能触发模型读取。
+- `src/js/tts_engine.js`：`buildMimoVoiceCloneRequest()` 改为 async，TTS 参考语音通过 `resolveMediaDataUrl()` 解析后传给 `voice_clone.audio`。
+
 ## 2026-07-03 Preset Character Voice Mapping
 
 - `src/js/characters.js`：`PRESET_CHARACTER_SOURCES` 为芙提雅、芬妮、琴诺补齐 `voiceSample`，路径分别指向各自 `src/_char/<角色>/..._Voice.mp3`。
@@ -137,6 +144,7 @@ fritia_online_next_chat/
     │   ├── knowledge_base.js
     │   ├── long_term_memory.js
     │   ├── media_store.js
+    │   ├── llm_media.js
     │   ├── stickers.js
     │   ├── tts_engine.js
     │   ├── chat_engine.js
@@ -409,7 +417,14 @@ fritia_online_next_chat/
 ### `src/js/tts_engine.js`
 
 - `getActiveTtsProvider(settings)`：读取默认文字转语音提供商源。
-- `buildMimoVoiceCloneRequest({ text, voiceSample, provider })`：构造 MiMO voice clone TTS 请求，输出格式固定为 MP3。
+- `buildMimoVoiceCloneRequest({ text, voiceSample, provider })`：异步构造 MiMO voice clone TTS 请求，输出格式固定为 MP3，参考语音会先解析为真实 data URL。
+
+### `src/js/llm_media.js`
+
+- `resolveMediaDataUrl(source)`：把 IndexedDB 媒体引用、data URL 或静态资源路径解析为真实 data URL。
+- `buildModelMessageContent({ speakerName, text, attachments })`：构造私聊 OpenAI-compatible 文本/多模态 message content。
+- `buildAttachmentContentParts(attachments)`：把附件数组转换为 `image_url`、`input_audio`、文本或 `file_data` content parts。
+- `attachmentLabelText(attachments)`：生成稳定的附件摘要文本，用于列表摘要和纯附件触发。
 
 ### `src/js/characters.js`
 
@@ -452,7 +467,7 @@ fritia_online_next_chat/
 ### `src/js/chat_engine.js`
 
 - `sendPrivateMessage({ store, conversation, character, text, attachments, onStore })`：私聊发送主流程。
-- `requestCharacterReply({ store, conversation, character, userText, mode, event })`：构建上下文并调用 OpenAI 兼容接口。
+- `requestCharacterReply({ store, conversation, character, userText, mode, event, userMessage })`：构建上下文并调用 OpenAI 兼容接口，`userMessage.attachments` 会在请求前解析为真实模型输入。
 
 请求拼接顺序：
 
@@ -465,7 +480,7 @@ fritia_online_next_chat/
 ### `src/js/roundtable.js`
 
 - `sendGroupPlayerMessage({ store, conversation, text, attachments, onStore })`：群聊玩家消息。
-- `runRoundtableTurn({ store, conversation, characters, triggerText, onStore })`：把玩家消息或提及拆成圆桌事件，串行处理 speaker 队列。
+- `runRoundtableTurn({ store, conversation, characters, triggerText, triggerAttachments, onStore })`：把玩家消息或提及拆成圆桌事件，串行处理 speaker 队列；纯附件消息用附件摘要触发，并在模型请求中附带真实媒体内容。
 
 发言人选择规则：
 

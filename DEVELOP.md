@@ -310,3 +310,10 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - `src/js/characters.js` 的 `PRESET_CHARACTER_SOURCES` 为芙提雅、芬妮、琴诺补齐 `voiceSample` 字段，使预置角色与用户导入角色共用同一角色数据结构。
 - 芙提雅预置 `examples` 示例对话；芬妮和琴诺保留空示例对话。
 - `ensurePresetCharacters()` 现在会把已有预置角色的 `examples` 和 `voiceSample` 更新写回 `fritia_next_chat_store`，避免旧用户数据启动后仍缺少参考语音字段。
+
+## 2026-07-03 LLM Media Payload Resolution
+
+- 新增 `src/js/llm_media.js`，作为模型请求前的统一媒体解析层：`idb-media:*`、data URL 和项目内静态资源路径都会解析成真实 `data:` 内容。
+- 私聊 `requestCharacterReply()` 会把当前用户消息和近期历史中的附件转换为 OpenAI-compatible 多模态 content parts；图片使用 `image_url`，音频使用 `input_audio`，文本文件解码为文本，其他二进制以 `file_data` 形式传递。
+- 群聊圆桌 `buildRequestBody()` 保持原圆桌 prompt 结构，但最后一个 user message 会在圆桌状态后追加真实媒体 content parts；只发送图片/表情时也会通过附件摘要触发圆桌回复。
+- `buildMimoVoiceCloneRequest()` 改为异步构建，TTS 参考语音会先解析为真实音频 data URL，再传给 `voice_clone`。

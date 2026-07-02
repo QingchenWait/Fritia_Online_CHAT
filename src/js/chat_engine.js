@@ -4,6 +4,7 @@ import { buildRagReferenceMessage } from './knowledge_base.js';
 import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_term_memory.js';
 import { characterDisplayName } from './characters.js';
 import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
+import { attachmentLabelText, buildModelMessageContent } from './llm_media.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -51,7 +52,8 @@ export async function completePrivateMessageReply({ store, conversation, charact
       store: nextStore,
       conversation,
       character,
-      userText: text
+      userText: text,
+      userMessage
     });
     const reply = typeof result === 'string' ? result : result.text;
     nextStore = replaceMessage(nextStore, conversation.id, typingId, {
@@ -85,7 +87,7 @@ export async function completePrivateMessageReply({ store, conversation, charact
   }
 }
 
-export async function requestCharacterReply({ store, conversation, character, userText, mode = 'private', event = null }) {
+export async function requestCharacterReply({ store, conversation, character, userText, mode = 'private', event = null, userMessage = null }) {
   const settings = getSettings();
   if (!settings.apiKey) {
     return localFallbackReply(character, userText, mode);
@@ -109,10 +111,11 @@ export async function requestCharacterReply({ store, conversation, character, us
     userText,
     history
   });
-  const messages = buildMessages({
+  const messages = await buildMessages({
     character,
     history,
     userText,
+    userMessage,
     ragMessage,
     memoryMessage,
     intimateMessage,
@@ -127,7 +130,7 @@ export async function requestCharacterReply({ store, conversation, character, us
   };
 }
 
-function buildMessages({ character, history, userText, ragMessage, memoryMessage, intimateMessage, historyLimit, mode, event }) {
+async function buildMessages({ character, history, userText, userMessage, ragMessage, memoryMessage, intimateMessage, historyLimit, mode, event }) {
   const system = [
     `你正在一个 QQ / Telegram 风格的角色扮演聊天软件中发言。`,
     `本次你只扮演：${character.name}。不要代替用户或其他角色发言。`,
@@ -142,17 +145,30 @@ function buildMessages({ character, history, userText, ragMessage, memoryMessage
     event?.targetName ? `本轮主要回应对象：${event.targetName}` : '',
     event?.botChainLimit ? `互聊进度：${event.interBotDebt || 0}/${event.botChainLimit}` : ''
   ].filter(Boolean).join('\n\n');
-  const recent = history.slice(-historyLimit).map(item => ({
-    role: item.role === 'assistant' ? 'assistant' : item.role === 'system' ? 'system' : 'user',
-    content: `${item.speakerName || (item.role === 'user' ? PLAYER_NAME : character.name)}：${item.text || attachmentText(item.attachments)}`
-  }));
+  const currentMessageId = userMessage?.id || '';
+  const recent = await Promise.all(history
+    .filter(item => !currentMessageId || item.id !== currentMessageId)
+    .slice(-historyLimit)
+    .map(async item => ({
+      role: item.role === 'assistant' ? 'assistant' : item.role === 'system' ? 'system' : 'user',
+      content: await buildModelMessageContent({
+        speakerName: item.speakerName || (item.role === 'user' ? PLAYER_NAME : character.name),
+        text: item.text || '',
+        attachments: item.attachments || []
+      })
+    })));
+  const currentUserContent = await buildModelMessageContent({
+    speakerName: PLAYER_NAME,
+    text: userText,
+    attachments: userMessage?.attachments || []
+  });
   return [
     { role: 'system', content: system },
     ...(ragMessage ? [ragMessage] : []),
     ...(memoryMessage ? [memoryMessage] : []),
     ...(intimateMessage ? [intimateMessage] : []),
     ...recent,
-    { role: 'user', content: `${PLAYER_NAME}：${userText}` }
+    { role: 'user', content: currentUserContent }
   ];
 }
 
@@ -205,8 +221,7 @@ function friendlyError(err) {
 }
 
 function attachmentText(attachments = []) {
-  if (!attachments.length) return '';
-  return attachments.map(item => `[${item.type === 'image' ? '图片' : '附件'}:${item.name || item.mime || '未命名'}]`).join(' ');
+  return attachmentLabelText(attachments);
 }
 
 function escapeRegExp(value) {

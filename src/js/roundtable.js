@@ -3,6 +3,7 @@ import { buildRagReferenceMessage } from './knowledge_base.js';
 import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_term_memory.js';
 import { getSettings, getAdvancedSettings } from './settings.js';
 import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
+import { attachmentLabelText, buildAttachmentContentParts } from './llm_media.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -137,10 +138,11 @@ export async function sendGroupPlayerMessage({ store, conversation, text, attach
   return { store: nextStore, message };
 }
 
-export async function runRoundtableTurn({ store, conversation, characters, triggerText = '', onStore }) {
+export async function runRoundtableTurn({ store, conversation, characters, triggerText = '', triggerAttachments = [], onStore }) {
   if (!conversation || conversation.type !== 'group') return store;
   const runtimeSettings = resolveRoundtableSettings(conversation);
-  if (!triggerText && !runtimeSettings.idleTalk) return store;
+  const effectiveTriggerText = String(triggerText || '').trim() || attachmentLabelText(triggerAttachments);
+  if (!effectiveTriggerText && !runtimeSettings.idleTalk) return store;
   const participants = resolveParticipants(conversation, characters, runtimeSettings);
   if (!participants.length) {
     setRoundtableBug('no-speaker', '圆桌密语无法选择发言成员', {
@@ -150,7 +152,7 @@ export async function runRoundtableTurn({ store, conversation, characters, trigg
     return store;
   }
 
-  const mentioned = collectMentionedParticipants(triggerText, participants, { includeNameKeywords: true });
+  const mentioned = collectMentionedParticipants(effectiveTriggerText, participants, { includeNameKeywords: true });
   const hasMentionTrigger = mentioned.length > 0;
   if (!runtimeSettings.autoBotChat && !hasMentionTrigger) return store;
 
@@ -160,22 +162,22 @@ export async function runRoundtableTurn({ store, conversation, characters, trigg
       speakerId: speaker.id,
       targetId: PLAYER_ID,
       targetName: PLAYER_NAME,
-      triggerText,
+      triggerText: effectiveTriggerText,
       eventType: 'mention',
       priority: 120 - index,
       suppressFollowUp: index < mentioned.length - 1
     }));
   } else {
     const history = getConversationMessages(store, conversation.id);
-    const speaker = chooseSpeaker(participants, triggerText, history);
+    const speaker = chooseSpeaker(participants, effectiveTriggerText, history);
     enqueueRoundtableEvent({
       conversationId: conversation.id,
       speakerId: speaker.id,
       targetId: PLAYER_ID,
       targetName: PLAYER_NAME,
-      triggerText,
-      eventType: triggerText ? 'player' : 'idle',
-      priority: triggerText ? 80 : 40
+      triggerText: effectiveTriggerText,
+      eventType: effectiveTriggerText ? 'player' : 'idle',
+      priority: effectiveTriggerText ? 80 : 40
     });
   }
 
@@ -304,6 +306,7 @@ async function runSpeakerReply({
     const ragMessage = await buildRoundtableRagMessage(requestEvent, history);
     const memoryMessage = await buildRoundtableMemoryMessage(requestEvent, speakerForRequest, history);
     intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
+    const mediaContentParts = await buildRoundtableMediaContentParts(history);
     const estimatedTokens = estimateRequestTokens(speakerForRequest, requestEvent, ragMessage, memoryMessage, intimateMessage, settings, history);
     const budgetBeforeRequest = getBudgetState();
     const tokenHardLimit = getRoundtableTokenHardLimit();
@@ -321,7 +324,7 @@ async function runSpeakerReply({
       throw error;
     }
 
-    const body = buildRequestBody(settings, speakerForRequest, requestEvent, ragMessage, memoryMessage, intimateMessage);
+    const body = buildRequestBody(settings, speakerForRequest, requestEvent, ragMessage, memoryMessage, intimateMessage, mediaContentParts);
     const rawReply = await requestRoundtableCompletion({ settings, body });
     recordCall(requestEvent.type, estimatedTokens + estimateTokens(rawReply));
     const parsed = parseRoundtableJson(rawReply);
@@ -533,6 +536,22 @@ async function buildRoundtableMemoryMessage(event, speaker, history) {
   return null;
 }
 
+async function buildRoundtableMediaContentParts(history = []) {
+  const mediaMessages = history
+    .filter(item => item && item.status !== 'typing' && Array.isArray(item.attachments) && item.attachments.length)
+    .slice(-4);
+  const parts = [];
+  for (const message of mediaMessages) {
+    const speakerName = message.speakerName || (message.role === 'user' ? PLAYER_NAME : '角色');
+    parts.push({
+      type: 'text',
+      text: `${speakerName}发送的媒体内容：${attachmentLabelText(message.attachments)}`
+    });
+    parts.push(...await buildAttachmentContentParts(message.attachments));
+  }
+  return parts;
+}
+
 function buildRoundtableRagQueries(event, requestMessages = []) {
   const recentPlayerTexts = requestMessages
     .filter(item => item.role === 'player')
@@ -568,7 +587,7 @@ function uniqueNonEmptyLines(lines = []) {
   return result;
 }
 
-export function buildRequestBody(settings, speaker, event, ragMessage = null, memoryMessage = null, intimateMessage = null) {
+export function buildRequestBody(settings, speaker, event, ragMessage = null, memoryMessage = null, intimateMessage = null, mediaContentParts = []) {
   const context = event.context || {};
   const participants = context.participants || [];
   const others = participants
@@ -604,6 +623,14 @@ export function buildRequestBody(settings, speaker, event, ragMessage = null, me
     participants: participants.map(item => ({ id: item.id, name: item.name })),
     recentMessages
   };
+  const userInstruction = [
+    '请根据以下圆桌状态，只生成你这一位角色的一条 JSON 消息。',
+    '再次强调：只返回一个可被 JSON.parse 直接解析的对象，不要普通聊天文本。',
+    JSON.stringify(userContext, null, 2)
+  ].join('\n');
+  const userContent = mediaContentParts.length
+    ? [{ type: 'text', text: userInstruction }, ...mediaContentParts]
+    : userInstruction;
 
   return {
     model: settings.model,
@@ -641,11 +668,7 @@ export function buildRequestBody(settings, speaker, event, ragMessage = null, me
       ...(intimateMessage ? [intimateMessage] : []),
       {
         role: 'user',
-        content: [
-          '请根据以下圆桌状态，只生成你这一位角色的一条 JSON 消息。',
-          '再次强调：只返回一个可被 JSON.parse 直接解析的对象，不要普通聊天文本。',
-          JSON.stringify(userContext, null, 2)
-        ].join('\n')
+        content: userContent
       }
     ]
   };
@@ -1306,8 +1329,7 @@ function isPassivePlayerText(text = '') {
 }
 
 function attachmentText(attachments = []) {
-  if (!attachments.length) return '';
-  return attachments.map(item => `[${item.type === 'image' ? '图片' : '附件'}:${item.name || item.mime || '未命名'}]`).join(' ');
+  return attachmentLabelText(attachments);
 }
 
 function clampText(value, maxLength) {

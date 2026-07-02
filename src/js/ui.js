@@ -370,6 +370,7 @@ function continueConversationAfterOutgoing(committed) {
       conversation,
       characters: store.characters,
       triggerText: message.text,
+      triggerAttachments: message.attachments || [],
       onStore: updateStore
     }).catch(error => {
       console.warn('[ui] roundtable turn failed', error);
