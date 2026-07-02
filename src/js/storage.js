@@ -187,7 +187,10 @@ export function normalizeAttachment(raw = {}) {
     name,
     dataUrl,
     mime: clampText(raw.mime, 120),
-    size: Math.max(0, Number(raw.size) || 0)
+    size: Math.max(0, Number(raw.size) || 0),
+    source: clampText(raw.source, 40),
+    width: Math.max(0, Number(raw.width) || 0),
+    height: Math.max(0, Number(raw.height) || 0)
   };
 }
 

@@ -103,9 +103,12 @@
 
       <footer class="composer">
         <div id="mention-popover" class="mention-popover hidden" role="listbox" aria-label="@ 群成员"></div>
+        <section id="sticker-popover" class="sticker-popover hidden" aria-label="表情包">
+          <div class="sticker-grid" id="sticker-popover-grid"></div>
+        </section>
         <div id="attachment-preview" class="attachment-preview hidden"></div>
         <div class="composer-tools">
-          <button class="icon-btn" type="button" title="表情">
+          <button id="sticker-toggle-btn" class="icon-btn" type="button" title="表情" aria-label="打开表情包">
             <img src="src/_logo/icons/smile.svg" alt="">
           </button>
           <label class="icon-btn" title="发送图片">
@@ -126,6 +129,7 @@
           <img src="src/_logo/icons/send.svg" alt="">
         </button>
       </footer>
+      <input id="sticker-upload-input" type="file" accept="image/*" multiple hidden>
     </main>
 
     <aside class="detail-pane" aria-label="详情">
@@ -524,6 +528,43 @@
               <p>静态 PWA 首版，预留 Tauri / Capacitor 跨平台壳层，数据默认保存在本机浏览器。</p>
               <p>图标来自 Lucide，表情美术来自 Microsoft Fluent UI Emoji。</p>
             </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="sticker-manager-panel" class="modal hidden settings-modal" role="dialog" aria-modal="true" aria-labelledby="sticker-manager-title">
+    <div class="modal-shell modal-shell-wide">
+      <header class="modal-head">
+        <div>
+          <small>STICKERS</small>
+          <h2 id="sticker-manager-title">表情包管理</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="sticker-manager-panel" aria-label="关闭表情包管理">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <div class="settings-layout">
+        <nav class="settings-nav" aria-label="表情包管理分组">
+          <button class="is-active" type="button" data-sticker-section="manage">表情管理</button>
+          <button type="button" data-sticker-section="auto-tags">自动标签</button>
+        </nav>
+        <section class="settings-content">
+          <div class="settings-view is-active" data-sticker-view="manage">
+            <div class="panel-title"><h3>表情管理</h3><p>上传图片作为表情包，点击表情即可作为图片发送。</p></div>
+            <div class="sticker-manager-toolbar">
+              <button id="sticker-manager-add" class="btn btn-primary" type="button">
+                <img src="src/_logo/icons/plus.svg" alt="">
+                <span>添加表情包</span>
+              </button>
+              <span id="sticker-manager-count" class="status-pill">0 个表情</span>
+            </div>
+            <div id="sticker-manager-grid" class="sticker-manager-grid"></div>
+          </div>
+          <div class="settings-view" data-sticker-view="auto-tags">
+            <div class="panel-title"><h3>自动标签</h3><p>后续会在这里添加表情包自动标签能力。</p></div>
+            <div class="sticker-empty-panel">暂未开放。</div>
           </div>
         </section>
       </div>

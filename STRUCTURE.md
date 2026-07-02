@@ -9,6 +9,14 @@
 - `.gitignore`：忽略 `node_modules/`、`dist/` 和本地 `.env*`。
 - `package.json` 新增脚本：`build` 生成静态产物，`preview` 预览 `dist/`。
 
+## 2026-07-02 Sticker Packs Mapping
+
+- 新增 `src/js/stickers.js`：导出 `listStickers()`、`addStickerFiles()`、`deleteSticker()`、`stickerToAttachment()`、`isWideSticker()`。
+- 新增 DOM：`#sticker-toggle-btn`、`#sticker-popover`、`#sticker-popover-grid`、`#sticker-upload-input`。
+- 新增表情包管理窗口：`#sticker-manager-panel`，内部使用 `[data-sticker-section]` / `[data-sticker-view]` 切换“表情管理”和“自动标签”。
+- 新增 CSS：`.sticker-popover`、`.sticker-grid`、`.sticker-tile`、`.sticker-action-tile`、`.sticker-manager-grid`、`.sticker-manager-item`；表情弹窗网格桌面端 4-6 列自适应且禁用横向滚动，移动竖屏最多 5 列。
+- 新增消息表情样式：`.message-image-sticker`、`.is-sticker-square`、`.is-sticker-landscape`、`.is-sticker-portrait`、`.message-content--sticker-only`。
+
 ## 2026-07-02 Advanced Settings And Localization Mapping
 
 - 新增 `src/js/deepseek_intimate_mode.js`：导出 `buildDeepSeekIntimateUserMessage()`、`isDeepSeekIntimateReply()`、`shouldKeepMessageForCurrentDeepSeekMode()`。
@@ -93,6 +101,7 @@ fritia_online_next_chat/
     │   ├── characters.js
     │   ├── knowledge_base.js
     │   ├── long_term_memory.js
+    │   ├── stickers.js
     │   ├── chat_engine.js
     │   ├── roundtable.js
     │   └── ui.js

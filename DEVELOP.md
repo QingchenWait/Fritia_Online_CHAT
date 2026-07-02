@@ -246,3 +246,11 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - `package.json` 新增 `build` 与 `preview` 脚本，`tools/static_server.mjs` 支持通过命令参数指定静态根目录。
 - 新增 GitHub Pages workflow：push 到 `main` / `master` 或手动触发时运行检查、构建并发布 `dist/`。
 - 新增 `wrangler.toml` 和 `.nvmrc`，Cloudflare Pages 通过 GitHub 仓库部署时使用 `npm run build` 与 `dist`。
+
+## 2026-07-02 Sticker Packs
+
+- 新增 `src/js/stickers.js`，使用 `localStorage.fritia_sticker_store` 保存用户上传的表情包原图 data URL、尺寸和文件信息。
+- `src/js/ui.js` 新增表情包弹窗、上传、删除、管理窗口分区和点击表情发送逻辑；发送时复用现有图片附件消息格式，不新增消息类型。
+- 表情缩略图按图片比例切换 `contain` / `cover`，只影响表情窗口和管理窗口显示，不改变发送的原图。
+- 表情附件会记录 `source: "sticker"` 与原始宽高；消息渲染时用 `.message-image-sticker` 按原图比例缩略显示，短边复用 `--sticker-thumb-size`。
+- 表情包弹窗使用无横向溢出的响应式 Grid：桌面端根据可用宽度在 4-6 列间自适应，移动竖屏固定最多 5 列。

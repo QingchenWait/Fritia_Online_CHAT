@@ -40,6 +40,7 @@ import {
   closeMemoryNodePanel,
   updateLongTermMemorySettings
 } from './long_term_memory.js';
+import { addStickerFiles, deleteSticker, isWideSticker, listStickers, stickerToAttachment } from './stickers.js';
 import { sendPrivateMessage } from './chat_engine.js';
 import { getRoundtableError, runRoundtableTurn, sendGroupPlayerMessage } from './roundtable.js';
 
@@ -61,6 +62,7 @@ const state = {
   groupInfoEditing: false,
   groupInfoMemberSearch: '',
   roundtableErrorPopoverOpen: false,
+  stickerPopoverOpen: false,
   mention: {
     active: false,
     start: -1,
@@ -116,6 +118,10 @@ function bindGlobalEvents() {
   document.addEventListener('fritia-roundtable-error-updated', () => {
     renderRoundtableErrorIndicator();
   });
+  document.addEventListener('fritia-stickers-updated', () => {
+    renderStickerPopover();
+    renderStickerManager();
+  });
 
   document.querySelectorAll('[data-panel-open]').forEach(button => {
     button.addEventListener('click', () => {
@@ -145,6 +151,9 @@ function bindGlobalEvents() {
   document.querySelectorAll('[data-settings-section]').forEach(button => {
     button.addEventListener('click', () => showSettingsSection(button.dataset.settingsSection));
   });
+  document.querySelectorAll('[data-sticker-section]').forEach(button => {
+    button.addEventListener('click', () => showStickerManagerSection(button.dataset.stickerSection));
+  });
 
   document.getElementById('conversation-search')?.addEventListener('input', renderConversationList);
   document.querySelector('[data-chat-info-toggle]')?.addEventListener('click', handleChatInfoToggle);
@@ -173,8 +182,16 @@ function bindGlobalEvents() {
     state.roundtableErrorPopoverOpen = false;
     renderRoundtableErrorIndicator();
   });
+  document.addEventListener('click', event => {
+    if (!state.stickerPopoverOpen) return;
+    const popover = document.getElementById('sticker-popover');
+    const button = document.getElementById('sticker-toggle-btn');
+    if (popover?.contains(event.target) || button?.contains(event.target)) return;
+    closeStickerPopover();
+  });
 
   bindComposer();
+  bindStickers();
   bindCharacterForm();
   bindGroupEditor();
   bindGroupInfoPanel();
@@ -246,13 +263,18 @@ async function handleSend() {
   const text = input?.value.trim() || '';
   const attachments = state.selectedAttachment ? [state.selectedAttachment] : [];
   if (!text && !attachments.length) return;
-  const conversation = getActiveConversation();
-  if (!conversation) return;
+  const sent = await sendMessageToActiveConversation(text, attachments);
+  if (!sent) return;
   input.value = '';
   input.style.height = 'auto';
   state.selectedAttachment = null;
   renderAttachmentPreview();
   closeMentionPicker();
+}
+
+async function sendMessageToActiveConversation(text, attachments = []) {
+  const conversation = getActiveConversation();
+  if (!conversation) return null;
   if (conversation.type === 'group') {
     const sent = await sendGroupPlayerMessage({
       store: state.store,
@@ -269,16 +291,33 @@ async function handleSend() {
       triggerText: text,
       onStore: updateStore
     });
-    return;
+    return sent;
   }
   const character = getCharacterById(state.store.characters, conversation.memberIds[0]);
-  await sendPrivateMessage({
+  if (!character) return null;
+  return sendPrivateMessage({
     store: state.store,
     conversation,
     character,
     text,
     attachments,
     onStore: updateStore
+  });
+}
+
+function bindStickers() {
+  document.getElementById('sticker-toggle-btn')?.addEventListener('click', event => {
+    event.stopPropagation();
+    state.stickerPopoverOpen = !state.stickerPopoverOpen;
+    renderStickerPopover();
+  });
+  document.getElementById('sticker-upload-input')?.addEventListener('change', async event => {
+    const files = [...(event.target.files || [])];
+    if (files.length) await addStickerFiles(files);
+    event.target.value = '';
+  });
+  document.getElementById('sticker-manager-add')?.addEventListener('click', () => {
+    document.getElementById('sticker-upload-input')?.click();
   });
 }
 
@@ -550,6 +589,8 @@ function renderAll() {
   renderDetail();
   renderGroupInfoPanel();
   renderMentionPicker();
+  renderStickerPopover();
+  renderStickerManager();
   updateContextStatus();
   renderRoundtableErrorIndicator();
   scheduleRoundtableIdle();
@@ -658,14 +699,19 @@ function createMessageNode(message) {
   if (message.status === 'typing') {
     content.innerHTML = '<span class="typing-indicator"><span></span><span></span><span></span></span>';
   } else {
-    renderMessageText(content, message.text || '');
-    for (const attachment of message.attachments || []) {
+    const text = message.text || '';
+    const attachments = message.attachments || [];
+    const stickerOnly = isStickerOnlyMessage(text, attachments);
+    if (stickerOnly) content.classList.add('message-content--sticker-only');
+    if (text.trim()) renderMessageText(content, text);
+    for (const attachment of attachments) {
       if (attachment.type === 'image' && attachment.dataUrl) {
         const image = document.createElement('img');
-        image.className = 'message-image';
+        const stickerMeta = resolveStickerAttachmentMeta(attachment);
+        image.className = `message-image${stickerMeta ? ` message-image-sticker ${getStickerAttachmentOrientation(stickerMeta)}` : ''}`;
         image.src = attachment.dataUrl;
         image.alt = attachment.name || '图片';
-        content.appendChild(document.createElement('br'));
+        if (content.childNodes.length) content.appendChild(document.createElement('br'));
         content.appendChild(image);
       } else {
         const line = document.createElement('div');
@@ -769,6 +815,147 @@ function renderAttachmentPreview() {
   });
   chip.append(text, close);
   preview.appendChild(chip);
+}
+
+function renderStickerPopover() {
+  const popover = document.getElementById('sticker-popover');
+  const grid = document.getElementById('sticker-popover-grid');
+  if (!popover || !grid) return;
+  popover.classList.toggle('hidden', !state.stickerPopoverOpen);
+  grid.innerHTML = '';
+  grid.appendChild(createStickerActionTile('plus', '添加表情包', () => {
+    document.getElementById('sticker-upload-input')?.click();
+  }));
+  grid.appendChild(createStickerActionTile('smile', '表情包管理', () => {
+    closeStickerPopover();
+    openPanel('sticker-manager-panel');
+    showStickerManagerSection('manage');
+    renderStickerManager();
+  }));
+  const stickers = listStickers();
+  if (!stickers.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sticker-popover-empty';
+    empty.textContent = '添加图片后即可作为表情发送。';
+    grid.appendChild(empty);
+    return;
+  }
+  for (const sticker of stickers) {
+    grid.appendChild(createStickerTile(sticker, {
+      className: 'sticker-tile',
+      onClick: () => sendSticker(sticker)
+    }));
+  }
+}
+
+function renderStickerManager() {
+  const grid = document.getElementById('sticker-manager-grid');
+  const count = document.getElementById('sticker-manager-count');
+  if (!grid) return;
+  const stickers = listStickers();
+  setText('sticker-manager-count', `${stickers.length} 个表情`);
+  if (count) count.textContent = `${stickers.length} 个表情`;
+  grid.innerHTML = '';
+  const addTile = createStickerActionTile('plus', '添加表情包', () => {
+    document.getElementById('sticker-upload-input')?.click();
+  });
+  addTile.classList.add('sticker-manager-add-tile');
+  grid.appendChild(addTile);
+  if (!stickers.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sticker-empty-panel';
+    empty.textContent = '还没有表情包。点击左侧按钮上传图片。';
+    grid.appendChild(empty);
+    return;
+  }
+  for (const sticker of stickers) {
+    const item = document.createElement('article');
+    item.className = 'sticker-manager-item';
+    const preview = createStickerTile(sticker, { className: 'sticker-preview-tile' });
+    const name = document.createElement('strong');
+    name.textContent = sticker.name || '表情包';
+    const meta = document.createElement('small');
+    meta.textContent = `${sticker.width || 0} x ${sticker.height || 0} · ${formatBytes(sticker.size)}`;
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'icon-btn memory-danger-icon';
+    deleteButton.type = 'button';
+    deleteButton.title = '删除表情包';
+    deleteButton.setAttribute('aria-label', '删除表情包');
+    deleteButton.innerHTML = '<img src="src/_logo/icons/trash-2.svg" alt="">';
+    deleteButton.addEventListener('click', () => {
+      if (!confirm(`确认删除「${sticker.name || '表情包'}」？`)) return;
+      deleteSticker(sticker.id);
+    });
+    item.append(preview, name, meta, deleteButton);
+    grid.appendChild(item);
+  }
+}
+
+function resolveStickerAttachmentMeta(attachment) {
+  if (!attachment || attachment.type !== 'image') return null;
+  if (attachment.source === 'sticker') return attachment;
+  return listStickers().find(item => item.dataUrl === attachment.dataUrl) || null;
+}
+
+function isStickerOnlyMessage(text, attachments = []) {
+  if (String(text || '').trim()) return false;
+  if (attachments.length !== 1) return false;
+  return Boolean(resolveStickerAttachmentMeta(attachments[0]));
+}
+
+function getStickerAttachmentOrientation(sticker) {
+  const width = Number(sticker?.width) || 0;
+  const height = Number(sticker?.height) || 0;
+  if (!width || !height) return 'is-sticker-square';
+  const ratio = Math.max(width, height) / Math.min(width, height);
+  if (ratio <= 1.2) return 'is-sticker-square';
+  return width > height ? 'is-sticker-landscape' : 'is-sticker-portrait';
+}
+
+function createStickerActionTile(icon, label, onClick) {
+  const button = document.createElement('button');
+  button.className = 'sticker-action-tile';
+  button.type = 'button';
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.innerHTML = `<img src="src/_logo/icons/${icon}.svg" alt="">`;
+  button.addEventListener('click', event => {
+    event.stopPropagation();
+    onClick?.();
+  });
+  return button;
+}
+
+function createStickerTile(sticker, options = {}) {
+  const button = document.createElement('button');
+  button.className = options.className || 'sticker-tile';
+  button.type = 'button';
+  button.title = sticker.name || '表情包';
+  const image = document.createElement('img');
+  image.src = sticker.dataUrl;
+  image.alt = sticker.name || '表情包';
+  image.className = isWideSticker(sticker) ? 'is-crop' : 'is-contain';
+  button.appendChild(image);
+  if (options.onClick) {
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      options.onClick(sticker);
+    });
+  }
+  return button;
+}
+
+async function sendSticker(sticker) {
+  const attachment = stickerToAttachment(sticker);
+  if (!attachment) return;
+  const sent = await sendMessageToActiveConversation('', [attachment]);
+  if (!sent) return;
+  closeStickerPopover();
+}
+
+function closeStickerPopover() {
+  state.stickerPopoverOpen = false;
+  renderStickerPopover();
 }
 
 function renderGroupMemberPicker() {
@@ -1569,6 +1756,10 @@ function openPanel(id, options = {}) {
     renderGroupMemberPicker();
   }
   if (id === 'memory-node-panel') openMemoryNodePanel();
+  if (id === 'sticker-manager-panel') {
+    showStickerManagerSection('manage');
+    renderStickerManager();
+  }
 }
 
 function closePanel(id) {
@@ -1588,11 +1779,21 @@ function showSettingsSection(section) {
   });
 }
 
+function showStickerManagerSection(section) {
+  document.querySelectorAll('[data-sticker-section]').forEach(button => {
+    button.classList.toggle('is-active', button.dataset.stickerSection === section);
+  });
+  document.querySelectorAll('[data-sticker-view]').forEach(view => {
+    view.classList.toggle('is-active', view.dataset.stickerView === section);
+  });
+}
+
 function selectConversation(id) {
   const next = saveAppStore({ ...state.store, activeConversationId: id });
   document.getElementById('app')?.classList.remove('is-detail-open');
   closeGroupInfoPanel();
   closeMentionPicker();
+  closeStickerPopover();
   updateStore(next);
   document.getElementById('app')?.classList.add('is-chat-open');
 }

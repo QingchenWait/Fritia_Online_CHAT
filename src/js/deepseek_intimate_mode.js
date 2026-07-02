@@ -23,7 +23,7 @@ export async function buildDeepSeekIntimateUserMessage(settings) {
   if (!prompt) return null;
   return {
     role: 'user',
-    content: `亲密模式追加提示：\n${prompt}`
+    content: `${prompt}`
   };
 }
 
