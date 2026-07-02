@@ -37,6 +37,16 @@ export async function saveFileAsMedia(file, options = {}) {
   };
 }
 
+export async function saveBlobAsMedia(blob, options = {}) {
+  if (!blob) throw new Error('缺少需要保存的媒体 Blob。');
+  const dataUrl = await readBlobAsDataUrl(blob);
+  return saveDataUrlAsMedia(dataUrl, {
+    ...options,
+    mime: options.mime || blob.type || '',
+    size: Number(options.size ?? blob.size) || 0
+  });
+}
+
 export async function saveDataUrlAsMedia(dataUrl, options = {}) {
   const source = String(dataUrl || '');
   if (!source) throw new Error('缺少需要保存的媒体数据。');
@@ -120,6 +130,15 @@ function readFileAsDataUrl(file) {
     reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(reader.error || new Error('读取文件失败。'));
     reader.readAsDataURL(file);
+  });
+}
+
+function readBlobAsDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('读取媒体 Blob 失败。'));
+    reader.readAsDataURL(blob);
   });
 }
 

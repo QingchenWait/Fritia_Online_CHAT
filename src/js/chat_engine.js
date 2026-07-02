@@ -5,11 +5,22 @@ import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_ter
 import { characterDisplayName } from './characters.js';
 import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
 import { attachmentLabelText, buildModelMessageContent } from './llm_media.js';
+import { saveDataUrlAsMedia } from './media_store.js';
+import { getTtsErrorLog, synthesizeMimoVoiceClone } from './tts_engine.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
 
-export async function sendPrivateMessage({ store, conversation, character, text, attachments = [], onStore }) {
+export async function sendPrivateMessage({
+  store,
+  conversation,
+  character,
+  text,
+  attachments = [],
+  voiceReplyEnabled = false,
+  onVoiceNotice,
+  onStore
+}) {
   if (!conversation || !character) return null;
   const userMessage = {
     id: createId('msg'),
@@ -29,11 +40,22 @@ export async function sendPrivateMessage({ store, conversation, character, text,
     character,
     text,
     userMessage,
+    voiceReplyEnabled,
+    onVoiceNotice,
     onStore
   });
 }
 
-export async function completePrivateMessageReply({ store, conversation, character, text, userMessage = null, onStore }) {
+export async function completePrivateMessageReply({
+  store,
+  conversation,
+  character,
+  text,
+  userMessage = null,
+  voiceReplyEnabled = false,
+  onVoiceNotice,
+  onStore
+}) {
   if (!store || !conversation || !character) return null;
   const typingId = createId('typing');
   let nextStore = appendMessage(store, conversation.id, {
@@ -56,14 +78,51 @@ export async function completePrivateMessageReply({ store, conversation, charact
       userMessage
     });
     const reply = typeof result === 'string' ? result : result.text;
-    nextStore = replaceMessage(nextStore, conversation.id, typingId, {
-      text: reply,
-      status: 'sent',
-      createdAt: now(),
-      meta: {
-        deepseekIntimateMode: typeof result === 'object' && result?.deepseekIntimateMode === true
+    const baseMeta = {
+      deepseekIntimateMode: typeof result === 'object' && result?.deepseekIntimateMode === true
+    };
+    if (voiceReplyEnabled) {
+      try {
+        const voiceAttachment = await buildVoiceReplyAttachment(reply, character);
+        nextStore = replaceMessage(nextStore, conversation.id, typingId, {
+          text: reply,
+          attachments: [voiceAttachment],
+          status: 'sent',
+          createdAt: now(),
+          meta: {
+            ...baseMeta,
+            voiceReply: true,
+            ttsText: reply
+          }
+        });
+      } catch (ttsError) {
+        const message = `语音生成失败：${ttsError?.message || '未知错误'}`;
+        onVoiceNotice?.({
+          conversationId: conversation.id,
+          level: 'error',
+          text: message,
+          title: '语音生成异常',
+          detail: getTtsErrorLog(ttsError)
+        });
+        nextStore = replaceMessage(nextStore, conversation.id, typingId, {
+          text: reply,
+          status: 'sent',
+          createdAt: now(),
+          meta: {
+            ...baseMeta,
+            voiceReplyFailed: true,
+            ttsError: message
+          }
+        });
       }
-    });
+    } else {
+      nextStore = replaceMessage(nextStore, conversation.id, typingId, {
+        text: reply,
+        status: 'sent',
+        createdAt: now(),
+        meta: baseMeta
+      });
+    }
     recordLongTermMemoryTurn({
       source: 'private',
       characterId: character.id,
@@ -154,7 +213,7 @@ async function buildMessages({ character, history, userText, userMessage, ragMes
       content: await buildModelMessageContent({
         speakerName: item.speakerName || (item.role === 'user' ? PLAYER_NAME : character.name),
         text: item.text || '',
-        attachments: item.attachments || []
+        attachments: item.meta?.voiceReply === true ? [] : (item.attachments || [])
       })
     })));
   const currentUserContent = await buildModelMessageContent({
@@ -218,6 +277,68 @@ function localFallbackReply(character, userText, mode) {
 function friendlyError(err) {
   console.warn('[chat] request failed', err);
   return `模型请求失败：${err?.message || '未知错误'}\n请在设置里检查 API Key、Base URL 和模型名称。`;
+}
+
+async function buildVoiceReplyAttachment(text, character) {
+  if (!character?.voiceSample) {
+    throw new Error(`${character?.name || '当前角色'}没有配置 TTS 参考语音。`);
+  }
+  const audio = await synthesizeMimoVoiceClone({
+    text,
+    voiceSample: character.voiceSample
+  });
+  const duration = await readAudioDuration(audio.dataUrl);
+  const media = await saveDataUrlAsMedia(audio.dataUrl, {
+    prefix: 'tts',
+    category: 'tts-reply',
+    name: `${character.name || 'voice'}-${Date.now()}.${audioExtension(audio.mime)}`,
+    mime: audio.mime || 'audio/wav',
+    size: audio.size || 0
+  });
+  return {
+    id: createId('att'),
+    type: 'audio',
+    name: media.name || `${character.name || 'voice'}-reply.${audioExtension(audio.mime)}`,
+    mime: media.mime || audio.mime || 'audio/wav',
+    size: media.size || audio.size || 0,
+    dataRef: media.ref,
+    source: 'tts-reply',
+    duration
+  };
+}
+
+function readAudioDuration(dataUrl) {
+  return new Promise(resolve => {
+    const audio = new Audio();
+    let settled = false;
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      audio.removeAttribute('src');
+      resolve(Number.isFinite(value) && value > 0 ? value : 0);
+    };
+    const timer = setTimeout(() => finish(0), 5000);
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => {
+      clearTimeout(timer);
+      finish(audio.duration);
+    };
+    audio.onerror = () => {
+      clearTimeout(timer);
+      finish(0);
+    };
+    audio.src = dataUrl;
+  });
+}
+
+function audioExtension(mime = '') {
+  const normalized = String(mime || '').toLowerCase();
+  if (normalized.includes('mpeg') || normalized.includes('mp3')) return 'mp3';
+  if (normalized.includes('wav')) return 'wav';
+  if (normalized.includes('ogg')) return 'ogg';
+  if (normalized.includes('webm')) return 'webm';
+  if (normalized.includes('mp4') || normalized.includes('m4a')) return 'm4a';
+  return 'wav';
 }
 
 function attachmentText(attachments = []) {

@@ -1,11 +1,19 @@
 # STRUCTURE
 
+## 2026-07-03 Private Voice Reply Mapping
+
+- `conversation.voiceReplyEnabled`：私聊会话级语音回复开关，保存在 `fritia_next_chat_store`；群聊不会使用该字段。
+- `src/js/chat_engine.js`：`completePrivateMessageReply()` 新增 `voiceReplyEnabled` 和 `onVoiceNotice`，语音模式下 LLM 先生成文字，再调用 TTS，成功后用 `meta.voiceReply` + 音频附件替换 typing 消息。
+- `src/js/tts_engine.js`：新增 `synthesizeMimoVoiceClone()`，负责按 MiMO `chat/completions` 音色复刻协议请求默认 TTS 提供商，并把音频响应规范成 data URL。
+- `src/js/ui.js`：新增 `#voice-reply-toggle-btn` 绑定、`#voice-error-btn`/`#voice-error-popover` 错误详情入口、`.voice-notice` 提示条、`.voice-bubble` 播放气泡和单条语音倒计时播放状态。
+- `src/_logo/icons/volume-2.svg`：语音气泡使用的本地图标。
+
 ## 2026-07-03 LLM Media Payload Mapping
 
 - 新增 `src/js/llm_media.js`：导出 `resolveMediaDataUrl()`、`buildModelMessageContent()`、`buildAttachmentContentParts()`、`attachmentLabelText()`，负责在请求模型前把 `idb-media:*`、data URL 和静态资源路径解析成真实模型输入数据。
 - `src/js/chat_engine.js`：私聊请求的当前用户消息和近期历史消息会调用 `buildModelMessageContent()`，图片作为 `image_url` content part 发送给 OpenAI-compatible LLM。
 - `src/js/roundtable.js`：圆桌请求在 `buildRequestBody().messages` 的最后一个 user message 中追加 `buildAttachmentContentParts()` 输出的真实媒体内容；`runRoundtableTurn()` 新增 `triggerAttachments`，只发图片/表情也能触发模型读取。
-- `src/js/tts_engine.js`：`buildMimoVoiceCloneRequest()` 改为 async，TTS 参考语音通过 `resolveMediaDataUrl()` 解析后传给 `voice_clone.audio`。
+- `src/js/tts_engine.js`：`buildMimoVoiceCloneRequest()` 改为 async，TTS 参考语音通过 `resolveMediaDataUrl()` 解析后按 MiMO 文档传给 `audio.voice`。
 
 ## 2026-07-03 Preset Character Voice Mapping
 
@@ -187,6 +195,8 @@ fritia_online_next_chat/
 - `#send-btn`：发送按钮。
 - `#mobile-back-btn`：移动端返回会话列表。
 - `#chat-info-btn`：右上角会话信息按钮。私聊时切换右侧角色卡片，群聊时打开群聊成员窗口。
+- `#voice-reply-toggle-btn`：私聊语音回复开关，群聊隐藏。
+- `#voice-error-btn` / `#voice-error-popover` / `#voice-error-detail`：私聊 TTS 生成或播放异常详情入口，显示脱敏后的原始错误日志。
 
 ### 角色导入
 
@@ -417,7 +427,9 @@ fritia_online_next_chat/
 ### `src/js/tts_engine.js`
 
 - `getActiveTtsProvider(settings)`：读取默认文字转语音提供商源。
-- `buildMimoVoiceCloneRequest({ text, voiceSample, provider })`：异步构造 MiMO voice clone TTS 请求，输出格式固定为 MP3，参考语音会先解析为真实 data URL。
+- `buildMimoVoiceCloneRequest({ text, voiceSample, provider })`：异步构造 MiMO `chat/completions` voice clone TTS 请求，参考语音会先解析为真实 data URL 并写入 `audio.voice`。
+- `synthesizeMimoVoiceClone({ text, voiceSample, provider })`：发起 TTS 请求，并把 `choices[0].message.audio.data`、二进制、JSON/base64 或远程 URL 音频响应规范为可持久化 data URL；失败时生成脱敏原始日志。
+- `getTtsErrorLog(error)`：从 TTS 异常中提取可展示的脱敏原始错误日志。
 
 ### `src/js/llm_media.js`
 
@@ -466,8 +478,9 @@ fritia_online_next_chat/
 
 ### `src/js/chat_engine.js`
 
-- `sendPrivateMessage({ store, conversation, character, text, attachments, onStore })`：私聊发送主流程。
+- `sendPrivateMessage({ store, conversation, character, text, attachments, voiceReplyEnabled, onVoiceNotice, onStore })`：私聊发送主流程，可透传语音回复开关。
 - `requestCharacterReply({ store, conversation, character, userText, mode, event, userMessage })`：构建上下文并调用 OpenAI 兼容接口，`userMessage.attachments` 会在请求前解析为真实模型输入。
+- `completePrivateMessageReply({ store, conversation, character, text, userMessage, voiceReplyEnabled, onVoiceNotice, onStore })`：私聊 bot 回复流程；语音模式下保存文字上下文并渲染持久化语音气泡。
 
 请求拼接顺序：
 

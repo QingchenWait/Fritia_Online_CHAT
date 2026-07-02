@@ -203,6 +203,8 @@ export function normalizeConversation(raw = {}) {
   if (type === 'group') {
     conversation.avatar = conversation.avatar || 'src/_char/Profile_GroupChat.png';
     conversation.groupSettings = normalizeGroupSettings(raw.groupSettings);
+  } else {
+    conversation.voiceReplyEnabled = raw.voiceReplyEnabled === true;
   }
   return conversation;
 }
@@ -250,7 +252,8 @@ export function normalizeAttachment(raw = {}) {
     size: Math.max(0, Number(raw.size) || 0),
     source: clampText(raw.source, 40),
     width: Math.max(0, Number(raw.width) || 0),
-    height: Math.max(0, Number(raw.height) || 0)
+    height: Math.max(0, Number(raw.height) || 0),
+    duration: Math.max(0, Number(raw.duration) || 0)
   };
 }
 

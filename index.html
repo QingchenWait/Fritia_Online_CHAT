@@ -75,7 +75,10 @@
           <button class="icon-btn roundtable-error-btn hidden" id="roundtable-error-btn" type="button" title="圆桌密语异常" aria-label="查看圆桌密语异常">
             <img src="src/_logo/icons/circle-alert.svg" alt="">
           </button>
-          <button class="icon-btn" type="button" title="语音通话占位">
+          <button class="icon-btn roundtable-error-btn voice-error-btn hidden" id="voice-error-btn" type="button" title="语音生成异常" aria-label="查看语音生成异常">
+            <img src="src/_logo/icons/circle-alert.svg" alt="">
+          </button>
+          <button class="icon-btn voice-toggle-btn" id="voice-reply-toggle-btn" type="button" title="语音回复" aria-label="切换语音回复" aria-pressed="false">
             <img src="src/_logo/icons/phone.svg" alt="">
           </button>
           <button class="icon-btn" type="button" title="视频通话占位">
@@ -93,6 +96,14 @@
           <button id="roundtable-error-close" class="memory-mini-close" type="button" aria-label="关闭异常详情">×</button>
         </div>
         <pre id="roundtable-error-detail"></pre>
+      </aside>
+
+      <aside id="voice-error-popover" class="roundtable-error-popover voice-error-popover hidden" aria-live="polite">
+        <div class="roundtable-error-head">
+          <strong id="voice-error-title">语音生成异常</strong>
+          <button id="voice-error-close" class="memory-mini-close" type="button" aria-label="关闭语音异常详情">×</button>
+        </div>
+        <pre id="voice-error-detail"></pre>
       </aside>
 
       <section id="message-list" class="message-list" aria-live="polite">

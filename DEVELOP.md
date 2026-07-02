@@ -5,7 +5,7 @@
 - “设置 / 大模型”重做为多提供商模型连接工作台，分为“对话”“文字转语音”和移动端可见的“默认模型”标签。
 - `src/js/settings.js` 扩展 `chatProviders`、`ttsProviders`、`defaultChatProviderId`、`defaultTtsProviderId`、`defaultImageCaptionProviderId`；旧版 `apiKey/baseUrl/model` 会在无 `chatProviders` 时迁移为首个对话提供商源。
 - 兼容字段 `settings.apiKey`、`settings.baseUrl`、`settings.model` 继续由默认对话提供商派生，私聊、群聊、DeepSeek 亲密模式和圆桌密语请求无需改入口即可使用默认对话模型。
-- 新增 `src/js/tts_engine.js`，预留 MiMO `mimo-v2.5-tts-voiceclone` 请求构造接口，固定 `response_format: "mp3"`，接收角色导入时保存的参考声音文件对象。
+- 新增 `src/js/tts_engine.js`，按 MiMO `mimo-v2.5-tts-voiceclone` 文档构造 `chat/completions` 音色复刻请求，使用 `api-key` 请求头与 `messages + audio.voice` 结构，接收角色导入时保存的参考声音文件对象。
 - 桌面端模型页使用左侧提供商列表、右侧配置表单、下方默认模型三列选择；移动端隐藏列表，使用下拉选择提供商，并把默认模型作为同级标签页。
 - 模型详情头部新增桌面端垃圾桶图标删除按钮；底部“保存模型设置”改回纯文字按钮，避免图标导致换行。
 - 原生 `<select>` 保留为数据源，但统一通过 `enhanceCustomSelect()` 渲染为自绘悬浮下拉菜单，选项点击后继续派发原生 `change` 事件。
@@ -222,8 +222,6 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 
 ## 下一步
 
-- 接入真实 TTS：使用角色 `voiceSample` 作为参考音频字段，增加 TTS provider 设置和播放队列。
-- 把图片/音频附件从 localStorage data URL 迁移到 IndexedDB Blob，降低移动端 localStorage 压力。
 - 增加导出/导入 ZIP，覆盖聊天、角色、知识库、长期记忆。
 - 增加 Playwright 截图检查，覆盖桌面横屏和移动竖屏。
 - 选择 Tauri 或 Capacitor 壳层并补充原生权限配置。
@@ -316,4 +314,11 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - 新增 `src/js/llm_media.js`，作为模型请求前的统一媒体解析层：`idb-media:*`、data URL 和项目内静态资源路径都会解析成真实 `data:` 内容。
 - 私聊 `requestCharacterReply()` 会把当前用户消息和近期历史中的附件转换为 OpenAI-compatible 多模态 content parts；图片使用 `image_url`，音频使用 `input_audio`，文本文件解码为文本，其他二进制以 `file_data` 形式传递。
 - 群聊圆桌 `buildRequestBody()` 保持原圆桌 prompt 结构，但最后一个 user message 会在圆桌状态后追加真实媒体 content parts；只发送图片/表情时也会通过附件摘要触发圆桌回复。
-- `buildMimoVoiceCloneRequest()` 改为异步构建，TTS 参考语音会先解析为真实音频 data URL，再传给 `voice_clone`。
+- `buildMimoVoiceCloneRequest()` 改为异步构建，TTS 参考语音会先解析为真实音频 data URL，再按 MiMO 文档传给 `audio.voice`。
+
+## 2026-07-03 Private Voice Reply Mode
+
+- 私聊聊天头 `#voice-reply-toggle-btn` 使用电话图标切换当前私聊会话的 `voiceReplyEnabled`，该字段随 `conversation` 持久化；群聊隐藏该按钮，不进入语音回复模式。
+- `completePrivateMessageReply()` 新增 `voiceReplyEnabled` 和 `onVoiceNotice` 参数。语音模式下先完成 LLM 文本回复，再调用 `synthesizeMimoVoiceClone()` 生成声音克隆音频。
+- TTS 返回音频会写入 IndexedDB 媒体库，bot 消息以 `meta.voiceReply` 和 `source: "tts-reply"` 音频附件记录；`message.text` 仍保存后台回复文字，供长期记忆和后续上下文使用。
+- UI 新增语音气泡、倒计时播放、语音模式切换提示条和 TTS 错误提示条；TTS 失败时聊天头会在电话按钮左侧显示感叹号，点击可查看脱敏后的原始请求/响应/网络错误日志。会话列表对语音回复显示 `[语音]`，不泄露隐藏文字。

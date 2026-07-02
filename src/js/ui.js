@@ -61,6 +61,8 @@ const MOBILE_EDGE_BACK_DISTANCE = 76;
 let roundtableIdleTimer = 0;
 let layoutResizeFrame = 0;
 let mobileEdgeSwipe = null;
+let voiceNoticeTimer = 0;
+let voicePlaybackTimer = 0;
 
 const state = {
   store: loadAppStore(),
@@ -77,7 +79,15 @@ const state = {
   selectedChatProviderId: '',
   selectedTtsProviderId: '',
   roundtableErrorPopoverOpen: false,
+  voiceErrorPopoverOpen: false,
+  voiceError: null,
   stickerPopoverOpen: false,
+  voiceNotice: null,
+  voicePlayback: {
+    messageId: '',
+    audio: null,
+    remaining: 0
+  },
   mention: {
     active: false,
     start: -1,
@@ -179,6 +189,7 @@ function bindGlobalEvents() {
   });
 
   document.getElementById('conversation-search')?.addEventListener('input', renderConversationList);
+  document.getElementById('voice-reply-toggle-btn')?.addEventListener('click', togglePrivateVoiceReply);
   document.querySelector('[data-chat-info-toggle]')?.addEventListener('click', handleChatInfoToggle);
   document.getElementById('roundtable-error-btn')?.addEventListener('click', event => {
     event.stopPropagation();
@@ -189,6 +200,16 @@ function bindGlobalEvents() {
     event.stopPropagation();
     state.roundtableErrorPopoverOpen = false;
     renderRoundtableErrorIndicator();
+  });
+  document.getElementById('voice-error-btn')?.addEventListener('click', event => {
+    event.stopPropagation();
+    state.voiceErrorPopoverOpen = !state.voiceErrorPopoverOpen;
+    renderVoiceErrorIndicator();
+  });
+  document.getElementById('voice-error-close')?.addEventListener('click', event => {
+    event.stopPropagation();
+    state.voiceErrorPopoverOpen = false;
+    renderVoiceErrorIndicator();
   });
   document.getElementById('detail-close-btn')?.addEventListener('click', () => {
     document.getElementById('app')?.classList.remove('is-detail-open');
@@ -205,6 +226,14 @@ function bindGlobalEvents() {
     if (popover?.contains(event.target) || button?.contains(event.target)) return;
     state.roundtableErrorPopoverOpen = false;
     renderRoundtableErrorIndicator();
+  });
+  document.addEventListener('click', event => {
+    if (!state.voiceErrorPopoverOpen) return;
+    const popover = document.getElementById('voice-error-popover');
+    const button = document.getElementById('voice-error-btn');
+    if (popover?.contains(event.target) || button?.contains(event.target)) return;
+    state.voiceErrorPopoverOpen = false;
+    renderVoiceErrorIndicator();
   });
   document.addEventListener('click', event => {
     if (!state.stickerPopoverOpen) return;
@@ -385,6 +414,8 @@ function continueConversationAfterOutgoing(committed) {
     character,
     text: message.text,
     userMessage: message,
+    voiceReplyEnabled: conversation.voiceReplyEnabled === true,
+    onVoiceNotice: showVoiceNotice,
     onStore: updateStore
   }).catch(error => {
     console.warn('[ui] private reply failed', error);
@@ -958,7 +989,9 @@ function closeMobileChatPage() {
   closeMentionPicker();
   closeStickerPopover();
   state.roundtableErrorPopoverOpen = false;
+  state.voiceErrorPopoverOpen = false;
   renderRoundtableErrorIndicator();
+  renderVoiceErrorIndicator();
   document.getElementById('app')?.classList.remove('is-chat-open');
   syncMobileBackAvailability();
 }
@@ -991,6 +1024,7 @@ function renderAll() {
   renderStickerManager();
   updateContextStatus();
   renderRoundtableErrorIndicator();
+  renderVoiceErrorIndicator();
   scheduleRoundtableIdle();
   syncMobileBackAvailability();
 }
@@ -1068,7 +1102,7 @@ function getListItems(query) {
         id: item.id,
         title: item.title || conversationTitle(item),
         avatar: conversationAvatar(item),
-        preview: last ? `${last.speakerName || ''}${last.speakerName ? '：' : ''}${last.text || attachmentSummary(last.attachments)}` : '还没有消息',
+        preview: last ? `${last.speakerName || ''}${last.speakerName ? '：' : ''}${messagePreviewText(last)}` : '还没有消息',
         meta: last ? formatTime(last.createdAt) : ''
       };
     });
@@ -1085,11 +1119,17 @@ function renderMessages() {
   const messages = getConversationMessages(state.store, conversation.id);
   if (!messages.length) {
     container.innerHTML = `<div class="empty-state"><img src="src/_logo/emoji/speech_balloon_3d.png" alt=""><h2>${escapeHtml(conversation.title || conversationTitle(conversation))}</h2><p>发送第一条消息。</p></div>`;
+    if (state.voiceNotice?.conversationId === conversation.id) {
+      container.appendChild(createVoiceNoticeNode(state.voiceNotice));
+    }
     return;
   }
   container.innerHTML = '';
   for (const message of messages) {
     container.appendChild(createMessageNode(message));
+  }
+  if (state.voiceNotice?.conversationId === conversation.id) {
+    container.appendChild(createVoiceNoticeNode(state.voiceNotice));
   }
   container.scrollTop = container.scrollHeight;
 }
@@ -1117,6 +1157,9 @@ function createMessageNode(message) {
   content.className = 'message-content';
   if (message.status === 'typing') {
     content.innerHTML = '<span class="typing-indicator"><span></span><span></span><span></span></span>';
+  } else if (isVoiceReplyMessage(message)) {
+    content.classList.add('message-content--voice');
+    content.appendChild(createVoiceBubble(message));
   } else {
     const text = message.text || '';
     const attachments = message.attachments || [];
@@ -1146,6 +1189,122 @@ function createMessageNode(message) {
   if (message.role === 'user') row.append(bubble, avatar);
   else row.append(avatar, bubble);
   return row;
+}
+
+function createVoiceNoticeNode(notice) {
+  const row = document.createElement('div');
+  row.className = `voice-notice${notice.level === 'error' ? ' is-error' : ''}`;
+  row.textContent = notice.text || '';
+  return row;
+}
+
+function isVoiceReplyMessage(message) {
+  return message?.meta?.voiceReply === true && getMessageVoiceAttachment(message);
+}
+
+function getMessageVoiceAttachment(message) {
+  return (message?.attachments || []).find(item => item.type === 'audio' && (item.dataRef || item.dataUrl)) || null;
+}
+
+function createVoiceBubble(message) {
+  const attachment = getMessageVoiceAttachment(message);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'voice-bubble';
+  button.dataset.voiceMessageId = message.id;
+  button.setAttribute('aria-label', `播放 ${message.speakerName || '角色'} 的语音回复`);
+  const icon = document.createElement('img');
+  icon.src = 'src/_logo/icons/volume-2.svg';
+  icon.alt = '';
+  const duration = document.createElement('span');
+  duration.className = 'voice-bubble__duration';
+  const initialDuration = Math.max(1, Math.ceil(Number(attachment?.duration) || 0));
+  button.dataset.voiceDuration = String(initialDuration);
+  duration.textContent = formatVoiceSeconds(initialDuration);
+  const bars = document.createElement('span');
+  bars.className = 'voice-bubble__bars';
+  bars.innerHTML = '<i></i><i></i><i></i>';
+  button.append(icon, bars, duration);
+  button.addEventListener('click', () => toggleVoicePlayback(message.id, attachment));
+  updateVoiceBubblePlaybackState(button, message.id);
+  return button;
+}
+
+async function toggleVoicePlayback(messageId, attachment) {
+  if (!attachment) return;
+  if (state.voicePlayback.messageId === messageId && state.voicePlayback.audio) {
+    stopVoicePlayback();
+    return;
+  }
+  stopVoicePlayback();
+  try {
+    const dataUrl = attachment.dataRef ? await getMediaDataUrl(attachment.dataRef) : attachment.dataUrl;
+    if (!dataUrl) throw new Error('语音文件不存在或已损坏。');
+    const audio = new Audio(dataUrl);
+    const fallbackDuration = Math.max(1, Math.ceil(Number(attachment.duration) || 0));
+    state.voicePlayback = {
+      messageId,
+      audio,
+      remaining: fallbackDuration
+    };
+    audio.addEventListener('loadedmetadata', () => {
+      if (state.voicePlayback.messageId !== messageId) return;
+      state.voicePlayback.remaining = Math.max(1, Math.ceil(audio.duration || fallbackDuration));
+      updateVoicePlaybackDom();
+    }, { once: true });
+    audio.addEventListener('ended', stopVoicePlayback, { once: true });
+    await audio.play();
+    updateVoicePlaybackDom();
+    voicePlaybackTimer = window.setInterval(() => {
+      if (state.voicePlayback.messageId !== messageId || !state.voicePlayback.audio) return;
+      const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : fallbackDuration;
+      state.voicePlayback.remaining = Math.max(0, Math.ceil(duration - audio.currentTime));
+      updateVoicePlaybackDom();
+      if (audio.ended || state.voicePlayback.remaining <= 0) stopVoicePlayback();
+    }, 500);
+  } catch (error) {
+    console.warn('[ui] voice playback failed', error);
+    showVoiceNotice({
+      conversationId: getActiveConversation()?.id || '',
+      level: 'error',
+      text: `语音播放失败：${error?.message || '未知错误'}`
+    });
+  }
+}
+
+function stopVoicePlayback() {
+  if (voicePlaybackTimer) {
+    clearInterval(voicePlaybackTimer);
+    voicePlaybackTimer = 0;
+  }
+  if (state.voicePlayback.audio) {
+    state.voicePlayback.audio.pause();
+    state.voicePlayback.audio.removeAttribute('src');
+  }
+  const previousId = state.voicePlayback.messageId;
+  state.voicePlayback = { messageId: '', audio: null, remaining: 0 };
+  if (previousId) updateVoicePlaybackDom(previousId);
+}
+
+function updateVoicePlaybackDom(previousId = '') {
+  document.querySelectorAll('.voice-bubble').forEach(button => {
+    const id = button.dataset.voiceMessageId || '';
+    updateVoiceBubblePlaybackState(button, id, previousId);
+  });
+}
+
+function updateVoiceBubblePlaybackState(button, messageId, previousId = '') {
+  const active = state.voicePlayback.messageId === messageId && state.voicePlayback.audio;
+  if (!active && previousId && previousId !== messageId) return;
+  button.classList.toggle('is-playing', Boolean(active));
+  const duration = button.querySelector('.voice-bubble__duration');
+  if (duration && active) duration.textContent = formatVoiceSeconds(state.voicePlayback.remaining);
+  if (duration && !active) duration.textContent = formatVoiceSeconds(button.dataset.voiceDuration);
+}
+
+function formatVoiceSeconds(value) {
+  const seconds = Math.max(1, Math.ceil(Number(value) || 0));
+  return `${seconds}s`;
 }
 
 function renderDetail() {
@@ -1200,6 +1359,29 @@ function renderRoundtableErrorIndicator() {
   if (detail) {
     const time = error?.createdAt ? `发生时间：${formatTime(error.createdAt)}` : '';
     detail.textContent = [time, error?.detail || ''].filter(Boolean).join('\n\n');
+  }
+}
+
+function renderVoiceErrorIndicator() {
+  const button = document.getElementById('voice-error-btn');
+  const popover = document.getElementById('voice-error-popover');
+  const title = document.getElementById('voice-error-title');
+  const detail = document.getElementById('voice-error-detail');
+  if (!button || !popover) return;
+  const conversation = getActiveConversation();
+  const error = state.voiceError;
+  const visible = Boolean(
+    conversation?.type === 'private'
+    && error
+    && (!error.conversationId || error.conversationId === conversation.id)
+  );
+  if (!visible) state.voiceErrorPopoverOpen = false;
+  button.classList.toggle('hidden', !visible);
+  popover.classList.toggle('hidden', !visible || !state.voiceErrorPopoverOpen);
+  if (title) title.textContent = error?.title || '语音生成异常';
+  if (detail) {
+    const time = error?.createdAt ? `发生时间：${formatTime(error.createdAt)}` : '';
+    detail.textContent = [time, error?.detail || error?.text || ''].filter(Boolean).join('\n\n');
   }
 }
 
@@ -2596,6 +2778,11 @@ function latestMessage(conversationId) {
   return list[list.length - 1] || null;
 }
 
+function messagePreviewText(message) {
+  if (isVoiceReplyMessage(message)) return '[语音]';
+  return message?.text || attachmentSummary(message?.attachments || []);
+}
+
 function conversationTitle(conversation) {
   if (!conversation) return 'NEXT Chat';
   if (conversation.type === 'private') {
@@ -2624,9 +2811,58 @@ function handleChatInfoToggle() {
   syncMobileBackAvailability();
 }
 
+function togglePrivateVoiceReply() {
+  const conversation = getActiveConversation();
+  if (!conversation || conversation.type !== 'private') return;
+  const character = getCharacterById(state.store.characters, conversation.memberIds[0]);
+  const enabled = conversation.voiceReplyEnabled !== true;
+  const conversations = state.store.conversations.map(item => item.id === conversation.id
+    ? { ...item, voiceReplyEnabled: enabled }
+    : item);
+  const nextStore = saveAppStore({ ...state.store, conversations });
+  updateStore(nextStore);
+  showVoiceNotice({
+    conversationId: conversation.id,
+    level: 'info',
+    text: `现在 ${character?.name || conversationTitle(conversation)} 会使用${enabled ? '语音' : '文字'}进行回复。`
+  });
+}
+
+function showVoiceNotice(notice = {}) {
+  if (voiceNoticeTimer) {
+    clearTimeout(voiceNoticeTimer);
+    voiceNoticeTimer = 0;
+  }
+  const createdAt = now();
+  state.voiceNotice = {
+    conversationId: notice.conversationId || getActiveConversation()?.id || '',
+    level: notice.level || 'info',
+    text: notice.text || '',
+    createdAt
+  };
+  if (state.voiceNotice.level === 'error') {
+    state.voiceError = {
+      conversationId: state.voiceNotice.conversationId,
+      title: notice.title || '语音生成异常',
+      text: state.voiceNotice.text,
+      detail: notice.detail || state.voiceNotice.text,
+      createdAt
+    };
+    state.voiceErrorPopoverOpen = false;
+    renderVoiceErrorIndicator();
+  }
+  renderMessages();
+  voiceNoticeTimer = window.setTimeout(() => {
+    if (state.voiceNotice?.createdAt !== createdAt) return;
+    state.voiceNotice = null;
+    renderMessages();
+  }, 5200);
+}
+
 function updateConversationChrome(conversation) {
   const app = document.getElementById('app');
   const infoButton = document.getElementById('chat-info-btn');
+  const voiceButton = document.getElementById('voice-reply-toggle-btn');
   if (!app) return;
   const isPrivate = conversation?.type === 'private';
   const isGroup = conversation?.type === 'group';
@@ -2639,6 +2875,13 @@ function updateConversationChrome(conversation) {
     infoButton.setAttribute('aria-label', isPrivate ? '打开角色卡片' : '打开群聊成员');
     const icon = infoButton.querySelector('img');
     if (icon) icon.src = isPrivate ? 'src/_logo/icons/bot.svg' : 'src/_logo/icons/users.svg';
+  }
+  if (voiceButton) {
+    const enabled = Boolean(isPrivate && conversation?.voiceReplyEnabled === true);
+    voiceButton.classList.toggle('hidden', !isPrivate);
+    voiceButton.classList.toggle('is-active', enabled);
+    voiceButton.setAttribute('aria-pressed', String(enabled));
+    voiceButton.title = enabled ? '关闭语音回复' : '开启语音回复';
   }
   document.querySelectorAll('.detail-group-action').forEach(button => {
     button.classList.toggle('hidden', !isGroup);

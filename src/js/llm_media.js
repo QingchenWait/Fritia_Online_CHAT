@@ -121,7 +121,11 @@ async function fetchPathAsDataUrl(path) {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`读取媒体资源失败：${path} (${response.status})`);
   const blob = await response.blob();
-  return blobToDataUrl(blob);
+  const mime = inferMimeFromPath(path);
+  const normalizedBlob = mime && (!blob.type || blob.type === 'application/octet-stream')
+    ? new Blob([blob], { type: mime })
+    : blob;
+  return blobToDataUrl(normalizedBlob);
 }
 
 function blobToDataUrl(blob) {
@@ -157,6 +161,20 @@ function audioFormatFromMime(mime = '', name = '') {
   if (lower.includes('webm')) return 'webm';
   if (lower.includes('m4a') || lower.includes('mp4')) return 'mp4';
   return 'mp3';
+}
+
+function inferMimeFromPath(path = '') {
+  const clean = String(path || '').split(/[?#]/)[0].toLowerCase();
+  if (clean.endsWith('.mp3')) return 'audio/mpeg';
+  if (clean.endsWith('.wav')) return 'audio/wav';
+  if (clean.endsWith('.m4a')) return 'audio/mp4';
+  if (clean.endsWith('.ogg')) return 'audio/ogg';
+  if (clean.endsWith('.webm')) return 'audio/webm';
+  if (clean.endsWith('.png')) return 'image/png';
+  if (clean.endsWith('.jpg') || clean.endsWith('.jpeg')) return 'image/jpeg';
+  if (clean.endsWith('.webp')) return 'image/webp';
+  if (clean.endsWith('.gif')) return 'image/gif';
+  return '';
 }
 
 function decodeDataUrlText(dataUrl) {

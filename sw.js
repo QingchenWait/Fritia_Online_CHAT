@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v2';
+const CACHE_NAME = 'fritia-next-chat-v3';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -35,7 +35,7 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   const networkFirst = url.origin === location.origin
-    && (url.pathname === '/'
+    && (url.pathname.endsWith('/')
       || url.pathname.endsWith('.html')
       || url.pathname.endsWith('.js')
       || url.pathname.endsWith('.css')

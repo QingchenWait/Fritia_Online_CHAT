@@ -430,6 +430,16 @@ img {
   gap: 4px;
 }
 
+.voice-toggle-btn.is-active {
+  color: #fff;
+  background: var(--brand-gradient);
+  box-shadow: 0 10px 22px rgba(79, 99, 255, 0.24);
+}
+
+.voice-toggle-btn.is-active img {
+  filter: brightness(0) invert(1);
+}
+
 .roundtable-error-btn {
   color: #ff4d4f;
   background: rgba(255, 77, 79, 0.08);
@@ -658,6 +668,95 @@ img {
   margin-top: 0;
 }
 
+.message-content--voice {
+  padding: 6px;
+  min-width: 178px;
+  white-space: normal;
+}
+
+.voice-bubble {
+  width: 100%;
+  min-width: 166px;
+  height: 42px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--brand-gradient);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 14px;
+  box-shadow: 0 12px 24px rgba(79, 99, 255, 0.20);
+}
+
+.voice-bubble img {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) invert(1);
+}
+
+.voice-bubble__bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.voice-bubble__bars i {
+  width: 3px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.voice-bubble__bars i:nth-child(2) {
+  height: 18px;
+}
+
+.voice-bubble__bars i:nth-child(3) {
+  height: 9px;
+}
+
+.voice-bubble.is-playing .voice-bubble__bars i {
+  animation: voicePulse 820ms infinite ease-in-out;
+}
+
+.voice-bubble.is-playing .voice-bubble__bars i:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.voice-bubble.is-playing .voice-bubble__bars i:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.voice-bubble__duration {
+  min-width: 2.4em;
+  text-align: right;
+  font-weight: 650;
+  font-size: 13px;
+}
+
+.voice-notice {
+  width: fit-content;
+  max-width: min(620px, calc(100% - 32px));
+  margin: 12px auto;
+  border: 1px solid rgba(99, 91, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 12px 26px rgba(40, 60, 120, 0.08);
+  color: var(--muted);
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.voice-notice.is-error {
+  border-color: rgba(217, 58, 58, 0.22);
+  background: rgba(255, 245, 245, 0.9);
+  color: var(--danger);
+}
+
 .message-meta {
   margin-top: 4px;
   color: var(--faint);
@@ -695,6 +794,18 @@ img {
   }
   40% {
     transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@keyframes voicePulse {
+  0%,
+  100% {
+    transform: scaleY(0.72);
+    opacity: 0.64;
+  }
+  50% {
+    transform: scaleY(1.1);
     opacity: 1;
   }
 }
