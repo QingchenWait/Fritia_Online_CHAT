@@ -3,6 +3,8 @@ import {
   createGroupConversation,
   createId,
   ensurePrivateConversation,
+  formatConversationListTime,
+  formatMessageTime,
   formatTime,
   getConversationMessages,
   loadAppStore,
@@ -83,6 +85,15 @@ const state = {
   voiceError: null,
   stickerPopoverOpen: false,
   voiceNotice: null,
+  characterImport: {
+    avatarUrl: '',
+    voiceUrl: ''
+  },
+  characterEdit: {
+    characterId: '',
+    avatarUrl: '',
+    voiceUrl: ''
+  },
   voicePlayback: {
     messageId: '',
     audio: null,
@@ -159,8 +170,10 @@ function bindGlobalEvents() {
   document.querySelectorAll('[data-panel-open]').forEach(button => {
     button.addEventListener('click', () => {
       const section = button.dataset.settingsSectionJump;
+      const openedFromDetailPane = Boolean(button.closest('.detail-pane'));
       openPanel(button.dataset.panelOpen);
       if (section) showSettingsSection(section);
+      if (openedFromDetailPane) closeDetailPane();
     });
   });
   document.querySelectorAll('[data-panel-close]').forEach(button => {
@@ -211,10 +224,7 @@ function bindGlobalEvents() {
     state.voiceErrorPopoverOpen = false;
     renderVoiceErrorIndicator();
   });
-  document.getElementById('detail-close-btn')?.addEventListener('click', () => {
-    document.getElementById('app')?.classList.remove('is-detail-open');
-    syncMobileBackAvailability();
-  });
+  document.getElementById('detail-close-btn')?.addEventListener('click', closeDetailPane);
   document.getElementById('mobile-back-btn')?.addEventListener('click', () => {
     closeMobileChatPage();
   });
@@ -252,6 +262,7 @@ function bindGlobalEvents() {
   bindComposer();
   bindStickers();
   bindCharacterForm();
+  bindCharacterEditForm();
   bindGroupEditor();
   bindGroupInfoPanel();
   bindSettings();
@@ -447,16 +458,33 @@ function bindStickers() {
 }
 
 function bindCharacterForm() {
+  const form = document.getElementById('character-form');
+  form?.querySelectorAll('input[maxlength], textarea[maxlength]').forEach(element => {
+    element.addEventListener('input', () => updateCharacterImportCounter(element));
+    updateCharacterImportCounter(element);
+  });
+  document.getElementById('char-avatar-file')?.addEventListener('change', event => {
+    updateCharacterAvatarPreview(event.target.files?.[0]);
+  });
+  document.getElementById('char-voice-file')?.addEventListener('change', event => {
+    updateCharacterVoicePreview(event.target.files?.[0]);
+  });
+  document.getElementById('char-voice-play')?.addEventListener('click', toggleCharacterVoicePreview);
   document.getElementById('char-load-prompt-file')?.addEventListener('click', () => {
     document.getElementById('char-prompt-file')?.click();
   });
   document.getElementById('char-prompt-file')?.addEventListener('change', async event => {
     const file = event.target.files?.[0];
     if (!file) return;
-    document.getElementById('char-prompt').value = await readFileAsText(file);
+    const prompt = document.getElementById('char-prompt');
+    prompt.value = await readFileAsText(file);
+    updateCharacterImportCounter(prompt);
     event.target.value = '';
   });
-  document.getElementById('character-form')?.addEventListener('submit', async event => {
+  form?.addEventListener('reset', () => {
+    requestAnimationFrame(resetCharacterImportPreview);
+  });
+  form?.addEventListener('submit', async event => {
     event.preventDefault();
     const avatarFile = document.getElementById('char-avatar-file').files?.[0];
     const voiceFile = document.getElementById('char-voice-file').files?.[0];
@@ -480,9 +508,247 @@ function bindCharacterForm() {
     ensurePrivateConversation(next, character);
     updateStore(loadAppStore());
     event.target.reset();
+    resetCharacterImportPreview();
     closePanel('character-import-panel');
     selectConversation(`private:${character.id}`);
   });
+}
+
+function updateCharacterImportCounter(element) {
+  if (!element?.id) return;
+  const target = document.querySelector(`[data-count-for="${element.id}"]`);
+  if (!target) return;
+  const max = Number(element.getAttribute('maxlength')) || 0;
+  const current = [...String(element.value || '')].length;
+  target.textContent = max ? `${current}/${max}` : `${current}`;
+}
+
+function updateCharacterAvatarPreview(file) {
+  if (state.characterImport.avatarUrl) URL.revokeObjectURL(state.characterImport.avatarUrl);
+  state.characterImport.avatarUrl = '';
+  const preview = document.getElementById('char-avatar-preview');
+  if (!file) {
+    if (preview) preview.src = 'src/_logo/emoji/robot_3d.png';
+    return;
+  }
+  state.characterImport.avatarUrl = URL.createObjectURL(file);
+  if (preview) preview.src = state.characterImport.avatarUrl;
+}
+
+function updateCharacterVoicePreview(file) {
+  if (state.characterImport.voiceUrl) URL.revokeObjectURL(state.characterImport.voiceUrl);
+  state.characterImport.voiceUrl = '';
+  const preview = document.getElementById('char-voice-preview');
+  const audio = document.getElementById('char-voice-audio');
+  const playButton = document.getElementById('char-voice-play');
+  if (audio) {
+    audio.pause();
+    audio.removeAttribute('src');
+  }
+  if (!file) {
+    preview?.classList.add('is-empty');
+    if (playButton) playButton.disabled = true;
+    setText('char-voice-name', '尚未选择参考语音');
+    setText('char-voice-meta', '支持 MP3 / WAV / M4A，大小不超过 10MB');
+    return;
+  }
+  state.characterImport.voiceUrl = URL.createObjectURL(file);
+  if (audio) audio.src = state.characterImport.voiceUrl;
+  preview?.classList.remove('is-empty');
+  if (playButton) playButton.disabled = false;
+  setText('char-voice-name', file.name || '参考语音');
+  setText('char-voice-meta', `${formatCompactFileSize(file.size)} · ${file.type || 'audio'}`);
+}
+
+function toggleCharacterVoicePreview() {
+  const audio = document.getElementById('char-voice-audio');
+  if (!audio?.src) return;
+  if (audio.paused) audio.play().catch(error => console.warn('[ui] failed to preview voice sample', error));
+  else audio.pause();
+}
+
+function resetCharacterImportPreview() {
+  updateCharacterAvatarPreview(null);
+  updateCharacterVoicePreview(null);
+  document.querySelectorAll('#character-form input[maxlength], #character-form textarea[maxlength]').forEach(updateCharacterImportCounter);
+}
+
+function bindCharacterEditForm() {
+  const form = document.getElementById('character-edit-form');
+  form?.querySelectorAll('input[maxlength], textarea[maxlength]').forEach(element => {
+    element.addEventListener('input', () => updateCharacterImportCounter(element));
+  });
+  document.getElementById('edit-char-avatar-file')?.addEventListener('change', event => {
+    updateCharacterEditAvatarPreview(event.target.files?.[0]);
+  });
+  document.getElementById('edit-char-voice-file')?.addEventListener('change', event => {
+    updateCharacterEditVoicePreview(event.target.files?.[0]);
+  });
+  document.getElementById('edit-char-voice-play')?.addEventListener('click', toggleCharacterEditVoicePreview);
+  document.getElementById('edit-char-load-prompt-file')?.addEventListener('click', () => {
+    document.getElementById('edit-char-prompt-file')?.click();
+  });
+  document.getElementById('edit-char-prompt-file')?.addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const prompt = document.getElementById('edit-char-prompt');
+    prompt.value = await readFileAsText(file);
+    updateCharacterImportCounter(prompt);
+    event.target.value = '';
+  });
+  form?.addEventListener('submit', saveCharacterEditForm);
+}
+
+function openCharacterEditPanel() {
+  const character = getActivePrivateCharacter();
+  if (!isEditableCharacter(character)) return false;
+  clearCharacterEditTransientUrls();
+  state.characterEdit.characterId = character.id;
+  setValue('edit-char-name', character.name);
+  setValue('edit-char-description', character.description);
+  setValue('edit-char-prompt', character.prompt);
+  setValue('edit-char-examples', character.examples);
+  const avatarInput = document.getElementById('edit-char-avatar-file');
+  const voiceInput = document.getElementById('edit-char-voice-file');
+  if (avatarInput) avatarInput.value = '';
+  if (voiceInput) voiceInput.value = '';
+  setImageSource(document.getElementById('edit-char-avatar-preview'), character.avatar);
+  setCharacterEditVoiceFromSource(character.voiceSample);
+  document.querySelectorAll('#character-edit-form input[maxlength], #character-edit-form textarea[maxlength]').forEach(updateCharacterImportCounter);
+  document.getElementById('character-edit-panel')?.classList.remove('hidden');
+  return true;
+}
+
+function updateCharacterEditAvatarPreview(file) {
+  if (state.characterEdit.avatarUrl) URL.revokeObjectURL(state.characterEdit.avatarUrl);
+  state.characterEdit.avatarUrl = '';
+  const preview = document.getElementById('edit-char-avatar-preview');
+  if (!file) {
+    const character = getCharacterById(state.store.characters, state.characterEdit.characterId);
+    setImageSource(preview, character?.avatar);
+    return;
+  }
+  state.characterEdit.avatarUrl = URL.createObjectURL(file);
+  if (preview) preview.src = state.characterEdit.avatarUrl;
+}
+
+function updateCharacterEditVoicePreview(file) {
+  if (state.characterEdit.voiceUrl) URL.revokeObjectURL(state.characterEdit.voiceUrl);
+  state.characterEdit.voiceUrl = '';
+  if (!file) {
+    const character = getCharacterById(state.store.characters, state.characterEdit.characterId);
+    setCharacterEditVoiceFromSource(character?.voiceSample);
+    return;
+  }
+  state.characterEdit.voiceUrl = URL.createObjectURL(file);
+  const preview = document.getElementById('edit-char-voice-preview');
+  const audio = document.getElementById('edit-char-voice-audio');
+  const playButton = document.getElementById('edit-char-voice-play');
+  if (audio) {
+    audio.pause();
+    audio.dataset.voiceSource = state.characterEdit.voiceUrl;
+    audio.src = state.characterEdit.voiceUrl;
+  }
+  preview?.classList.remove('is-empty');
+  if (playButton) playButton.disabled = false;
+  setText('edit-char-voice-name', file.name || '参考语音');
+  setText('edit-char-voice-meta', `${formatCompactFileSize(file.size)} · ${file.type || 'audio'}`);
+}
+
+function setCharacterEditVoiceFromSource(source) {
+  const value = String(source || '');
+  const preview = document.getElementById('edit-char-voice-preview');
+  const audio = document.getElementById('edit-char-voice-audio');
+  const playButton = document.getElementById('edit-char-voice-play');
+  if (audio) {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.dataset.voiceSource = value;
+  }
+  if (!value) {
+    preview?.classList.add('is-empty');
+    if (playButton) playButton.disabled = true;
+    setText('edit-char-voice-name', '尚未选择参考语音');
+    setText('edit-char-voice-meta', '支持 MP3 / WAV / M4A，大小不超过 10MB');
+    return;
+  }
+  preview?.classList.remove('is-empty');
+  if (playButton) playButton.disabled = false;
+  setText('edit-char-voice-name', '已配置 TTS 参考语音');
+  setText('edit-char-voice-meta', '不上传新文件则保留当前参考语音');
+  if (!audio) return;
+  if (!isMediaRef(value)) {
+    audio.src = value;
+    return;
+  }
+  getMediaDataUrl(value)
+    .then(dataUrl => {
+      if (audio.dataset.voiceSource === value) audio.src = dataUrl || '';
+    })
+    .catch(error => {
+      console.warn('[ui] failed to load edit voice sample', error);
+      if (audio.dataset.voiceSource === value && playButton) playButton.disabled = true;
+    });
+}
+
+function toggleCharacterEditVoicePreview() {
+  const audio = document.getElementById('edit-char-voice-audio');
+  if (!audio?.src) return;
+  if (audio.paused) audio.play().catch(error => console.warn('[ui] failed to preview edit voice sample', error));
+  else audio.pause();
+}
+
+async function saveCharacterEditForm(event) {
+  event.preventDefault();
+  const current = getCharacterById(state.store.characters, state.characterEdit.characterId);
+  if (!isEditableCharacter(current)) return;
+  const avatarFile = document.getElementById('edit-char-avatar-file')?.files?.[0];
+  const voiceFile = document.getElementById('edit-char-voice-file')?.files?.[0];
+  const avatarMedia = avatarFile ? await saveFileAsMedia(avatarFile, { category: 'avatar', prefix: 'avatar' }) : null;
+  const voiceMedia = voiceFile ? await saveFileAsMedia(voiceFile, { category: 'voice', prefix: 'voice' }) : null;
+  const updated = normalizeCharacterRecord({
+    ...current,
+    name: document.getElementById('edit-char-name')?.value.trim(),
+    description: document.getElementById('edit-char-description')?.value.trim(),
+    prompt: document.getElementById('edit-char-prompt')?.value.trim(),
+    examples: document.getElementById('edit-char-examples')?.value.trim(),
+    avatar: avatarMedia ? avatarMedia.ref : current.avatar,
+    voiceSample: voiceMedia ? voiceMedia.ref : current.voiceSample,
+    source: 'custom',
+    updatedAt: Date.now()
+  });
+  if (!updated) return;
+  const characters = state.store.characters.map(item => item.id === updated.id ? updated : item);
+  const conversations = state.store.conversations.map(conversation => {
+    if (conversation.type !== 'private' || conversation.memberIds[0] !== updated.id) return conversation;
+    return {
+      ...conversation,
+      title: updated.name,
+      avatar: updated.avatar,
+      updatedAt: Date.now()
+    };
+  });
+  const messages = Object.fromEntries(Object.entries(state.store.messages || {}).map(([conversationId, list]) => [
+    conversationId,
+    (Array.isArray(list) ? list : []).map(message => message.speakerId === updated.id
+      ? { ...message, speakerName: updated.name }
+      : message)
+  ]));
+  const saved = saveAppStore({
+    ...state.store,
+    characters,
+    conversations,
+    messages
+  });
+  updateStore(saved);
+  closePanel('character-edit-panel');
+}
+
+function clearCharacterEditTransientUrls() {
+  if (state.characterEdit.avatarUrl) URL.revokeObjectURL(state.characterEdit.avatarUrl);
+  if (state.characterEdit.voiceUrl) URL.revokeObjectURL(state.characterEdit.voiceUrl);
+  state.characterEdit.avatarUrl = '';
+  state.characterEdit.voiceUrl = '';
 }
 
 function bindGroupEditor() {
@@ -515,7 +781,10 @@ function bindGroupInfoPanel() {
   document.getElementById('group-info-close')?.addEventListener('click', closeGroupInfoPanel);
   document.getElementById('group-info-backdrop')?.addEventListener('click', closeGroupInfoPanel);
   document.querySelectorAll('[data-group-info-open]').forEach(button => {
-    button.addEventListener('click', openGroupInfoPanel);
+    button.addEventListener('click', () => {
+      openGroupInfoPanel();
+      if (button.closest('.detail-pane')) closeDetailPane();
+    });
   });
   document.getElementById('group-info-invite-btn')?.addEventListener('click', () => openGroupInfoEditor());
   document.getElementById('group-info-remove-btn')?.addEventListener('click', () => openGroupInfoEditor());
@@ -1089,7 +1358,7 @@ function getListItems(query) {
         title: item.name,
         avatar: characterAvatar(item),
         preview: item.description || item.prompt.slice(0, 44),
-        meta: item.source === 'preset' ? '预置' : '好友'
+        meta: item.source === 'preset' ? '预置' : '导入'
       }));
   }
   const filtered = conversations.filter(item => state.listTab === 'groups' ? item.type === 'group' : true);
@@ -1103,7 +1372,7 @@ function getListItems(query) {
         title: item.title || conversationTitle(item),
         avatar: conversationAvatar(item),
         preview: last ? `${last.speakerName || ''}${last.speakerName ? '：' : ''}${messagePreviewText(last)}` : '还没有消息',
-        meta: last ? formatTime(last.createdAt) : ''
+        meta: last ? formatConversationListTime(last.createdAt) : ''
       };
     });
 }
@@ -1184,7 +1453,7 @@ function createMessageNode(message) {
   }
   const meta = document.createElement('div');
   meta.className = 'message-meta';
-  meta.textContent = `${formatTime(message.createdAt)}${message.status === 'error' ? ' · 失败' : ''}`;
+  meta.textContent = `${formatMessageTime(message.createdAt)}${message.status === 'error' ? ' · 失败' : ''}`;
   bubble.append(name, content, meta);
   if (message.role === 'user') row.append(bubble, avatar);
   else row.append(avatar, bubble);
@@ -1329,6 +1598,7 @@ function renderDetail() {
     description.textContent = character?.description || '角色私聊';
     headSubtitle.textContent = character?.description || '私聊';
     tags.innerHTML = (character?.tags || []).map(item => `<span class="tag">${escapeHtml(item)}</span>`).join('');
+    renderDetailCharacterAction(character);
   } else {
     description.textContent = `${conversation.memberIds.length} 位角色 · 圆桌密语群聊`;
     headSubtitle.textContent = conversation.memberIds
@@ -1336,7 +1606,31 @@ function renderDetail() {
       .filter(Boolean)
       .join('、');
     tags.innerHTML = '<span class="tag">群聊</span><span class="tag">圆桌密语</span>';
+    renderDetailCharacterAction(null);
   }
+}
+
+function renderDetailCharacterAction(character) {
+  const button = document.getElementById('detail-character-action');
+  const icon = document.getElementById('detail-character-action-icon');
+  const label = document.getElementById('detail-character-action-label');
+  const editable = isEditableCharacter(character);
+  if (button) {
+    button.dataset.panelOpen = editable ? 'character-edit-panel' : 'character-import-panel';
+    button.title = editable ? '编辑角色' : '导入角色';
+  }
+  if (icon) icon.src = editable ? 'src/_logo/icons/pencil.svg' : 'src/_logo/icons/user-plus.svg';
+  if (label) label.textContent = editable ? '编辑角色' : '导入角色';
+}
+
+function getActivePrivateCharacter() {
+  const conversation = getActiveConversation();
+  if (!conversation || conversation.type !== 'private') return null;
+  return getCharacterById(state.store.characters, conversation.memberIds[0]);
+}
+
+function isEditableCharacter(character) {
+  return Boolean(character && character.source === 'custom');
 }
 
 function renderRoundtableErrorIndicator() {
@@ -2685,6 +2979,11 @@ function updateContextStatus() {
 }
 
 function openPanel(id, options = {}) {
+  if (id === 'character-edit-panel') {
+    openCharacterEditPanel();
+    syncMobileBackAvailability();
+    return;
+  }
   document.getElementById(id)?.classList.remove('hidden');
   if (id === 'group-editor-panel') {
     prepareGroupEditor(options);
@@ -2703,6 +3002,10 @@ function closePanel(id) {
     closeMemoryNodePanel();
     syncMobileBackAvailability();
     return;
+  }
+  if (id === 'character-edit-panel') {
+    clearCharacterEditTransientUrls();
+    state.characterEdit.characterId = '';
   }
   document.getElementById(id)?.classList.add('hidden');
   syncMobileBackAvailability();
@@ -2740,6 +3043,11 @@ function selectConversation(id) {
 function updateStore(store) {
   state.store = store || loadAppStore();
   renderAll();
+}
+
+function closeDetailPane() {
+  document.getElementById('app')?.classList.remove('is-detail-open');
+  syncMobileBackAvailability();
 }
 
 function scheduleRoundtableIdle() {
@@ -2964,6 +3272,13 @@ function setChecked(id, value) {
 function setText(id, value) {
   const element = document.getElementById(id);
   if (element) element.textContent = value ?? '';
+}
+
+function formatCompactFileSize(size) {
+  const bytes = Math.max(0, Number(size) || 0);
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
 }
 
 function compactLabel(label, max = 7) {

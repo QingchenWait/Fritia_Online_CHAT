@@ -1,5 +1,20 @@
 # DEVELOP
 
+## 2026-07-04 Preset Roles And Time Display
+
+- `src/js/characters.js` 的 `PRESET_CHARACTER_SOURCES` 新增安卡希雅、凯茜娅、里芙、苔丝、肴，复用现有 `ensurePresetCharacters()` 预置角色同步和私聊创建流程。
+- 新增角色均读取 `src/_char/<角色>` 下的头像、人格提示词和 TTS 参考语音；示例对话暂留空，简介和 tags 在预置角色元数据中维护。
+- `src/js/storage.js` 新增 `formatConversationListTime()` 和 `formatMessageTime()`：会话列表当天显示 `HH:MM`、非当天显示 `MM/DD`；消息气泡当天显示 `HH:MM`、非当天显示 `MM/DD HH:MM`。
+- `src/js/ui.js` 的会话列表 meta 改用 `formatConversationListTime()`，消息气泡 meta 改用 `formatMessageTime()`；异常详情仍保留 `formatTime()` 的纯时间显示。
+
+## 2026-07-04 Role Card And Image Model Routing
+
+- `src/js/ui.js` 的 `[data-panel-open]` 和 `[data-group-info-open]` 事件会识别触发源是否来自 `.detail-pane`；从角色卡片快速操作打开设置、导入/编辑角色、知识库、记忆节点或群聊成员面板后，会调用 `closeDetailPane()` 自动关闭角色卡片。
+- `#detail-close-btn` 改为复用 `closeDetailPane()`，并在样式中增加底部间距，避免关闭按钮贴住角色头像简介卡片。
+- 新增 `src/js/llm_request.js`，作为 OpenAI-compatible 请求统一入口。私聊 `requestOpenAICompatible()` 和群聊 `requestRoundtableCompletion()` 都通过该入口发起请求。
+- `requestLlmCompletion()` 会检测 `messages` 中的 `image_url` content part：明确文本模型会直接使用默认图像转述模型，未知模型先请求默认对话模型，只有在图片/视觉不支持错误时才回退默认图像转述模型；这保证图片路由是单次请求级别的，不会改变后续默认对话模型。
+- `sw.js` 缓存版本更新到 `fritia-next-chat-v4`，并把 `src/js/llm_request.js` 加入核心资源清单。
+
 ## 2026-07-02 Model Provider Settings
 
 - “设置 / 大模型”重做为多提供商模型连接工作台，分为“对话”“文字转语音”和移动端可见的“默认模型”标签。
@@ -77,7 +92,7 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 
 继承范围：
 
-- 预置角色：芙提雅、芬妮、琴诺头像和人格提示词。
+- 预置角色：芙提雅、芬妮、琴诺、安卡希雅、凯茜娅、里芙、苔丝、肴头像和人格提示词。
 - 知识库：沿用 `fritia_knowledge_base_db`、`fritia_knowledge_base_state`、archive 字段、分块与检索思想。
 - 长期记忆：沿用 `fritia_long_term_memory`、私聊 scope、公共圆桌 scope、文本记忆 + graph edge 的数据组织。
 - 群聊：沿用“圆桌密语”的核心对话方式，即每轮只选择一个 bot，模型请求只扮演当前发言角色，可处理 @ 提及、角色间 bot-to-bot 接话和最大互聊次数限制。
@@ -109,6 +124,11 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - 从 `src/_char/Fritia/fritia_prompt.txt` 加载芙提雅。
 - 从 `src/_char/Fenny/char_fenny_prompt.txt` 加载芬妮。
 - 从 `src/_char/Cherno/char_cherno_prompt.txt` 加载琴诺。
+- 从 `src/_char/Acacia/char_acacia_prompt.txt` 加载安卡希雅。
+- 从 `src/_char/Katya/cha_katya_prompt.txt` 加载凯茜娅。
+- 从 `src/_char/Lyfe/char_lyfe_prompt.txt` 加载里芙。
+- 从 `src/_char/Tess/char_tess_prompt.txt` 加载苔丝。
+- 从 `src/_char/Yao/char_yao_prompt.txt` 加载肴。
 - 首次加载会为预置角色创建私聊。
 
 ### `src/js/knowledge_base.js`
@@ -164,7 +184,7 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 
 新增全部 DOM 绑定和渲染：
 
-- 会话列表、好友列表、群聊列表。
+- 会话列表、联系人列表、群聊列表。
 - 消息窗口和附件预览。
 - 角色导入表单。
 - 群聊成员单列多选创建窗口，包含搜索、已选头像条、自绘滚动条和底部创建按钮。
@@ -266,7 +286,7 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 
 ## 2026-07-02 Responsive Navigation Gestures
 
-- 桌面横屏主布局新增 `#conversation-resizer`，允许拖拽或用方向键调整消息/好友/群聊列表宽度，并写入 `localStorage.fritia_conversation_list_width`。
+- 桌面横屏主布局新增 `#conversation-resizer`，允许拖拽或用方向键调整消息/角色/群聊列表宽度，并写入 `localStorage.fritia_conversation_list_width`。
 - 列表宽度下限为 272px，并同步约束列表项正文列和时间列，保证最小宽度下仍能显示“5 个全角字符 + 省略号 + 时间”的摘要结构。
 - 移动竖屏新增触控左缘右滑返回规则：打开全屏二级页面时关闭最上层 modal；没有二级页面时从聊天页返回列表页。
 - 分隔条视觉改为单线窄边框，拖拽热区与可见边框分离；移动返回手势改为 Pointer Events + Touch Events 双路径，并扩大左缘触发区。

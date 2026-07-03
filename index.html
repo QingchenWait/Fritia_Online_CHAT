@@ -17,7 +17,7 @@
       <button class="rail-btn is-active" type="button" data-view-btn="chat" title="聊天">
         <img src="src/_logo/icons/message-circle.svg" alt="">
       </button>
-      <button class="rail-btn" type="button" data-view-btn="contacts" title="好友">
+      <button class="rail-btn" type="button" data-view-btn="contacts" title="角色">
         <img src="src/_logo/icons/users.svg" alt="">
       </button>
       <button class="rail-btn" type="button" data-panel-open="character-import-panel" title="导入角色">
@@ -37,7 +37,7 @@
           <img src="src/_char/Profile_Adjutant.png" alt="分析员" class="profile-chip__avatar">
           <div>
             <strong>分析员</strong>
-            <small>Role-play AI Chat</small>
+            <small>海姆达尔 AI 通信终端</small>
           </div>
         </div>
         <button class="icon-btn" id="mobile-menu-btn" type="button" title="菜单">
@@ -53,7 +53,7 @@
       </div>
       <div class="list-tabs" role="tablist" aria-label="列表切换">
         <button class="tab-btn is-active" type="button" data-list-tab="chats">会话</button>
-        <button class="tab-btn" type="button" data-list-tab="friends">好友</button>
+        <button class="tab-btn" type="button" data-list-tab="friends">角色</button>
         <button class="tab-btn" type="button" data-list-tab="groups">群聊</button>
       </div>
       <div id="conversation-list" class="list-scroll"></div>
@@ -160,9 +160,9 @@
           <h3>快速操作</h3>
         </div>
         <div class="quick-grid">
-          <button type="button" data-panel-open="character-import-panel">
-            <img src="src/_logo/icons/user-plus.svg" alt="">
-            <span>导入角色</span>
+          <button id="detail-character-action" type="button" data-panel-open="character-import-panel">
+            <img id="detail-character-action-icon" src="src/_logo/icons/user-plus.svg" alt="">
+            <span id="detail-character-action-label">导入角色</span>
           </button>
           <button type="button" data-panel-open="settings-panel" data-settings-section-jump="knowledge">
             <img src="src/_logo/icons/database.svg" alt="">
@@ -263,45 +263,270 @@
   </aside>
 
   <div id="character-import-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="character-import-title">
-    <div class="modal-shell">
-      <header class="modal-head">
-        <div>
-          <small>ADD FRIEND</small>
-          <h2 id="character-import-title">导入角色</h2>
+    <div class="modal-shell character-import-shell">
+      <header class="modal-head character-import-head">
+        <div class="character-import-titlebar">
+          <span class="character-import-badge" aria-hidden="true">
+            <img src="src/_logo/icons/user-plus.svg" alt="">
+          </span>
+          <div>
+            <h2 id="character-import-title">导入角色</h2>
+            <p>导入角色信息，即可开启全新对话体验</p>
+          </div>
         </div>
         <button class="icon-btn" type="button" data-panel-close="character-import-panel">
-          <img src="src/_logo/icons/x.svg" alt="">
+          <img class="character-close-desktop" src="src/_logo/icons/x.svg" alt="">
+          <img class="character-close-mobile" src="src/_logo/icons/chevron-down.svg" alt="">
         </button>
       </header>
-      <form id="character-form" class="form-grid">
-        <label>
-          <span>角色名称</span>
-          <input id="char-name" name="name" required placeholder="例如：芙提雅">
-        </label>
-        <label>
-          <span>角色简介</span>
-          <input id="char-description" name="description" placeholder="显示在好友列表中的一句话">
-        </label>
-        <label>
-          <span>头像</span>
-          <input id="char-avatar-file" type="file" accept="image/*">
-        </label>
-        <label>
-          <span>TTS 参考语音</span>
-          <input id="char-voice-file" type="file" accept="audio/*">
-        </label>
-        <label class="wide">
-          <span>人格设定提示词</span>
-          <textarea id="char-prompt" required rows="8" placeholder="粘贴 system prompt 或上传 txt"></textarea>
-        </label>
-        <label class="wide">
-          <span>示例对话</span>
-          <textarea id="char-examples" rows="5" placeholder="用户：...\n角色：..."></textarea>
-        </label>
-        <div class="form-actions wide">
-          <button type="button" class="btn" id="char-load-prompt-file">从 txt 读取提示词</button>
+      <form id="character-form" class="character-import-form">
+        <div class="character-import-scroll">
+          <div class="character-import-grid">
+            <div class="character-import-column">
+              <section class="character-import-card character-basic-card">
+                <div class="character-import-card-head">
+                  <span class="character-import-card-icon">
+                    <img src="src/_logo/icons/bot.svg" alt="">
+                  </span>
+                  <div>
+                    <h3>角色基础信息</h3>
+                    <p>定义角色的基本身份与背景</p>
+                  </div>
+                </div>
+                <div class="character-avatar-row">
+                  <span class="character-import-label">头像</span>
+                  <img id="char-avatar-preview" class="character-avatar-preview" src="src/_logo/emoji/robot_3d.png" alt="">
+                  <label class="character-upload-tile character-avatar-upload" for="char-avatar-file">
+                    <img src="src/_logo/icons/upload.svg" alt="">
+                    <strong>上传头像</strong>
+                    <small>JPG / PNG / WebP</small>
+                  </label>
+                  <input id="char-avatar-file" class="character-file-input" type="file" accept="image/*">
+                </div>
+                <label class="character-field">
+                  <span>角色名称</span>
+                  <input id="char-name" name="name" required maxlength="30" placeholder="请输入角色名称">
+                  <small class="character-count" data-count-for="char-name">0/30</small>
+                </label>
+                <label class="character-field">
+                  <span>角色简介</span>
+                  <input id="char-description" name="description" maxlength="50" placeholder="请输入角色简介（不超过 50 字）">
+                  <small class="character-count" data-count-for="char-description">0/50</small>
+                </label>
+              </section>
+
+              <section class="character-import-card">
+                <div class="character-import-card-head character-import-card-head-inline">
+                  <span class="character-import-card-icon">
+                    <img src="src/_logo/icons/volume-2.svg" alt="">
+                  </span>
+                  <div>
+                    <h3>TTS参考语音</h3>
+                    <p>建议 5s-30s 的清晰人声</p>
+                  </div>
+                </div>
+                <div id="char-voice-preview" class="character-voice-preview is-empty">
+                  <span class="character-voice-icon">
+                    <img src="src/_logo/icons/volume-2.svg" alt="">
+                  </span>
+                  <div>
+                    <strong id="char-voice-name">尚未选择参考语音</strong>
+                    <small id="char-voice-meta">支持 MP3 / WAV / M4A，大小不超过 10MB</small>
+                  </div>
+                  <button id="char-voice-play" class="character-voice-play" type="button" disabled aria-label="播放参考语音">
+                    <img src="src/_logo/icons/play.svg" alt="">
+                  </button>
+                  <audio id="char-voice-audio" hidden></audio>
+                </div>
+                <label class="character-upload-tile character-voice-upload" for="char-voice-file">
+                  <img src="src/_logo/icons/upload.svg" alt="">
+                  <strong>上传音频文件</strong>
+                  <small>点击上传或拖拽音频</small>
+                </label>
+                <input id="char-voice-file" class="character-file-input" type="file" accept="audio/*">
+              </section>
+            </div>
+
+            <div class="character-import-column">
+              <section class="character-import-card character-text-card">
+                <div class="character-import-card-head">
+                  <span class="character-import-card-icon">
+                    <img src="src/_logo/emoji/sparkles_3d.png" alt="">
+                  </span>
+                  <div>
+                    <h3>人格设定提示词</h3>
+                    <p>描述角色的性格、语气、行为方式等核心特征</p>
+                  </div>
+                </div>
+                <label class="character-textarea-field">
+                  <textarea id="char-prompt" required maxlength="60000" placeholder="请详细描述该角色的性格、说话风格、知识背景、价值观、行为习惯等内容..."></textarea>
+                  <small class="character-count" data-count-for="char-prompt">0/60000</small>
+                </label>
+              </section>
+
+              <section class="character-import-card character-text-card character-example-card">
+                <div class="character-import-card-head">
+                  <span class="character-import-card-icon">
+                    <img src="src/_logo/icons/messages-square.svg" alt="">
+                  </span>
+                  <div>
+                    <h3>示例对话</h3>
+                    <p>提供 2-5 轮示例对话，帮助模型更好地理解角色</p>
+                  </div>
+                </div>
+                <label class="character-textarea-field">
+                  <textarea id="char-examples" maxlength="30000" placeholder="请提供示例对话，使用“用户：”和“角色：”格式，建议 2-5 轮..."></textarea>
+                  <small class="character-count" data-count-for="char-examples">0/30000</small>
+                </label>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div class="character-import-actions">
+          <button type="button" class="btn character-secondary-btn" id="char-load-prompt-file">
+            <img src="src/_logo/icons/upload.svg" alt="">
+            <span>从 txt 读取提示词</span>
+          </button>
           <input id="char-prompt-file" type="file" accept=".txt,.md" hidden>
-          <button type="submit" class="btn btn-primary">保存为好友</button>
+          <button type="submit" class="btn btn-primary character-submit-btn">
+            <span>加入聊天</span>
+            <img src="src/_logo/emoji/sparkles_3d.png" alt="">
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="character-edit-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="character-edit-title">
+    <div class="modal-shell character-import-shell character-edit-shell">
+      <header class="modal-head character-import-head">
+        <div class="character-import-titlebar">
+          <span class="character-import-badge" aria-hidden="true">
+            <img src="src/_logo/icons/pencil.svg" alt="">
+          </span>
+          <div>
+            <h2 id="character-edit-title">编辑角色</h2>
+            <p>修改角色信息，保存后会立即更新当前角色</p>
+          </div>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="character-edit-panel">
+          <img class="character-close-desktop" src="src/_logo/icons/x.svg" alt="">
+          <img class="character-close-mobile" src="src/_logo/icons/chevron-down.svg" alt="">
+        </button>
+      </header>
+      <form id="character-edit-form" class="character-import-form">
+        <div class="character-import-scroll">
+          <div class="character-import-grid">
+            <div class="character-import-column">
+              <section class="character-import-card character-basic-card">
+                <div class="character-import-card-head">
+                  <span class="character-import-card-icon">
+                    <img src="src/_logo/icons/bot.svg" alt="">
+                  </span>
+                  <div>
+                    <h3>角色基础信息</h3>
+                    <p>定义角色的基本身份与背景</p>
+                  </div>
+                </div>
+                <div class="character-avatar-row">
+                  <span class="character-import-label">头像</span>
+                  <img id="edit-char-avatar-preview" class="character-avatar-preview" src="src/_logo/emoji/robot_3d.png" alt="">
+                  <label class="character-upload-tile character-avatar-upload" for="edit-char-avatar-file">
+                    <img src="src/_logo/icons/upload.svg" alt="">
+                    <strong>替换头像</strong>
+                    <small>JPG / PNG / WebP</small>
+                  </label>
+                  <input id="edit-char-avatar-file" class="character-file-input" type="file" accept="image/*">
+                </div>
+                <label class="character-field">
+                  <span>角色名称</span>
+                  <input id="edit-char-name" name="name" required maxlength="30" placeholder="请输入角色名称">
+                  <small class="character-count" data-count-for="edit-char-name">0/30</small>
+                </label>
+                <label class="character-field">
+                  <span>角色简介</span>
+                  <input id="edit-char-description" name="description" maxlength="50" placeholder="请输入角色简介（不超过 50 字）">
+                  <small class="character-count" data-count-for="edit-char-description">0/50</small>
+                </label>
+              </section>
+
+              <section class="character-import-card">
+                <div class="character-import-card-head character-import-card-head-inline">
+                  <span class="character-import-card-icon">
+                    <img src="src/_logo/icons/volume-2.svg" alt="">
+                  </span>
+                  <div>
+                    <h3>TTS参考语音</h3>
+                    <p>建议 5s-30s 的清晰人声</p>
+                  </div>
+                </div>
+                <div id="edit-char-voice-preview" class="character-voice-preview is-empty">
+                  <span class="character-voice-icon">
+                    <img src="src/_logo/icons/volume-2.svg" alt="">
+                  </span>
+                  <div>
+                    <strong id="edit-char-voice-name">尚未选择参考语音</strong>
+                    <small id="edit-char-voice-meta">支持 MP3 / WAV / M4A，大小不超过 10MB</small>
+                  </div>
+                  <button id="edit-char-voice-play" class="character-voice-play" type="button" disabled aria-label="播放参考语音">
+                    <img src="src/_logo/icons/play.svg" alt="">
+                  </button>
+                  <audio id="edit-char-voice-audio" hidden></audio>
+                </div>
+                <label class="character-upload-tile character-voice-upload" for="edit-char-voice-file">
+                  <img src="src/_logo/icons/upload.svg" alt="">
+                  <strong>替换音频文件</strong>
+                  <small>不上传则保留当前语音</small>
+                </label>
+                <input id="edit-char-voice-file" class="character-file-input" type="file" accept="audio/*">
+              </section>
+            </div>
+
+            <div class="character-import-column">
+              <section class="character-import-card character-text-card">
+                <div class="character-import-card-head">
+                  <span class="character-import-card-icon">
+                    <img src="src/_logo/emoji/sparkles_3d.png" alt="">
+                  </span>
+                  <div>
+                    <h3>人格设定提示词</h3>
+                    <p>描述角色的性格、语气、行为方式等核心特征</p>
+                  </div>
+                </div>
+                <label class="character-textarea-field">
+                  <textarea id="edit-char-prompt" required maxlength="60000" placeholder="请详细描述该角色的性格、说话风格、知识背景、价值观、行为习惯等内容..."></textarea>
+                  <small class="character-count" data-count-for="edit-char-prompt">0/60000</small>
+                </label>
+              </section>
+
+              <section class="character-import-card character-text-card character-example-card">
+                <div class="character-import-card-head">
+                  <span class="character-import-card-icon">
+                    <img src="src/_logo/icons/messages-square.svg" alt="">
+                  </span>
+                  <div>
+                    <h3>示例对话</h3>
+                    <p>提供 2-5 轮示例对话，帮助模型更好地理解角色</p>
+                  </div>
+                </div>
+                <label class="character-textarea-field">
+                  <textarea id="edit-char-examples" maxlength="30000" placeholder="请提供示例对话，使用“用户：”和“角色：”格式，建议 2-5 轮..."></textarea>
+                  <small class="character-count" data-count-for="edit-char-examples">0/30000</small>
+                </label>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div class="character-import-actions">
+          <button type="button" class="btn character-secondary-btn" id="edit-char-load-prompt-file">
+            <img src="src/_logo/icons/upload.svg" alt="">
+            <span>从 txt 读取提示词</span>
+          </button>
+          <input id="edit-char-prompt-file" type="file" accept=".txt,.md" hidden>
+          <button type="submit" class="btn btn-primary character-submit-btn">
+            <span>保存修改</span>
+            <img src="src/_logo/icons/pencil.svg" alt="">
+          </button>
         </div>
       </form>
     </div>
@@ -683,9 +908,9 @@
           <div class="settings-view" data-settings-view="about">
             <div class="about-panel">
               <img src="src/_logo/emoji/robot_3d.png" alt="">
-              <h3>Fritia Online NEXT Chat</h3>
-              <p>静态 PWA 首版，预留 Tauri / Capacitor 跨平台壳层，数据默认保存在本机浏览器。</p>
-              <p>图标来自 Lucide，表情美术来自 Microsoft Fluent UI Emoji。</p>
+              <h3>Fritia Online CHAT | 海姆达尔 AI 聊天终端</h3>
+              <p>Copyright © 2026 青尘工作室。本软件使用 GPLv3 许可证，开源免费。</p>
+              <p>企划 | 制作：青尘工作室 <br /> 贴图：尘白禁区、浮游Lev、ShinoKo <br /> 文案：CyanDust_青尘、the-one-唯一 <br /> 知识库：海姆情报室 (BWiki)、萌娘百科 <br /> 美术资源：Lucide、Microsoft Fluent UI Emoji </p>
             </div>
           </div>
         </section>

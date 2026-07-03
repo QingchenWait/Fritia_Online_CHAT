@@ -416,7 +416,33 @@ function isDataUrl(value) {
 export function formatTime(ts) {
   if (!ts) return '';
   const date = new Date(ts);
+  return formatClock(date);
+}
+
+export function formatConversationListTime(ts) {
+  if (!ts) return '';
+  const date = new Date(ts);
+  return isSameLocalDate(date, new Date()) ? formatClock(date) : formatMonthDay(date);
+}
+
+export function formatMessageTime(ts) {
+  if (!ts) return '';
+  const date = new Date(ts);
+  return isSameLocalDate(date, new Date()) ? formatClock(date) : `${formatMonthDay(date)} ${formatClock(date)}`;
+}
+
+function formatClock(date) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatMonthDay(date) {
+  return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function isSameLocalDate(left, right) {
+  return left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
 }
 
 export function downloadJson(filename, payload) {

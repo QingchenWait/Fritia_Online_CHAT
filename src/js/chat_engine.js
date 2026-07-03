@@ -5,6 +5,7 @@ import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_ter
 import { characterDisplayName } from './characters.js';
 import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
 import { attachmentLabelText, buildModelMessageContent } from './llm_media.js';
+import { requestLlmCompletion } from './llm_request.js';
 import { saveDataUrlAsMedia } from './media_store.js';
 import { getTtsErrorLog, synthesizeMimoVoiceClone } from './tts_engine.js';
 
@@ -195,7 +196,7 @@ async function buildMessages({ character, history, userText, userMessage, ragMes
     `本次你只扮演：${character.name}。不要代替用户或其他角色发言。`,
     mode === 'roundtable'
       ? '这是群聊“圆桌密语”。仍然只输出你自己的消息。'
-      : '这是私聊。请像即时通讯好友一样自然回复。',
+      : '这是私聊。请像即时通讯联系人一样自然回复。',
     mode === 'roundtable' && event?.expectsJson
       ? '本轮圆桌调度要求只输出一个 JSON 对象，不要 Markdown、代码块或额外解释；JSON 中的 text 字段才是实际聊天内容。'
       : '',
@@ -232,25 +233,14 @@ async function buildMessages({ character, history, userText, userMessage, ragMes
 }
 
 async function requestOpenAICompatible(settings, messages) {
-  const response = await fetch(`${settings.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings.apiKey}`
-    },
-    body: JSON.stringify({
-      model: settings.model,
-      messages,
+  const text = await requestLlmCompletion({
+    settings,
+    messages,
+    body: {
       temperature: settings.temperature,
       stream: false
-    })
+    }
   });
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`模型请求失败：${response.status} ${body.slice(0, 240)}`);
-  }
-  const json = await response.json();
-  const text = json?.choices?.[0]?.message?.content || '';
   if (!text.trim()) throw new Error('模型返回为空');
   return text;
 }

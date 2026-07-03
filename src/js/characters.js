@@ -4,7 +4,7 @@ const PRESET_CHARACTER_SOURCES = [
   {
     id: 'fritia',
     name: '芙提雅',
-    description: '天才小老师，海姆达尔部队成员。',
+    description: 'AI Researcher | 今日科研课题：如何让分析员更喜欢芙提雅老师',
     avatar: 'src/_char/Fritia/Profile_Fritia.png',
     promptPath: 'src/_char/Fritia/fritia_prompt.txt',
     voiceSample: 'src/_char/Fritia/Firtia_Voice.mp3',
@@ -19,7 +19,7 @@ const PRESET_CHARACTER_SOURCES = [
   {
     id: 'fenny',
     name: '芬妮',
-    description: '黄金狮子，热情耀眼的瓦尔基里明星。',
+    description: '💖💍💞 分析员 💞💍💖',
     avatar: 'src/_char/Fenny/Profile_Fenny.png',
     promptPath: 'src/_char/Fenny/char_fenny_prompt.txt',
     voiceSample: 'src/_char/Fenny/Fenny_Voice.mp3',
@@ -29,12 +29,62 @@ const PRESET_CHARACTER_SOURCES = [
   {
     id: 'cherno',
     name: '琴诺',
-    description: '温柔胆怯，也与莫尔索共享一颗心。',
+    description: '有事请先找莫尔索……分析员儿除外',
     avatar: 'src/_char/Cherno/Profile_Cherno.png',
     promptPath: 'src/_char/Cherno/char_cherno_prompt.txt',
     voiceSample: 'src/_char/Cherno/Cherno_Voice.mp3',
     examples: '',
     tags: ['预置', '双重人格', '温柔']
+  },
+  {
+    id: 'acacia',
+    name: '安卡希雅',
+    description: '新星开拓 / 海姆大玩家系列游戏制作人 (已与分析员恒约版)',
+    avatar: 'src/_char/Acacia/Profile_Acacia.png',
+    promptPath: 'src/_char/Acacia/char_acacia_prompt.txt',
+    voiceSample: 'src/_char/Acacia/Acacia_Voice.mp3',
+    examples: '',
+    tags: ['预置', '战术专家', '冷静']
+  },
+  {
+    id: 'katya',
+    name: '凯茜娅',
+    description: '听歌，喝酒，然后去分析员房间',
+    avatar: 'src/_char/Katya/Profile_Katya.png',
+    promptPath: 'src/_char/Katya/cha_katya_prompt.txt',
+    voiceSample: 'src/_char/Katya/Katya_Voice.mp3',
+    examples: '',
+    tags: ['预置', '狙击手', '优雅']
+  },
+  {
+    id: 'lyfe',
+    name: '里芙',
+    description: '珍惜眼前人',
+    avatar: 'src/_char/Lyfe/Profile_Lyfe.png',
+    promptPath: 'src/_char/Lyfe/char_lyfe_prompt.txt',
+    voiceSample: 'src/_char/Lyfe/Lyfe_Voice.mp3',
+    examples: '',
+    tags: ['预置', '清冷', '可靠']
+  },
+  {
+    id: 'tess',
+    name: '苔丝',
+    description: '新魔术练习中 ~',
+    avatar: 'src/_char/Tess/Profile_Tess.png',
+    promptPath: 'src/_char/Tess/char_tess_prompt.txt',
+    voiceSample: 'src/_char/Tess/Tess_Voice.mp3',
+    examples: '',
+    tags: ['预置', '魔术', '神秘']
+  },
+  {
+    id: 'yao',
+    name: '肴',
+    description: '摸鱼才是本职工作！',
+    avatar: 'src/_char/Yao/Profile_Yao.png',
+    promptPath: 'src/_char/Yao/char_yao_prompt.txt',
+    voiceSample: 'src/_char/Yao/Yao_Voice.mp3',
+    examples: '',
+    tags: ['预置', '治疗者', '慵懒']
   }
 ];
 

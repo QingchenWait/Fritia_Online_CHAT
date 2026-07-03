@@ -1,5 +1,20 @@
 # STRUCTURE
 
+## 2026-07-04 Preset Roles And Time Display Mapping
+
+- `src/js/characters.js`：`PRESET_CHARACTER_SOURCES` 新增安卡希雅、凯茜娅、里芙、苔丝、肴，字段包含 `avatar`、`promptPath`、`voiceSample`、`description` 和 `tags`。
+- `src/js/storage.js`：新增 `formatConversationListTime()` 和 `formatMessageTime()`，分别服务会话列表和消息气泡时间展示。
+- `src/js/ui.js`：会话列表 `meta` 使用 `formatConversationListTime()`；消息气泡 `.message-meta` 使用 `formatMessageTime()`。
+
+## 2026-07-04 Role Card And Image Model Routing Mapping
+
+- 新增 `src/js/llm_request.js`：导出 `requestLlmCompletion()`、`messagesContainImages()`、`providerSupportsImageInput()`，统一处理 OpenAI-compatible 请求、流式/JSON 响应解析、图片请求模型路由和错误标注。
+- `src/js/chat_engine.js`：私聊模型请求改为调用 `requestLlmCompletion()`，不再直接拼接 `fetch(.../chat/completions)`。
+- `src/js/roundtable.js`：圆桌群聊 `requestRoundtableCompletion()` 复用 `requestLlmCompletion()`，仍保留 `buildRequestBody().messages` 作为圆桌专用 prompt 来源。
+- `src/js/ui.js`：新增 `closeDetailPane()`；角色卡片内快速操作打开二级窗口或群聊成员面板后会自动关闭角色卡片。
+- `src/styles/app.css`：`#detail-close-btn` 所在的 `.detail-close-btn` 补充底部间距。
+- `sw.js`：核心缓存清单新增 `src/js/llm_request.js`，缓存版本更新到 `fritia-next-chat-v4`。
+
 ## 2026-07-03 Private Voice Reply Mapping
 
 - `conversation.voiceReplyEnabled`：私聊会话级语音回复开关，保存在 `fritia_next_chat_store`；群聊不会使用该字段。
@@ -153,6 +168,7 @@ fritia_online_next_chat/
     │   ├── long_term_memory.js
     │   ├── media_store.js
     │   ├── llm_media.js
+    │   ├── llm_request.js
     │   ├── stickers.js
     │   ├── tts_engine.js
     │   ├── chat_engine.js
@@ -168,15 +184,15 @@ fritia_online_next_chat/
 
 - `#app`：应用根节点。移动端通过 `.is-chat-open` 切换列表/聊天视图，桌面端通过 `.is-detail-open` 展开私聊角色卡片。
 - `.rail`：桌面左侧导航栏。
-- `.conversation-list`：会话、好友、群聊列表区域。
+- `.conversation-list`：会话、联系人、群聊列表区域。
 - `.chat-pane`：聊天窗口区域。
 - `.detail-pane`：桌面右侧详情与快捷操作。
 
 ### 会话列表
 
-- `#conversation-search`：搜索会话、好友和群聊。
+- `#conversation-search`：搜索会话、联系人和群聊。
 - `[data-list-tab="chats"]`：显示全部会话。
-- `[data-list-tab="friends"]`：显示角色好友。
+- `[data-list-tab="friends"]`：显示角色。
 - `[data-list-tab="groups"]`：显示群聊。
 - `#conversation-list`：列表渲染容器。
 - `#conversation-item-template`：列表项模板。
@@ -438,9 +454,16 @@ fritia_online_next_chat/
 - `buildAttachmentContentParts(attachments)`：把附件数组转换为 `image_url`、`input_audio`、文本或 `file_data` content parts。
 - `attachmentLabelText(attachments)`：生成稳定的附件摘要文本，用于列表摘要和纯附件触发。
 
+### `src/js/llm_request.js`
+
+- `requestLlmCompletion({ settings, messages, body })`：统一发起 OpenAI-compatible chat completions 请求。图片请求会按默认对话模型能力单次路由到默认图像转述模型，或在默认模型返回图片不支持错误后回退。
+- `messagesContainImages(messages)`：检测 `image_url` content part，用于判断本次请求是否需要图像输入能力。
+- `providerSupportsImageInput(provider)`：根据模型名识别明确的多模态模型；内部请求路由对未知模型采用先试默认模型、失败再回退的策略。
+
 ### `src/js/characters.js`
 
 - `ensurePresetCharacters()`：读取预置角色头像与提示词，写入主存储并创建私聊。
+- `PRESET_CHARACTER_SOURCES`：当前内置芙提雅、芬妮、琴诺、安卡希雅、凯茜娅、里芙、苔丝、肴，并为每个角色配置头像、提示词和 TTS 参考语音路径。
 - `getCharacterById(characters, id)`：按 id 查找角色。
 - `characterAvatar(character)`：获取角色头像。
 - `characterDisplayName(character)`：获取角色显示名。
@@ -516,6 +539,7 @@ fritia_online_next_chat/
 - `renderMessages()`：渲染消息流。
 - `renderDetail()`：渲染聊天头和桌面右侧详情。
 - `handleChatInfoToggle()`：私聊时切换角色卡片，群聊时打开成员与规则侧边面板。
+- `closeDetailPane()`：关闭右侧角色卡片并同步移动端返回状态；角色卡片内快速操作会调用该函数收起原窗口。
 - `renderGroupMemberPicker()`：渲染单列好友多选列表。
 - `openGroupInfoPanel()` / `closeGroupInfoPanel()`：打开/关闭群聊侧边悬浮面板。
 - `renderGroupInfoPanel()`：刷新群聊成员宫格、群聊名称、圆桌规则开关和最大人数。

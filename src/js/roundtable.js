@@ -4,6 +4,7 @@ import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_ter
 import { getSettings, getAdvancedSettings } from './settings.js';
 import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
 import { attachmentLabelText, buildAttachmentContentParts } from './llm_media.js';
+import { requestLlmCompletion } from './llm_request.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -470,32 +471,11 @@ function canRunEvent(event, conversationId) {
 }
 
 async function requestRoundtableCompletion({ settings, body }) {
-  const baseUrl = normalizeBaseUrl(settings.baseUrl);
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings.apiKey}`
-    },
-    body: JSON.stringify(body)
+  return requestLlmCompletion({
+    settings,
+    messages: body.messages,
+    body
   });
-
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => '');
-    const error = new Error(`API 请求失败 (${response.status}): ${errorBody}`);
-    error.status = response.status;
-    error.statusText = response.statusText || '';
-    error.body = errorBody;
-    throw error;
-  }
-
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    const json = await response.json();
-    return extractCompletionText(json).trim() || JSON.stringify(json);
-  }
-  if (!response.body) throw new Error('API 没有返回可读取内容');
-  return readCompletionStream(response);
 }
 
 async function buildRoundtableRagMessage(event, history) {
