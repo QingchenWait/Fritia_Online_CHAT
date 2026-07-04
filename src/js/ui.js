@@ -52,6 +52,7 @@ import {
   formatArchiveSize,
   getArchiveStats,
   getWebDavConfig,
+  ensureWebDavCorsSupport,
   importArchiveZipFile,
   resolveArchiveConflict,
   saveWebDavConfig,
@@ -952,8 +953,17 @@ function bindArchivePanel() {
     if (file) runArchiveAction(() => importArchiveZipFile(file));
   });
   document.getElementById('archive-webdav-enabled')?.addEventListener('change', event => {
-    saveWebDavConfig({ enabled: event.target.checked });
-    renderArchivePanel();
+    const enabled = event.target.checked;
+    if (!enabled) {
+      saveWebDavConfig({ enabled: false });
+      renderArchivePanel();
+      return;
+    }
+    runArchiveAction(async () => {
+      const next = { ...getWebDavConfig(), enabled: true };
+      await ensureWebDavCorsSupport(next);
+      saveWebDavConfig({ enabled: true });
+    });
   });
   document.getElementById('archive-config-open')?.addEventListener('click', () => {
     state.archiveConfigOpen = true;
@@ -965,9 +975,13 @@ function bindArchivePanel() {
     renderArchivePanel();
   });
   document.getElementById('archive-config-save')?.addEventListener('click', () => {
-    saveWebDavConfig(readArchiveConfigFields());
-    state.archiveConfigOpen = false;
-    renderArchivePanel();
+    runArchiveAction(async () => {
+      const next = readArchiveConfigFields();
+      if (next.enabled) await ensureWebDavCorsSupport(next);
+      saveWebDavConfig(next);
+      state.archiveConfigOpen = false;
+      renderArchivePanel();
+    });
   });
   document.getElementById('archive-webdav-test')?.addEventListener('click', () => runArchiveAction(() => testWebDavConnection()));
   document.getElementById('archive-webdav-sync')?.addEventListener('click', () => runArchiveAction(() => syncWebDavNow()));
@@ -1007,6 +1021,7 @@ async function runArchiveAction(action) {
     renderArchiveProgress();
   } finally {
     setArchiveButtonsDisabled(false);
+    renderArchivePanel();
   }
 }
 

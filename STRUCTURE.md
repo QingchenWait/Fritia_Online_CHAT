@@ -1,5 +1,16 @@
 # STRUCTURE
 
+## 2026-07-05 Runtime Environment Detection And WebDAV CORS Mapping
+
+- 新增 `src/js/runtime_env.js`：导出 `RUNTIME_ENV_TYPES`、`initRuntimeEnvironment()`、`detectRuntimeEnvironment()`、`getRuntimeEnvironment()`、`getRuntimeEnvironmentType()`、`isBrowserFrontendRuntime()`。
+- `src/js/main.js`：启动时先调用 `initRuntimeEnvironment()`，再执行媒体迁移、预置角色同步和 UI 初始化。
+- 运行环境类型：`web`、`localhost`、`file` 表示普通浏览器纯前端；`tauri`、`electron`、`webview` 表示打包或 WebView 环境；`unknown` 用于无法判断的环境。
+- `src/js/archive_sync.js`：新增 `ensureWebDavCorsSupport(config, options)`。纯前端环境下用当前 WebDAV 配置发起 CORS 探测；Tauri/Electron/WebView 环境直接返回通过。
+- `src/js/archive_sync.js`：`testWebDavConnection()` 会先调用 `ensureWebDavCorsSupport()`，因此用户点击“连接测试”也会执行 CORS 检测。
+- `src/js/ui.js`：`#archive-webdav-enabled` 和 `#archive-config-save` 在启用 WebDAV 前调用 `ensureWebDavCorsSupport()`；CORS 不支持时保持未启用，并通过 `#archive-progress-label` / `#archive-config-progress-label` 显示固定错误文本。
+- `package.json`：`check` 脚本加入 `node --check src/js/runtime_env.js`。
+- `sw.js`：缓存版本更新到 `fritia-next-chat-v6`，核心资源加入 `src/js/runtime_env.js`。
+
 ## 2026-07-05 Archive Backup And WebDAV Sync Mapping
 
 - 新增 `src/js/archive_sync.js`：负责 `getWebDavConfig()`、`saveWebDavConfig()`、`startArchiveSync()`、`getArchiveStats()`、`exportArchiveZip()`、`importArchiveZipFile()`、`testWebDavConnection()`、`syncWebDavNow()`、`resolveArchiveConflict()`、`formatArchiveSize()` 和 `formatArchiveDate()`。

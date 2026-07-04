@@ -1,5 +1,6 @@
 import { STORAGE_KEYS, loadAppStore, loadJson, saveJson } from './storage.js';
 import { getSettings, getAdvancedSettings } from './settings.js';
+import { isBrowserFrontendRuntime } from './runtime_env.js';
 
 const ARCHIVE_CONFIG_KEY = 'fritia_archive_sync';
 const ARCHIVE_SCHEMA_VERSION = 1;
@@ -133,6 +134,7 @@ export async function importArchiveZipFile(file, options = {}) {
 export async function testWebDavConnection(options = {}) {
   const config = getWebDavConfig();
   assertWebDavConfig(config);
+  await ensureWebDavCorsSupport(config, options);
   setSyncStatus('working', '正在测试 WebDAV 连接', 0.2, options);
   await ensureRemoteDirectory(config);
   const response = await webDavFetch(config, remoteUrl(config, 'manifest.json'), {
@@ -145,6 +147,20 @@ export async function testWebDavConnection(options = {}) {
   saveWebDavConfig({ ...config, lastStatus: '连接测试成功' });
   setSyncStatus('idle', '连接测试成功', 1, options);
   return true;
+}
+
+export async function ensureWebDavCorsSupport(config = getWebDavConfig(), options = {}) {
+  if (!isBrowserFrontendRuntime()) return true;
+  const normalized = normalizeWebDavConfig(config);
+  assertWebDavConfig(normalized);
+  setSyncStatus('working', '正在检测 WebDAV 浏览器 CORS 支持', 0.18, options);
+  try {
+    await webDavFetch(normalized, remoteUrl(normalized, 'manifest.json'), { method: 'OPTIONS' });
+    setSyncStatus('idle', 'WebDAV 浏览器 CORS 检测通过', 1, options);
+    return true;
+  } catch (error) {
+    throw new Error('错误：该 WebDAV 服务商不支持浏览器同步，请更换服务商或下载客户端。');
+  }
 }
 
 export async function syncWebDavNow(options = {}) {

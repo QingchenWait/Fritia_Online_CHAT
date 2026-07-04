@@ -1,5 +1,14 @@
 # DEVELOP
 
+## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
+
+- 新增 `src/js/runtime_env.js`，导出 `initRuntimeEnvironment()`、`getRuntimeEnvironment()`、`getRuntimeEnvironmentType()`、`isBrowserFrontendRuntime()` 和 `RUNTIME_ENV_TYPES`。
+- `src/js/main.js` 在 `boot()` 最前面调用 `initRuntimeEnvironment()`，把运行环境检测结果缓存为通用接口，并写入 `document.documentElement.dataset.runtimeEnv`。
+- 运行环境类型覆盖 `web`、`localhost`、`file`、`tauri`、`electron`、`webview` 和 `unknown`；普通网页/localhost/file 归为纯前端环境，Tauri/Electron/WebView 归为打包环境。
+- `src/js/archive_sync.js` 新增 `ensureWebDavCorsSupport()`：仅在纯前端环境下对当前 WebDAV 配置执行浏览器 CORS 探测，打包环境直接跳过。
+- 用户尝试启用 WebDAV 同步，以及点击“连接测试”时都会先调用 CORS 探测；若浏览器 fetch 因 CORS 阻断失败，进度文本显示固定错误：“错误：该 WebDAV 服务商不支持浏览器同步，请更换服务商或下载客户端。”
+- `package.json` 的 `check` 脚本加入 `src/js/runtime_env.js`；`sw.js` 缓存版本升级到 `fritia-next-chat-v6` 并加入 `runtime_env.js`。
+
 ## 2026-07-05 Archive Backup And WebDAV Sync
 
 - 左侧主导航原 `data-panel-open="character-import-panel"` 的“导入角色”按钮改为 `data-panel-open="archive-panel"` 存档备份入口，图标复用项目已有 Lucide `database.svg`。导入角色入口仍保留在搜索框 `+` 添加菜单和角色卡快捷操作中。

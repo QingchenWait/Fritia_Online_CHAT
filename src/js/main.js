@@ -2,8 +2,10 @@ import { ensurePresetCharacters } from './characters.js';
 import { initUi } from './ui.js';
 import { migrateLegacyAppMediaToIndexedDb } from './storage.js';
 import { migrateLegacyStickersToIndexedDb } from './stickers.js';
+import { initRuntimeEnvironment } from './runtime_env.js';
 
 async function boot() {
+  initRuntimeEnvironment();
   await migrateLegacyAppMediaToIndexedDb();
   await migrateLegacyStickersToIndexedDb();
   await ensurePresetCharacters();

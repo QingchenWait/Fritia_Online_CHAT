@@ -1,5 +1,12 @@
 # Fritia Online NEXT Chat
 
+## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
+
+- 新增通用运行环境检测机制，项目启动时会识别当前运行在普通浏览器网页、localhost、本地 file 页面、Tauri、Electron、通用 WebView 或未知环境。
+- WebDAV 在普通浏览器/localhost/file 等纯前端环境下启用同步或点击“连接测试”时，会先执行浏览器 CORS 探测。
+- 如果 WebDAV 服务商不允许浏览器跨域同步，进度文本会显示：“错误：该 WebDAV 服务商不支持浏览器同步，请更换服务商或下载客户端。”
+- Tauri、Electron 或其他打包 WebView 环境会跳过该浏览器 CORS 探测，交由客户端网络能力处理。
+
 ## 2026-07-05 Archive Backup And WebDAV Sync
 
 - 左侧主导航原“导入角色”按钮改为“存档备份”入口，使用与项目一致的 Lucide 数据库图标，点击打开“导入和导出存档”悬浮窗口。
@@ -172,7 +179,7 @@ http://127.0.0.1:3000/
 - 这是前端首版骨架，尚未接入语音录制、服务端同步和端到端加密。
 - 浏览器直接调用模型 API 可能受 CORS 限制，需要服务商允许浏览器跨域请求。
 - 大体积媒体已迁移到 IndexedDB；浏览器仍可能按站点配额限制长期大量媒体存储。
-- WebDAV 同步需要服务器允许浏览器跨域请求对应的 `GET / PUT / MKCOL / PROPFIND` 方法；ZIP 和 WebDAV 数据目前不加密，配置和 API Key 会随本地备份数据保存。
+- WebDAV 同步在纯前端浏览器环境中需要服务器允许浏览器跨域请求；启用同步和连接测试会先做 CORS 探测。ZIP 和 WebDAV 数据目前不加密，配置和 API Key 会随本地备份数据保存。
 
 ## 2026-07-02 UI Layout Fix
 
