@@ -1,5 +1,19 @@
 # STRUCTURE
 
+## 2026-07-05 Archive Backup And WebDAV Sync Mapping
+
+- 新增 `src/js/archive_sync.js`：负责 `getWebDavConfig()`、`saveWebDavConfig()`、`startArchiveSync()`、`getArchiveStats()`、`exportArchiveZip()`、`importArchiveZipFile()`、`testWebDavConnection()`、`syncWebDavNow()`、`resolveArchiveConflict()`、`formatArchiveSize()` 和 `formatArchiveDate()`。
+- `src/js/archive_sync.js` 的 ZIP 备份范围：`localStorage` 中 `fritia_` / `fritia-` 前缀的用户数据、`fritia_media_store/media`、`fritia_knowledge_base_db/knowledgeBases/files/chunks/indexes`。
+- WebDAV 同步文件布局：远端路径为 `<配置路径>/fritia-sync-v1/`，包含 `manifest.json`、`localStorage/<key>.json` 和 `indexeddb/<db>/<store>.json`。同步按文件 hash 增量 PUT/GET，冲突基于上次同步的本地/远端 manifest hash。
+- `index.html`：左侧导航第三个按钮改为 `data-panel-open="archive-panel"`，图标为 `src/_logo/icons/database.svg`，原导入角色入口保留在加号菜单和详情快捷操作。
+- 新增 DOM：`#archive-panel`、`#archive-import-file`、`#archive-export-btn`、`#archive-webdav-enabled`、`#archive-config-open`、`#archive-webdav-test`、`#archive-webdav-sync`。
+- 新增 DOM：`#archive-config-popover` 及 `#archive-config-url`、`#archive-config-path`、`#archive-config-username`、`#archive-config-password`、`#archive-config-interval`、`#archive-config-test`、`#archive-config-sync`。
+- 新增 DOM：`#archive-conflict-overlay`、`#archive-conflict-local`、`#archive-conflict-remote`，用于云端和本地数据同时变化时的顶层冲突选择。
+- `src/js/ui.js`：新增存档窗口绑定、进度渲染、WebDAV 配置浮层、ZIP 导入/导出按钮、冲突窗口渲染，并监听 `fritia-archive-sync-updated`、`fritia-archive-sync-status`、`fritia-archive-conflict`。
+- `src/styles/app.css`：新增 `.archive-*` 样式，桌面端使用左侧状态栏 + 右侧滚动内容，移动端使用单列全屏窗口；`.archive-content` 和 `.archive-config-popover` 使用自绘滚动条。
+- `sw.js`：缓存版本更新到 `fritia-next-chat-v5`，核心资源加入 `src/js/archive_sync.js`。
+- `package.json`：`check` 脚本加入 `node --check src/js/archive_sync.js`。
+
 ## 2026-07-05 Quick Add Menu Mapping
 
 - `index.html`：会话列表搜索框右侧新增 `#quick-create-wrap` / `#quick-create-menu`，加号按钮 `#quick-new-group` 改为添加菜单触发器。
@@ -208,6 +222,21 @@ fritia_online_next_chat/
 - `[data-list-tab="groups"]`：显示群聊。
 - `#conversation-list`：列表渲染容器。
 - `#conversation-item-template`：列表项模板。
+
+### 存档导入导出
+
+- `#archive-panel`：存档导入导出与 WebDAV 同步主窗口。
+- `#archive-import-drop` / `#archive-import-file`：ZIP 备份导入拖放区和文件选择框。
+- `#archive-export-btn`：导出本地 ZIP 备份。
+- `#archive-webdav-enabled`：启用 WebDAV 自动同步开关。
+- `#archive-config-open`：打开 WebDAV 配置小浮层。
+- `#archive-webdav-test`：测试 WebDAV 连接。
+- `#archive-webdav-sync`：立即执行一次 WebDAV 同步。
+- `#archive-config-popover`：WebDAV 配置小浮层，包含地址、路径、账户、密码和同步间隔。
+- `#archive-progress` / `#archive-config-progress`：主窗口和配置浮层内的同步进度条。
+- `#archive-conflict-overlay`：位于所有页面控件顶部的数据冲突选择窗口。
+- `#archive-conflict-local`：冲突时上传本地版本覆盖云端。
+- `#archive-conflict-remote`：冲突时恢复云端版本覆盖本地。
 
 ### 聊天窗口
 
@@ -576,6 +605,7 @@ fritia_online_next_chat/
 - 消息 UI：`.message-row`、`.message-content`、`.composer`。
 - @ UI：`.mention-popover`、`.mention-row`、`.message-mention`。
 - 快速添加菜单：`.quick-create-wrap`、`.quick-create-menu`、`.quick-create-item`。
+- 存档窗口：`.archive-shell`、`.archive-layout`、`.archive-sidebar`、`.archive-content`、`.archive-section`、`.archive-webdav-card`、`.archive-config-popover`、`.archive-conflict-overlay`。
 - 弹窗：`.modal`、`.modal-shell`、`.settings-layout`。
 - 知识库：`.knowledge-workbench`、`.kb-sidebar`、`.kb-main`、`.kb-list`、`.kb-detail`、`.kb-files-panel`、`.kb-chunks-panel`。
 - 群聊创建：`.group-editor`、`.group-create-search`、`.member-picker`、`.member-item`、`.group-create-actions`。

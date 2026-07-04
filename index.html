@@ -20,8 +20,8 @@
       <button class="rail-btn" type="button" data-view-btn="contacts" title="角色">
         <img src="src/_logo/icons/users.svg" alt="">
       </button>
-      <button class="rail-btn" type="button" data-panel-open="character-import-panel" title="导入角色">
-        <img src="src/_logo/icons/user-plus.svg" alt="">
+      <button class="rail-btn" type="button" data-panel-open="archive-panel" title="存档备份">
+        <img src="src/_logo/icons/database.svg" alt="">
       </button>
       <button class="rail-btn" type="button" data-panel-open="memory-node-panel" title="记忆节点">
         <img src="src/_logo/icons/network.svg" alt="">
@@ -570,6 +570,189 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="archive-panel" class="modal hidden archive-modal" role="dialog" aria-modal="true" aria-labelledby="archive-title">
+    <div class="modal-shell modal-shell-wide archive-shell">
+      <header class="modal-head archive-head">
+        <div>
+          <small>ARCHIVE SYNC</small>
+          <h2 id="archive-title">导入和导出存档</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="archive-panel" aria-label="关闭存档窗口">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <div class="archive-layout">
+        <aside class="archive-sidebar">
+          <div class="archive-sidebar-title">
+            <h3>导入和导出存档</h3>
+            <p>管理本地存档与云端同步</p>
+          </div>
+          <section class="archive-stat-card">
+            <span class="archive-stat-icon"><img src="src/_logo/icons/database.svg" alt=""></span>
+            <div>
+              <small>云端同步状态</small>
+              <strong id="archive-sync-state">未连接</strong>
+              <p id="archive-sync-detail">尚未配置 WebDAV</p>
+            </div>
+          </section>
+          <section class="archive-stat-card">
+            <span class="archive-stat-icon"><img src="src/_logo/icons/download.svg" alt=""></span>
+            <div>
+              <small>上次备份</small>
+              <strong id="archive-last-backup">从未</strong>
+              <p id="archive-backup-size">无本地备份</p>
+            </div>
+          </section>
+          <section class="archive-stat-card">
+            <span class="archive-stat-icon"><img src="src/_logo/icons/upload.svg" alt=""></span>
+            <div>
+              <small>本地备份数量</small>
+              <strong id="archive-backup-count">0</strong>
+              <p id="archive-local-size">正在统计</p>
+            </div>
+          </section>
+        </aside>
+
+        <section class="archive-content">
+          <section class="archive-section">
+            <div class="archive-section-head">
+              <h3>存档导入</h3>
+              <p>从 ZIP 备份恢复聊天记录、角色、设置、知识库、记忆和媒体文件。</p>
+            </div>
+            <label id="archive-import-drop" class="archive-import-drop" for="archive-import-file">
+              <img src="src/_logo/icons/upload.svg" alt="">
+              <strong>点击选择存档 ZIP 或拖拽到此处</strong>
+              <span>导入会覆盖当前本地数据，建议先导出备份。</span>
+            </label>
+            <input id="archive-import-file" type="file" accept=".zip,application/zip" hidden>
+          </section>
+
+          <section class="archive-section">
+            <div class="archive-section-head">
+              <h3>存档备份</h3>
+              <p>把当前所有可见用户数据打包为本地 ZIP 压缩包。</p>
+            </div>
+            <article class="archive-action-card">
+              <span class="archive-action-icon"><img src="src/_logo/icons/download.svg" alt=""></span>
+              <div>
+                <strong>创建完整备份</strong>
+                <p>包含聊天记录、角色资料、设置、知识库、长期记忆、表情包和附件媒体。</p>
+              </div>
+              <button id="archive-export-btn" class="btn btn-primary" type="button" data-archive-action>
+                <span>导出备份</span>
+                <img src="src/_logo/icons/download.svg" alt="">
+              </button>
+            </article>
+            <button class="archive-history-row" type="button" disabled>
+              <span>上次同步：<strong id="archive-last-sync">从未</strong></span>
+              <small>本地数据量 <b id="archive-local-size-inline">见左侧状态</b></small>
+            </button>
+          </section>
+
+          <section class="archive-section">
+            <div class="archive-section-head">
+              <h3>WebDAV 同步配置</h3>
+              <p>跨设备增量同步数据 (注：网页端很可能无法使用，请下载 Windows 或 Android 客户端)</p>
+            </div>
+            <article class="archive-webdav-card">
+              <div class="archive-webdav-toggle">
+                <span class="archive-action-icon"><img src="src/_logo/icons/database.svg" alt=""></span>
+                <div>
+                  <strong>启用 WebDAV 同步</strong>
+                  <p>页面打开后按设定间隔自动同步到 WebDAV 服务器。</p>
+                </div>
+                <label class="archive-switch" aria-label="启用 WebDAV 同步">
+                  <input id="archive-webdav-enabled" type="checkbox">
+                  <span></span>
+                </label>
+              </div>
+              <div class="archive-webdav-rows">
+                <div><span>服务器地址</span><strong id="archive-webdav-url">未配置</strong></div>
+                <div><span>同步路径</span><strong id="archive-webdav-path">/fritia-online-chat</strong></div>
+                <div><span>用户名</span><strong id="archive-webdav-user">未配置</strong></div>
+                <div><span>同步时间间隔</span><strong id="archive-webdav-interval">每 30 分钟</strong></div>
+              </div>
+              <div id="archive-progress" class="archive-progress">
+                <span id="archive-progress-label">等待操作</span>
+                <i><b id="archive-progress-fill"></b></i>
+              </div>
+              <div class="archive-webdav-actions">
+                <button id="archive-config-open" class="btn" type="button" data-archive-action>
+                  <img src="src/_logo/icons/settings.svg" alt="">
+                  <span>编辑配置</span>
+                </button>
+                <button id="archive-webdav-test" class="btn" type="button" data-archive-action>
+                  <span>连接测试</span>
+                </button>
+                <button id="archive-webdav-sync" class="btn btn-primary" type="button" data-archive-action>
+                  <span>立即同步</span>
+                  <img src="src/_logo/icons/upload.svg" alt="">
+                </button>
+              </div>
+            </article>
+          </section>
+        </section>
+      </div>
+    </div>
+
+    <aside id="archive-config-popover" class="archive-config-popover hidden" aria-label="WebDAV 同步配置">
+      <header>
+        <div>
+          <small>WEBDAV</small>
+          <h3>同步配置</h3>
+        </div>
+        <button id="archive-config-close" class="icon-btn" type="button" aria-label="关闭 WebDAV 配置">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <label class="archive-config-check">
+        <input id="archive-config-enabled" type="checkbox">
+        <span>启用 WebDAV 自动同步</span>
+      </label>
+      <label><span>服务器地址</span><input id="archive-config-url" type="url" placeholder="https://dav.example.com/webdav"></label>
+      <label><span>同步路径</span><input id="archive-config-path" type="text" placeholder="/fritia-online-chat"></label>
+      <label><span>用户名</span><input id="archive-config-username" type="text" autocomplete="username"></label>
+      <label><span>密码 / 应用密码</span><input id="archive-config-password" type="password" autocomplete="current-password"></label>
+      <label><span>同步时间间隔（分钟）</span><input id="archive-config-interval" type="number" min="5" max="1440" step="5"></label>
+      <div id="archive-config-progress" class="archive-progress">
+        <span id="archive-config-progress-label">等待操作</span>
+        <i><b id="archive-config-progress-fill"></b></i>
+      </div>
+      <div class="archive-config-actions">
+        <button id="archive-config-save" class="btn btn-primary" type="button" data-archive-action>保存配置</button>
+        <button id="archive-config-test" class="btn" type="button" data-archive-action>连接测试</button>
+        <button id="archive-config-sync" class="btn" type="button" data-archive-action>立即同步</button>
+      </div>
+    </aside>
+  </div>
+
+  <div id="archive-conflict-overlay" class="archive-conflict-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="archive-conflict-title">
+    <section class="archive-conflict-card">
+      <header>
+        <img src="src/_logo/icons/circle-alert.svg" alt="">
+        <div>
+          <small>SYNC CONFLICT</small>
+          <h2 id="archive-conflict-title">检测到存档冲突</h2>
+          <p>云端和本地都发生了修改，请选择要保留的数据版本。</p>
+        </div>
+      </header>
+      <div class="archive-conflict-grid">
+        <article>
+          <strong>使用本地数据</strong>
+          <span>上次修改：<b id="archive-conflict-local-time">从未</b></span>
+          <span>数据大小：<b id="archive-conflict-local-size">0 B</b></span>
+          <button id="archive-conflict-local" class="btn btn-primary" type="button" data-archive-action>上传本地版本</button>
+        </article>
+        <article>
+          <strong>使用云端数据</strong>
+          <span>上次修改：<b id="archive-conflict-remote-time">从未</b></span>
+          <span>数据大小：<b id="archive-conflict-remote-size">0 B</b></span>
+          <button id="archive-conflict-remote" class="btn" type="button" data-archive-action>恢复云端版本</button>
+        </article>
+      </div>
+    </section>
   </div>
 
   <div id="settings-panel" class="modal hidden settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">

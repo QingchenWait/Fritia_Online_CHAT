@@ -1,5 +1,15 @@
 # DEVELOP
 
+## 2026-07-05 Archive Backup And WebDAV Sync
+
+- 左侧主导航原 `data-panel-open="character-import-panel"` 的“导入角色”按钮改为 `data-panel-open="archive-panel"` 存档备份入口，图标复用项目已有 Lucide `database.svg`。导入角色入口仍保留在搜索框 `+` 添加菜单和角色卡快捷操作中。
+- 新增 `src/js/archive_sync.js`，集中实现 ZIP 导出/导入、IndexedDB 全量导出/恢复、WebDAV 配置保存、文件级增量同步、同步状态事件和冲突事件。
+- ZIP 备份使用标准 ZIP 容器的 stored 条目，不引入额外 npm 依赖；内容包含 `localStorage` 中的聊天/设置/知识库状态/长期记忆/表情包等键，以及 `fritia_media_store` 和 `fritia_knowledge_base_db` 的记录。
+- WebDAV 同步不上传 ZIP 包，而是按 `localStorage/<key>.json`、`indexeddb/<db>/<store>.json` 和 `manifest.json` 拆分为具体 JSON 文件；每个文件使用内容 hash 判断是否需要上传，冲突判断基于上次本地/远端 manifest hash。
+- 当本地和云端自上次同步后都发生变化，`fritia-archive-conflict` 会触发顶层冲突窗口，用户选择“上传本地版本”或“恢复云端版本”后再继续同步。
+- 新增 `#archive-panel`、`#archive-config-popover` 和 `#archive-conflict-overlay`。桌面端为左侧状态栏 + 右侧滚动内容，移动端为单列全屏窗口；配置编辑使用小悬浮窗口，测试/同步共用进度条。
+- `sw.js` 缓存版本升级到 `fritia-next-chat-v5`，核心缓存清单加入 `src/js/archive_sync.js`；`npm run check` 同步加入该模块的 `node --check`。
+
 ## 2026-07-05 Quick Add Menu
 
 - `index.html` 在会话列表搜索框右侧 `+` 外增加 `#quick-create-wrap` 和 `#quick-create-menu`，菜单项为“创建群聊”和“导入角色”，均使用 `src/_logo/icons` 下的 Lucide SVG 图标。
@@ -194,6 +204,7 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - 会话列表、联系人列表、群聊列表。
 - 消息窗口和附件预览。
 - 角色导入表单。
+- 存档导入导出窗口，包含 ZIP 全量备份、ZIP 导入恢复、WebDAV 配置、连接测试、立即同步、增量同步进度和冲突选择。
 - 会话列表搜索框右侧 `+` 浮动添加菜单，统一进入创建群聊或导入角色。
 - 群聊成员单列多选创建窗口，包含搜索、已选头像条、自绘滚动条和底部创建按钮。
 - 私聊桌面端默认收起右侧角色卡片，右上角会话信息按钮在私聊时展开角色卡，在群聊时打开成员与规则侧边悬浮面板。

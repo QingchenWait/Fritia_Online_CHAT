@@ -46,6 +46,19 @@ import { addStickerFiles, deleteSticker, isWideSticker, listStickers, stickerToA
 import { completePrivateMessageReply } from './chat_engine.js';
 import { getRoundtableError, runRoundtableTurn } from './roundtable.js';
 import { getMediaDataUrl, isMediaRef, saveFileAsMedia } from './media_store.js';
+import {
+  exportArchiveZip,
+  formatArchiveDate,
+  formatArchiveSize,
+  getArchiveStats,
+  getWebDavConfig,
+  importArchiveZipFile,
+  resolveArchiveConflict,
+  saveWebDavConfig,
+  startArchiveSync,
+  syncWebDavNow,
+  testWebDavConnection
+} from './archive_sync.js';
 
 const MAX_KB_PREVIEW_CHUNKS = 80;
 const MAX_KB_PREVIEW_CHARS = 360;
@@ -84,6 +97,13 @@ const state = {
   voiceErrorPopoverOpen: false,
   voiceError: null,
   quickCreateMenuOpen: false,
+  archiveConfigOpen: false,
+  archiveProgress: {
+    phase: 'idle',
+    label: '等待操作',
+    progress: 0
+  },
+  archiveConflict: null,
   stickerPopoverOpen: false,
   voiceNotice: null,
   characterImport: {
@@ -131,6 +151,7 @@ export function initUi() {
     refreshKnowledgePanel();
     updateContextStatus();
   });
+  startArchiveSync();
   refreshKnowledgePanel();
   updateContextStatus();
 }
@@ -160,6 +181,17 @@ function bindGlobalEvents() {
   document.addEventListener('fritia-stickers-updated', () => {
     renderStickerPopover();
     renderStickerManager();
+  });
+  document.addEventListener('fritia-archive-sync-updated', () => {
+    renderArchivePanel();
+  });
+  document.addEventListener('fritia-archive-sync-status', event => {
+    state.archiveProgress = event.detail || state.archiveProgress;
+    renderArchiveProgress();
+  });
+  document.addEventListener('fritia-archive-conflict', event => {
+    state.archiveConflict = event.detail || null;
+    renderArchiveConflict();
   });
   bindConversationListResizer();
   bindMobileBackGesture();
@@ -272,6 +304,7 @@ function bindGlobalEvents() {
   bindSettings();
   bindKnowledge();
   bindMemoryPanel();
+  bindArchivePanel();
 }
 
 function bindQuickCreateMenu() {
@@ -892,6 +925,165 @@ function bindGroupSettingToggle(id, key) {
     updateStore(updateGroupConversation(state.store, conversation.id, {
       groupSettings: { [key]: event.target.checked }
     }));
+  });
+}
+
+function bindArchivePanel() {
+  document.getElementById('archive-export-btn')?.addEventListener('click', () => runArchiveAction(() => exportArchiveZip()));
+  document.getElementById('archive-import-file')?.addEventListener('change', event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    runArchiveAction(() => importArchiveZipFile(file)).finally(() => {
+      event.target.value = '';
+    });
+  });
+  const importDrop = document.getElementById('archive-import-drop');
+  importDrop?.addEventListener('dragover', event => {
+    event.preventDefault();
+    importDrop.classList.add('is-dragging');
+  });
+  importDrop?.addEventListener('dragleave', () => {
+    importDrop.classList.remove('is-dragging');
+  });
+  importDrop?.addEventListener('drop', event => {
+    event.preventDefault();
+    importDrop.classList.remove('is-dragging');
+    const file = [...(event.dataTransfer?.files || [])].find(item => /\.zip$/i.test(item.name || ''));
+    if (file) runArchiveAction(() => importArchiveZipFile(file));
+  });
+  document.getElementById('archive-webdav-enabled')?.addEventListener('change', event => {
+    saveWebDavConfig({ enabled: event.target.checked });
+    renderArchivePanel();
+  });
+  document.getElementById('archive-config-open')?.addEventListener('click', () => {
+    state.archiveConfigOpen = true;
+    syncArchiveConfigFields();
+    renderArchivePanel();
+  });
+  document.getElementById('archive-config-close')?.addEventListener('click', () => {
+    state.archiveConfigOpen = false;
+    renderArchivePanel();
+  });
+  document.getElementById('archive-config-save')?.addEventListener('click', () => {
+    saveWebDavConfig(readArchiveConfigFields());
+    state.archiveConfigOpen = false;
+    renderArchivePanel();
+  });
+  document.getElementById('archive-webdav-test')?.addEventListener('click', () => runArchiveAction(() => testWebDavConnection()));
+  document.getElementById('archive-webdav-sync')?.addEventListener('click', () => runArchiveAction(() => syncWebDavNow()));
+  document.getElementById('archive-config-test')?.addEventListener('click', () => {
+    saveWebDavConfig(readArchiveConfigFields());
+    runArchiveAction(() => testWebDavConnection());
+  });
+  document.getElementById('archive-config-sync')?.addEventListener('click', () => {
+    saveWebDavConfig(readArchiveConfigFields());
+    runArchiveAction(() => syncWebDavNow());
+  });
+  document.getElementById('archive-conflict-local')?.addEventListener('click', () => runArchiveAction(async () => {
+    await resolveArchiveConflict('local');
+    state.archiveConflict = null;
+    renderArchiveConflict();
+  }));
+  document.getElementById('archive-conflict-remote')?.addEventListener('click', () => runArchiveAction(async () => {
+    await resolveArchiveConflict('remote');
+    state.archiveConflict = null;
+    renderArchiveConflict();
+  }));
+  renderArchivePanel();
+}
+
+async function runArchiveAction(action) {
+  setArchiveButtonsDisabled(true);
+  try {
+    await action();
+    renderArchivePanel();
+  } catch (error) {
+    console.warn('[archive] action failed', error);
+    state.archiveProgress = {
+      phase: 'error',
+      label: error?.message || '存档操作失败',
+      progress: 0
+    };
+    renderArchiveProgress();
+  } finally {
+    setArchiveButtonsDisabled(false);
+  }
+}
+
+function readArchiveConfigFields() {
+  return {
+    enabled: document.getElementById('archive-config-enabled')?.checked === true,
+    url: document.getElementById('archive-config-url')?.value || '',
+    path: document.getElementById('archive-config-path')?.value || '',
+    username: document.getElementById('archive-config-username')?.value || '',
+    password: document.getElementById('archive-config-password')?.value || '',
+    intervalMinutes: Number(document.getElementById('archive-config-interval')?.value) || 30
+  };
+}
+
+function syncArchiveConfigFields() {
+  const config = getWebDavConfig();
+  setChecked('archive-config-enabled', config.enabled);
+  setValue('archive-config-url', config.url);
+  setValue('archive-config-path', config.path);
+  setValue('archive-config-username', config.username);
+  setValue('archive-config-password', config.password);
+  setValue('archive-config-interval', config.intervalMinutes);
+}
+
+async function renderArchivePanel() {
+  const panel = document.getElementById('archive-panel');
+  if (!panel) return;
+  try {
+    const stats = await getArchiveStats();
+    setText('archive-sync-state', stats.connected ? '已连接' : '未连接');
+    setText('archive-sync-detail', stats.statusText || (stats.connected ? 'WebDAV 同步可用' : '尚未配置 WebDAV'));
+    setText('archive-last-backup', formatArchiveDate(stats.lastBackupAt));
+    setText('archive-backup-size', stats.lastBackupSize ? formatArchiveSize(stats.lastBackupSize) : '无本地备份');
+    setText('archive-backup-count', String(stats.backupCount || 0));
+    setText('archive-local-size', formatArchiveSize(stats.localSize));
+    setText('archive-webdav-url', stats.serverUrl || '未配置');
+    setText('archive-webdav-user', stats.username || '未配置');
+    setText('archive-webdav-path', stats.remotePath || '/fritia-online-chat');
+    setText('archive-webdav-interval', `每 ${stats.intervalMinutes || 30} 分钟`);
+    setText('archive-last-sync', formatArchiveDate(stats.lastSyncAt));
+    setText('archive-local-size-inline', formatArchiveSize(stats.localSize));
+    setChecked('archive-webdav-enabled', stats.connected);
+    document.getElementById('archive-sync-state')?.classList.toggle('is-connected', stats.connected);
+  } catch (error) {
+    console.warn('[archive] render failed', error);
+  }
+  document.getElementById('archive-config-popover')?.classList.toggle('hidden', !state.archiveConfigOpen);
+  if (state.archiveConfigOpen) syncArchiveConfigFields();
+  renderArchiveProgress();
+  renderArchiveConflict();
+}
+
+function renderArchiveProgress() {
+  const progress = state.archiveProgress || {};
+  const percent = `${Math.round((Number(progress.progress) || 0) * 100)}%`;
+  setText('archive-progress-label', progress.label || '等待操作');
+  setText('archive-config-progress-label', progress.label || '等待操作');
+  document.getElementById('archive-progress-fill')?.style.setProperty('--progress', percent);
+  document.getElementById('archive-config-progress-fill')?.style.setProperty('--progress', percent);
+  document.getElementById('archive-progress')?.classList.toggle('is-error', progress.phase === 'error');
+  document.getElementById('archive-config-progress')?.classList.toggle('is-error', progress.phase === 'error');
+}
+
+function renderArchiveConflict() {
+  const overlay = document.getElementById('archive-conflict-overlay');
+  if (!overlay) return;
+  overlay.classList.toggle('hidden', !state.archiveConflict);
+  if (!state.archiveConflict) return;
+  setText('archive-conflict-local-time', formatArchiveDate(state.archiveConflict.local?.updatedAt));
+  setText('archive-conflict-local-size', formatArchiveSize(state.archiveConflict.local?.size));
+  setText('archive-conflict-remote-time', formatArchiveDate(state.archiveConflict.remote?.updatedAt));
+  setText('archive-conflict-remote-size', formatArchiveSize(state.archiveConflict.remote?.size));
+}
+
+function setArchiveButtonsDisabled(disabled) {
+  document.querySelectorAll('[data-archive-action]').forEach(button => {
+    button.disabled = disabled;
   });
 }
 
@@ -3040,6 +3232,7 @@ function openPanel(id, options = {}) {
     showStickerManagerSection('manage');
     renderStickerManager();
   }
+  if (id === 'archive-panel') renderArchivePanel();
   syncMobileBackAvailability();
 }
 
@@ -3052,6 +3245,9 @@ function closePanel(id) {
   if (id === 'character-edit-panel') {
     clearCharacterEditTransientUrls();
     state.characterEdit.characterId = '';
+  }
+  if (id === 'archive-panel') {
+    state.archiveConfigOpen = false;
   }
   document.getElementById(id)?.classList.add('hidden');
   syncMobileBackAvailability();
