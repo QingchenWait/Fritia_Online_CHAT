@@ -47,9 +47,21 @@
       <div class="search-row">
         <img src="src/_logo/icons/search.svg" alt="">
         <input id="conversation-search" type="search" placeholder="搜索角色、群聊或消息">
-        <button class="icon-btn" id="quick-new-group" type="button" title="创建群聊">
-          <img src="src/_logo/icons/plus.svg" alt="">
-        </button>
+        <div class="quick-create-wrap" id="quick-create-wrap">
+          <button class="icon-btn quick-create-trigger" id="quick-new-group" type="button" title="添加" aria-haspopup="menu" aria-expanded="false" aria-controls="quick-create-menu">
+            <img src="src/_logo/icons/plus.svg" alt="">
+          </button>
+          <div class="quick-create-menu hidden" id="quick-create-menu" role="menu" aria-label="添加菜单">
+            <button class="quick-create-item" id="quick-create-group" type="button" role="menuitem">
+              <img src="src/_logo/icons/messages-square.svg" alt="">
+              <span>创建群聊</span>
+            </button>
+            <button class="quick-create-item" id="quick-import-character" type="button" role="menuitem">
+              <img src="src/_logo/icons/user-plus.svg" alt="">
+              <span>导入角色</span>
+            </button>
+          </div>
+        </div>
       </div>
       <div class="list-tabs" role="tablist" aria-label="列表切换">
         <button class="tab-btn is-active" type="button" data-list-tab="chats">会话</button>

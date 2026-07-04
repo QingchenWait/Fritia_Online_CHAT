@@ -1,5 +1,13 @@
 # STRUCTURE
 
+## 2026-07-05 Quick Add Menu Mapping
+
+- `index.html`：会话列表搜索框右侧新增 `#quick-create-wrap` / `#quick-create-menu`，加号按钮 `#quick-new-group` 改为添加菜单触发器。
+- `#quick-create-group`：浮动菜单中的“创建群聊”入口，点击后打开现有 `#group-editor-panel` 并传入 `{ fresh: true }`。
+- `#quick-import-character`：浮动菜单中的“导入角色”入口，点击后打开现有 `#character-import-panel`。
+- `src/js/ui.js`：新增 `state.quickCreateMenuOpen`、`bindQuickCreateMenu()`、`renderQuickCreateMenu()` 和 `closeQuickCreateMenu()`；支持点击触发、空白点击关闭、Escape 关闭，并在任意 `openPanel()` 前收起菜单。
+- `src/styles/app.css`：新增 `.quick-create-wrap`、`.quick-create-trigger`、`.quick-create-menu`、`.quick-create-item` 和移动端覆盖样式，使用本地 Lucide 图标、白色半透明背景、圆角、细边框和柔和阴影。
+
 ## 2026-07-04 Preset Roles And Time Display Mapping
 
 - `src/js/characters.js`：`PRESET_CHARACTER_SOURCES` 新增安卡希雅、凯茜娅、里芙、苔丝、肴，字段包含 `avatar`、`promptPath`、`voiceSample`、`description` 和 `tags`。
@@ -191,6 +199,10 @@ fritia_online_next_chat/
 ### 会话列表
 
 - `#conversation-search`：搜索会话、联系人和群聊。
+- `#quick-new-group`：搜索框右侧添加菜单触发按钮。
+- `#quick-create-menu`：搜索框加号触发的浮动添加菜单。
+- `#quick-create-group`：打开创建群聊窗口。
+- `#quick-import-character`：打开导入角色窗口。
 - `[data-list-tab="chats"]`：显示全部会话。
 - `[data-list-tab="friends"]`：显示角色。
 - `[data-list-tab="groups"]`：显示群聊。
@@ -563,6 +575,7 @@ fritia_online_next_chat/
 - 主布局：`.app-shell`、`.rail`、`.conversation-list`、`.chat-pane`、`.detail-pane`、`.is-detail-open`。
 - 消息 UI：`.message-row`、`.message-content`、`.composer`。
 - @ UI：`.mention-popover`、`.mention-row`、`.message-mention`。
+- 快速添加菜单：`.quick-create-wrap`、`.quick-create-menu`、`.quick-create-item`。
 - 弹窗：`.modal`、`.modal-shell`、`.settings-layout`。
 - 知识库：`.knowledge-workbench`、`.kb-sidebar`、`.kb-main`、`.kb-list`、`.kb-detail`、`.kb-files-panel`、`.kb-chunks-panel`。
 - 群聊创建：`.group-editor`、`.group-create-search`、`.member-picker`、`.member-item`、`.group-create-actions`。

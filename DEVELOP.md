@@ -1,5 +1,12 @@
 # DEVELOP
 
+## 2026-07-05 Quick Add Menu
+
+- `index.html` 在会话列表搜索框右侧 `+` 外增加 `#quick-create-wrap` 和 `#quick-create-menu`，菜单项为“创建群聊”和“导入角色”，均使用 `src/_logo/icons` 下的 Lucide SVG 图标。
+- `src/js/ui.js` 新增 `state.quickCreateMenuOpen`、`bindQuickCreateMenu()`、`renderQuickCreateMenu()` 和 `closeQuickCreateMenu()`；点击加号展开/收起菜单，点击空白处或按 Escape 关闭菜单。
+- 菜单项复用现有弹窗：`#quick-create-group` 调用 `openPanel('group-editor-panel', { fresh: true })`，`#quick-import-character` 调用 `openPanel('character-import-panel')`。
+- `src/styles/app.css` 新增 `.quick-create-*` 样式，按 Soft UI / 轻量玻璃拟态规则设置白色半透明背景、圆角、细边框、柔和阴影和移动端宽度约束。
+
 ## 2026-07-04 Preset Roles And Time Display
 
 - `src/js/characters.js` 的 `PRESET_CHARACTER_SOURCES` 新增安卡希雅、凯茜娅、里芙、苔丝、肴，复用现有 `ensurePresetCharacters()` 预置角色同步和私聊创建流程。
@@ -187,6 +194,7 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - 会话列表、联系人列表、群聊列表。
 - 消息窗口和附件预览。
 - 角色导入表单。
+- 会话列表搜索框右侧 `+` 浮动添加菜单，统一进入创建群聊或导入角色。
 - 群聊成员单列多选创建窗口，包含搜索、已选头像条、自绘滚动条和底部创建按钮。
 - 私聊桌面端默认收起右侧角色卡片，右上角会话信息按钮在私聊时展开角色卡，在群聊时打开成员与规则侧边悬浮面板。
 - 群聊侧边面板支持成员宫格、当前群聊成员增减、圆桌规则开关、最大人数、bot-to-bot 最大连续回复次数和跳转高级设置。

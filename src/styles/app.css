@@ -214,6 +214,8 @@ img {
 }
 
 .search-row {
+  position: relative;
+  z-index: 6;
   margin: 0 14px 10px;
   min-height: 42px;
   background: #fff;
@@ -239,6 +241,94 @@ img {
   border: 0;
   outline: 0;
   background: transparent;
+}
+
+.quick-create-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.quick-create-trigger {
+  position: relative;
+  z-index: 2;
+}
+
+.quick-create-wrap.is-open .quick-create-trigger {
+  background: var(--surface-hover);
+  box-shadow: 0 10px 24px rgba(79, 99, 255, 0.14);
+}
+
+.quick-create-menu {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  z-index: 40;
+  width: min(11rem, calc(100vw - 2rem));
+  padding: 0.35rem;
+  border: 1px solid rgba(120, 140, 180, 0.20);
+  border-radius: clamp(0.875rem, 2vw, 1.125rem);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-floating);
+  backdrop-filter: blur(18px);
+  display: grid;
+  gap: 0.25rem;
+  transform-origin: top right;
+  animation: quickCreateMenuIn 160ms ease;
+}
+
+.quick-create-item {
+  width: 100%;
+  min-height: clamp(2.45rem, 5.8vw, 3rem);
+  border: 0;
+  border-radius: clamp(0.65rem, 1.6vw, 0.9rem);
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  grid-template-columns: 1.35rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0 0.75rem;
+  text-align: left;
+  font-size: clamp(0.95rem, 0.85vw, 1.02rem);
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.quick-create-item img {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.quick-create-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick-create-item:hover,
+.quick-create-item:focus-visible {
+  outline: 0;
+  background: var(--surface-hover);
+  color: var(--brand);
+}
+
+.quick-create-item:active {
+  transform: scale(0.98);
+}
+
+@keyframes quickCreateMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-0.35rem) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .list-tabs {
@@ -4107,6 +4197,25 @@ select:focus {
   .app-shell.is-clearing-touch-activation .icon-btn {
     background: transparent;
     box-shadow: none;
+  }
+
+  .search-row {
+    z-index: 12;
+  }
+
+  .quick-create-wrap.is-open .quick-create-trigger {
+    background: var(--surface-hover);
+    box-shadow: 0 10px 24px rgba(79, 99, 255, 0.14);
+  }
+
+  .quick-create-menu {
+    right: -0.25rem;
+    width: min(10.75rem, calc(100vw - 2.25rem));
+  }
+
+  .quick-create-item {
+    min-height: 2.75rem;
+    font-size: 1rem;
   }
 
   .conversation-list,

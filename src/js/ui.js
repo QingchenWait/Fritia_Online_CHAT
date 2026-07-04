@@ -83,6 +83,7 @@ const state = {
   roundtableErrorPopoverOpen: false,
   voiceErrorPopoverOpen: false,
   voiceError: null,
+  quickCreateMenuOpen: false,
   stickerPopoverOpen: false,
   voiceNotice: null,
   characterImport: {
@@ -228,7 +229,7 @@ function bindGlobalEvents() {
   document.getElementById('mobile-back-btn')?.addEventListener('click', () => {
     closeMobileChatPage();
   });
-  document.getElementById('quick-new-group')?.addEventListener('click', () => openPanel('group-editor-panel', { fresh: true }));
+  bindQuickCreateMenu();
   document.addEventListener('click', event => {
     if (!state.roundtableErrorPopoverOpen) return;
     const popover = document.getElementById('roundtable-error-popover');
@@ -256,7 +257,10 @@ function bindGlobalEvents() {
     if (!event.target.closest('.custom-select')) closeCustomSelects();
   });
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') closeCustomSelects();
+    if (event.key === 'Escape') {
+      closeQuickCreateMenu();
+      closeCustomSelects();
+    }
   });
 
   bindComposer();
@@ -268,6 +272,47 @@ function bindGlobalEvents() {
   bindSettings();
   bindKnowledge();
   bindMemoryPanel();
+}
+
+function bindQuickCreateMenu() {
+  document.getElementById('quick-new-group')?.addEventListener('click', event => {
+    event.stopPropagation();
+    state.quickCreateMenuOpen = !state.quickCreateMenuOpen;
+    renderQuickCreateMenu();
+  });
+  document.getElementById('quick-create-group')?.addEventListener('click', event => {
+    event.stopPropagation();
+    closeQuickCreateMenu();
+    openPanel('group-editor-panel', { fresh: true });
+  });
+  document.getElementById('quick-import-character')?.addEventListener('click', event => {
+    event.stopPropagation();
+    closeQuickCreateMenu();
+    openPanel('character-import-panel');
+  });
+  document.addEventListener('click', event => {
+    if (!state.quickCreateMenuOpen) return;
+    const menu = document.getElementById('quick-create-menu');
+    const button = document.getElementById('quick-new-group');
+    if (menu?.contains(event.target) || button?.contains(event.target)) return;
+    closeQuickCreateMenu();
+  });
+  renderQuickCreateMenu();
+}
+
+function renderQuickCreateMenu() {
+  const menu = document.getElementById('quick-create-menu');
+  const button = document.getElementById('quick-new-group');
+  const wrap = document.getElementById('quick-create-wrap');
+  menu?.classList.toggle('hidden', !state.quickCreateMenuOpen);
+  wrap?.classList.toggle('is-open', state.quickCreateMenuOpen);
+  button?.setAttribute('aria-expanded', String(state.quickCreateMenuOpen));
+}
+
+function closeQuickCreateMenu() {
+  if (!state.quickCreateMenuOpen) return;
+  state.quickCreateMenuOpen = false;
+  renderQuickCreateMenu();
 }
 
 function bindComposer() {
@@ -2979,6 +3024,7 @@ function updateContextStatus() {
 }
 
 function openPanel(id, options = {}) {
+  closeQuickCreateMenu();
   if (id === 'character-edit-panel') {
     openCharacterEditPanel();
     syncMobileBackAvailability();
