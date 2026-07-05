@@ -6,12 +6,12 @@
 - 纯网页部署时，聊天头右上角原“视频通话占位”按钮会作为外部工具选择入口，只显示可用的 Streamable HTTP MCP 客户端；打包到 Tauri/Electron/Capacitor/WebView 后可同时显示本地 Stdio MCP。
 - 私聊启用外部工具后，会切换到独立的 `tool_chat_engine.js` 流式工具对话流程，消息中展示可折叠“思考中”和合并后的“MCP 调用”状态栏；状态详情保存到聊天历史，但不会写入长期记忆或后续 LLM 上下文。
 - 工具模式现在使用多步 agent loop：工具结果返回后会继续允许模型发起后续 MCP 调用，直到任务完成、工具不可用、权限被拒绝、明确失败或达到 50 步保护上限；“我继续处理 / 要我继续吗 / 下一步我会操作”这类中间话术不会直接结束 MCP 流程。达到上限或网络异常后，发送“继续”可从中断点续跑。
-- 工具模式回复支持文本以外的输出：图片直接展示，音频显示为可播放语音条，其他类型作为可保存附件展示。
+- 工具模式回复支持文本以外的输出：图片直接展示，音频显示为可播放语音条，其他类型作为可保存附件展示。MCP 工具返回的附件、Relay 捕获到的本轮新建/修改文件，以及结果文本或参数中出现的文件路径都会合并到 bot 最后一条回复里，不会只把文件静默留在工作目录。
 - WebMCP 服务端通过 `window.FritiaWebMCP` 和页面内 `#fritia-webmcp-manifest` 暴露角色列表、角色上下文和按角色对话能力，让支持的浏览器 agent 继承本 APP 的人物人格、知识库、长期记忆和默认 LLM 配置。
 - 新增 `backend/mcp_relay.mjs`，作为打包客户端可复用的轻量 stdio MCP Relay。启动后默认监听 `127.0.0.1:17373`，前端 Stdio MCP 配置通过 relay 调用本地 MCP Server。
 - MCP 客户端 JSON 使用标准 `mcpServers` 配置文本，运行时按 `url` / `command` / `transport` / `type` 识别 Streamable HTTP、SSE 或 stdio；Streamable HTTP 新建、删除兜底和空白保存时不会预置模板，也不会把用户输入改写成内部扁平格式。对 `localhost` / `127.0.0.1` 会做运行时 loopback fallback，不改写存档。
-- Windows v0.3.0 Tauri 打包端对 Streamable HTTP MCP 使用原生 HTTP relay，按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应；stdio relay 会自动完成 MCP `initialize` / `notifications/initialized` 握手，并在 Windows 上兼容 `npx`、`npm` 等无扩展命令。
-- Windows v0.3.0 Tauri 打包端支持按 `F12` 呼出 WebView2 DevTools。
+- Windows v0.3.2 Tauri 打包端对 Streamable HTTP MCP 使用原生 HTTP relay，按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应；stdio relay 会自动完成 MCP `initialize` / `notifications/initialized` 握手，并在 Windows 上兼容 `npx`、`npm` 等无扩展命令。
+- Windows v0.3.2 Tauri 打包端支持按 `F12` 呼出 WebView2 DevTools，并提供通用本地文件读取桥，让 stdio MCP 工具创建/修改的图片、音频和普通文件可以回传到聊天附件。
 
 ## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
 
@@ -150,7 +150,9 @@ http://127.0.0.1:3000/
 
 推荐直接粘贴标准 MCP 客户端配置。保存后，配置框会保存你填写的标准 JSON 文本，不会改写成 APP 内部格式；如果 JSON 为空、格式错误或缺少 `url` / `command`，运行时会报错而不是自动套用模板。
 
-启用工具后，私聊会进入独立的工具对话流程。模型可以在同一轮回复中连续执行多个 MCP 工具步骤；如果模型先输出了“我继续帮你处理”“下一步我会点击”等中间文本，APP 会继续推进工具调用，而不是把这句文本当成最终回复。连续 MCP 调用会合并显示在同一个折叠框里，展开后可逐条查看参数和结果。只有最终回复会写入长期记忆，工具 trace 只保存到该条聊天记录中。
+启用工具后，私聊会进入独立的工具对话流程。模型可以在同一轮回复中连续执行多个 MCP 工具步骤；如果模型先输出了“我继续帮你处理”“下一步我会点击”等中间文本，APP 会继续推进工具调用，而不是把这句文本当成最终回复。连续 MCP 调用会合并显示在同一个折叠框里，展开后可逐条查看参数和结果。工具运行中的日志和消息增量只刷新相关区域，不会反复刷新联系人头像和聊天主框架。只有最终回复会写入长期记忆，工具 trace 只保存到该条聊天记录中。
+
+如果 MCP 工具返回图片、音频、resource 或 file-like content，APP 会把它们作为 bot 最终回复附件展示。打包端 stdio Relay 和开发用 `backend/mcp_relay.mjs` 会在 `tools/call` 前后记录配置 `cwd` 内的新建/修改文件，并把可读取文件随响应回传；图片会内嵌显示，音频会显示语音条，其他文件显示可点击保存的附件卡片。如果工具没有返回二进制附件，APP 至少会把结果文本或工具参数里出现的文件路径显示成文件卡片，便于用户定位本轮生成物。
 
 权限设置中的“默认调用级别”和“工具调用前需要手动授权”会直接决定实际授权流程：设置为“允许已启用 MCP”且关闭手动授权时，不会每次弹出确认框。
 

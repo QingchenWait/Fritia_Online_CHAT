@@ -10,7 +10,7 @@
 - `index.html` 新增 `#tool-call-panel` 工具调用悬浮窗口、`#mcp-picker-popover` 聊天头工具选择下拉，以及左侧 `data-panel-open="tool-call-panel"` 入口。聊天头原视频按钮改为 `#external-tools-toggle-btn`。
 - `src/js/ui.js` 新增工具配置窗口绑定、MCP 客户端列表/JSON 编辑器/权限/日志渲染、聊天头多选下拉、工具开关状态同步和工具模式发送分流。
 - `src/styles/app.css` 新增工具配置窗口桌面/移动两套布局、MCP 多选下拉、工具调用状态栏和自绘滚动条样式，继续使用本项目蓝紫 Soft UI 设计变量。
-- `sw.js` 缓存版本升级到 `fritia-next-chat-v11`，核心缓存清单加入 `mcp_tools.js`、`tool_chat_engine.js` 和 `wrench.svg`；本次同时用于刷新 MCP transport、配置保存逻辑和工具对话多步循环。
+- `sw.js` 缓存版本升级到 `fritia-next-chat-v12`，核心缓存清单加入 `mcp_tools.js`、`tool_chat_engine.js` 和 `wrench.svg`；本次同时用于刷新 MCP transport、配置保存逻辑、工具对话多步循环和工具附件输出。
 - `package.json` 的 `check` 脚本加入新增模块和 `backend/mcp_relay.mjs`；`tools/static_server.mjs` 增加 `.mjs` MIME；`tools/build_static.mjs` 复制 `backend/`。
 - 网络沙箱阻止从 Lucide GitHub 下载 `wrench.svg`，因此本次先按项目现有 Lucide SVG 风格写入同名本地图标，后续可用官方下载资源覆盖。
 - `parseMcpServerConfigJson()` 以标准 `mcpServers` 配置为主，按 `url`、`command`、`transport`、`type` 解析 Streamable HTTP、legacy SSE 或 stdio；UI 不再把标准 JSON 改写成扁平内部模板。Streamable HTTP 新建、删除兜底和空白保存时 `#mcp-client-json` 保持空白，空白或错误 JSON 会在运行时报错，不再自动套默认 URL 模板。
@@ -20,9 +20,13 @@
 - 工具模式 prompt 保持通用 MCP 流程：根据工具名称、描述和参数 schema 判断是否调用工具，不写死任何具体 MCP Server 或工具名。
 - 工具模式 prompt 明确要求：任务未完成时继续发起 tool calls，不得在自然语言中间承诺后停止，也不得让用户重复确认本可继续用工具完成的步骤。
 - `src/js/ui.js` 的 `createToolTraceNode()` 将连续 `toolTrace.calls` 合并为单个“MCP 调用”折叠框，折叠时显示最新工具名，展开后再逐条查看参数、结果和附件摘要。
-- 工具模式最终消息可携带任意附件：`tool_chat_engine.js` 从模型 content parts 和 MCP result content 中抽取 image/audio/resource/file，图片直接渲染，音频复用语音条，其他附件通过 `saveAttachmentToUserDevice()` 保存到用户选择的位置。
+- 工具模式最终消息可携带任意附件：`tool_chat_engine.js` 从模型 content parts、MCP result content、Relay `changedFiles`、结果文本和工具参数中的文件引用抽取 image/audio/resource/file；图片直接渲染，音频复用语音条，其他附件通过 `saveAttachmentToUserDevice()` 保存到用户选择的位置。
+- `backend/mcp_relay.mjs` 在 stdio `tools/call` 前后对配置 `cwd` 做有限文件快照，并额外读取请求参数中明确出现的文件路径/文件名；返回 `{ response, changedFiles }`，前端通过 `getNativeRelayResponse()` 保留 MCP JSON-RPC 结果并把文件变更映射为聊天附件。
+- `src/js/mcp_tools.js` 将 `MCP_LOG_EVENT` 从 `MCP_CONFIG_EVENT` 中拆出，MCP 调用日志写入只刷新日志面板，不再触发工具配置、会话 chrome 和 WebMCP manifest 的整套刷新。
+- `src/js/ui.js` 为工具回复新增 `updateStoreFromToolReply()`：工具运行中只更新消息列表和移动端返回状态，最终 sent/error 时再刷新会话列表、MCP 选择器和聊天头，避免每次 MCP 调用导致主页面头像和人物图标重载。
+- 工具附件渲染新增本地文件桥兼容：打包端可暴露 `window.__FRITIA_NATIVE_FILE__.readFile()`，`createMessageAttachmentNode()` 会用它加载本地图片/音频路径，文件卡片点击保存时也会优先读取该桥返回的数据。
 - `assertMcpPermission()` 改为以全局权限设置驱动实际授权流程；客户端级 `off` 仍禁止调用，但客户端默认 `ask` 不再覆盖“默认调用级别：允许已启用 MCP + 关闭手动授权”。
-- Windows v0.3.0 Tauri 壳层启用 `devtools` feature，注入脚本监听 `F12` 调用 `open_devtools`；stdio MCP 子进程 stderr 会被采集为最近日志摘要，并在启动、初始化或读写失败时附加到错误中。
+- Windows v0.3.2 Tauri 壳层启用 `devtools` feature，注入脚本监听 `F12` 调用 `open_devtools`；stdio MCP 子进程 stderr 会被采集为最近日志摘要，并在启动、初始化或读写失败时附加到错误中。v0.3.2 额外提供通用 `read_local_file` 命令和 stdio `tools/call` 文件快照，把本地 MCP 工具创建/修改的输出文件作为附件回传网页层。
 
 ## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
 

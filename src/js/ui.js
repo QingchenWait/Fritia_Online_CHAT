@@ -47,6 +47,7 @@ import { completePrivateMessageReply } from './chat_engine.js';
 import { completeToolPrivateMessageReply } from './tool_chat_engine.js';
 import {
   MCP_CONFIG_EVENT,
+  MCP_LOG_EVENT,
   MCP_TRANSPORTS,
   buildWebMcpManifest,
   clearMcpLogs,
@@ -215,6 +216,9 @@ function bindGlobalEvents() {
     renderToolCallPanel();
     renderMcpPicker();
     updateConversationChrome(getActiveConversation());
+  });
+  document.addEventListener(MCP_LOG_EVENT, () => {
+    renderMcpLogPanel();
   });
   document.addEventListener('fritia-archive-sync-status', event => {
     state.archiveProgress = event.detail || state.archiveProgress;
@@ -616,7 +620,7 @@ function continueConversationAfterOutgoing(committed) {
       text: message.text,
       userMessage: message,
       selectedClientIds: selectedMcpClientIds,
-      onStore: updateStore
+      onStore: updateStoreFromToolReply
     }).catch(error => {
       console.warn('[ui] tool private reply failed', error);
     });
@@ -2111,15 +2115,15 @@ function createMessageNode(message) {
 
 function createMessageAttachmentNode(message, attachment, index = 0) {
   if (!attachment) return null;
-  if (attachment.type === 'image' && (attachment.dataRef || attachment.dataUrl || attachment.url)) {
+  if (attachment.type === 'image' && (attachment.dataRef || attachment.dataUrl || attachment.url || attachment.path)) {
     const image = document.createElement('img');
     const stickerMeta = resolveStickerAttachmentMeta(attachment);
     image.className = `message-image${stickerMeta ? ` message-image-sticker ${getStickerAttachmentOrientation(stickerMeta)}` : ''}`;
-    setImageSource(image, attachment.dataRef || attachment.dataUrl || attachment.url);
+    setAttachmentImageSource(image, attachment);
     image.alt = attachment.name || '图片';
     return image;
   }
-  if (attachment.type === 'audio' && (attachment.dataRef || attachment.dataUrl || attachment.url)) {
+  if (attachment.type === 'audio' && (attachment.dataRef || attachment.dataUrl || attachment.url || attachment.path)) {
     return createVoiceBubble(message, attachment, `${message.id}:attachment:${index}`);
   }
   const button = document.createElement('button');
@@ -2134,7 +2138,11 @@ function createMessageAttachmentNode(message, attachment, index = 0) {
   const name = document.createElement('strong');
   name.textContent = attachment.name || attachment.mime || '未命名附件';
   const meta = document.createElement('small');
-  meta.textContent = [attachment.mime || attachment.type || 'attachment', attachment.size ? formatBytes(attachment.size) : ''].filter(Boolean).join(' · ');
+  meta.textContent = [
+    attachment.mime || attachment.type || 'attachment',
+    attachment.size ? formatBytes(attachment.size) : '',
+    attachment.path && !attachment.dataRef && !attachment.dataUrl ? '本地文件引用' : ''
+  ].filter(Boolean).join(' · ');
   text.append(name, meta);
   button.append(icon, text);
   button.addEventListener('click', () => {
@@ -2144,6 +2152,25 @@ function createMessageAttachmentNode(message, attachment, index = 0) {
     });
   });
   return button;
+}
+
+function setAttachmentImageSource(image, attachment = {}, fallback = 'src/_logo/emoji/robot_3d.png') {
+  if (!image) return;
+  const stableSource = attachment.dataRef || attachment.dataUrl || attachment.url || attachment.path || fallback;
+  image.dataset.mediaSource = stableSource;
+  image.src = fallback;
+  if (attachment.dataRef || attachment.dataUrl || attachment.path) {
+    resolveAttachmentDataUrl(attachment)
+      .then(dataUrl => {
+        if (image.dataset.mediaSource === stableSource) image.src = dataUrl || attachment.url || fallback;
+      })
+      .catch(error => {
+        console.warn('[ui] failed to load attachment image', error);
+        if (image.dataset.mediaSource === stableSource) image.src = attachment.url || fallback;
+      });
+    return;
+  }
+  image.src = attachment.url || fallback;
 }
 
 function createToolTraceNode(trace = {}) {
@@ -2245,7 +2272,7 @@ function isVoiceReplyMessage(message) {
 }
 
 function getMessageVoiceAttachment(message) {
-  return (message?.attachments || []).find(item => item.type === 'audio' && (item.dataRef || item.dataUrl)) || null;
+  return (message?.attachments || []).find(item => item.type === 'audio' && (item.dataRef || item.dataUrl || item.url || item.path)) || null;
 }
 
 function createVoiceBubble(message, attachmentOverride = null, playbackId = '') {
@@ -2303,7 +2330,26 @@ async function saveAttachmentToUserDevice(attachment = {}) {
 
 async function resolveAttachmentDataUrl(attachment = {}) {
   if (attachment.dataRef) return getMediaDataUrl(attachment.dataRef);
-  return attachment.dataUrl || '';
+  if (attachment.dataUrl) return attachment.dataUrl;
+  if (attachment.path && window.__FRITIA_NATIVE_FILE__?.readFile) {
+    const file = await window.__FRITIA_NATIVE_FILE__.readFile({
+      path: attachment.path,
+      mime: attachment.mime || '',
+      name: attachment.name || ''
+    });
+    const dataUrl = file?.dataUrl || file?.data_url || '';
+    if (dataUrl) return dataUrl;
+    const dataBase64 = file?.dataBase64 || file?.data_base64 || file?.base64 || '';
+    if (dataBase64) return base64ToDataUrl(dataBase64, file?.mime || attachment.mime || 'application/octet-stream');
+  }
+  return '';
+}
+
+function base64ToDataUrl(data, mime = 'application/octet-stream') {
+  const source = String(data || '');
+  if (!source) return '';
+  if (source.startsWith('data:')) return source;
+  return `data:${mime || 'application/octet-stream'};base64,${source}`;
 }
 
 function dataUrlToBlob(dataUrl) {
@@ -2353,7 +2399,7 @@ async function toggleVoicePlayback(messageId, attachment) {
   }
   stopVoicePlayback();
   try {
-    const dataUrl = attachment.dataRef ? await getMediaDataUrl(attachment.dataRef) : attachment.dataUrl;
+    const dataUrl = await resolveAttachmentDataUrl(attachment);
     if (!dataUrl) throw new Error('语音文件不存在或已损坏。');
     const audio = new Audio(dataUrl);
     const fallbackDuration = Math.max(1, Math.ceil(Number(attachment.duration) || 0));
@@ -3896,6 +3942,20 @@ function selectConversation(id) {
 function updateStore(store) {
   state.store = store || loadAppStore();
   renderAll();
+}
+
+function updateStoreFromToolReply(store, meta = {}) {
+  state.store = store || loadAppStore();
+  renderMessages();
+  syncMobileBackAvailability();
+  if (meta.status === 'sent' || meta.status === 'error') {
+    renderConversationList();
+    renderMcpPicker();
+    updateConversationChrome(getActiveConversation());
+    renderRoundtableErrorIndicator();
+    renderVoiceErrorIndicator();
+    scheduleRoundtableIdle();
+  }
 }
 
 function closeDetailPane() {

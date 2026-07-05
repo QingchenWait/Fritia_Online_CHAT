@@ -41,7 +41,7 @@ export async function completeToolPrivateMessageReply({
     status: 'typing',
     meta: { toolMode: true, toolTrace: trace }
   });
-  onStore?.(nextStore);
+  onStore?.(nextStore, { source: 'tool', status: 'typing', messageId: typingId });
 
   const commit = patch => {
     nextStore = replaceMessage(nextStore, conversation.id, typingId, {
@@ -52,7 +52,7 @@ export async function completeToolPrivateMessageReply({
         toolTrace: trace
       }
     });
-    onStore?.(nextStore);
+    onStore?.(nextStore, { source: 'tool', status: patch.status || 'typing', messageId: typingId });
   };
   let agentMessagesForResume = [];
   let previousStepCount = Number(resumeState?.stepCount) || 0;
@@ -172,7 +172,7 @@ export async function completeToolPrivateMessageReply({
             if (!entry) throw new Error(`未找到工具映射：${call.name}`);
             const result = await callMcpToolByRegistryEntry(entry, call.arguments || {});
             const resultText = formatMcpContentText(result);
-            const resultAttachments = await extractMcpResultAttachments(result, entry?.toolName || call.name);
+            const resultAttachments = await extractMcpResultAttachments(result, entry?.toolName || call.name, call.arguments || {});
             if (resultAttachments.length) toolOutputAttachments.push(...resultAttachments);
             trace = updateToolCall(trace, traceCallId, {
               status: 'success',
@@ -239,7 +239,7 @@ export async function completeToolPrivateMessageReply({
       }
 
       finalText = stepText;
-      finalAttachments = completionAttachments;
+      finalAttachments = mergeToolAttachments(completionAttachments, toolOutputAttachments);
       break;
     }
 
@@ -250,7 +250,7 @@ export async function completeToolPrivateMessageReply({
       }
     }
     if (!finalAttachments.length && toolOutputAttachments.length) {
-      finalAttachments = toolOutputAttachments.slice(0, 8);
+      finalAttachments = mergeToolAttachments(toolOutputAttachments).slice(0, 8);
     }
 
     const reply = sanitizeReply(finalText, character.name, { allowEmpty: finalAttachments.length > 0 });
@@ -551,14 +551,16 @@ function parseToolArguments(value) {
   }
 }
 
-async function extractMcpResultAttachments(result, toolName = 'tool') {
+async function extractMcpResultAttachments(result, toolName = 'tool', args = {}) {
   const content = Array.isArray(result?.content) ? result.content : [];
   const raw = [];
   for (const item of content) {
     const attachment = attachmentFromMcpContent(item, toolName);
     if (attachment) raw.push(attachment);
   }
-  return normalizeGeneratedAttachments(raw);
+  raw.push(...extractChangedFileAttachments(result, toolName));
+  raw.push(...extractFileReferenceAttachments(formatMcpContentText(result), args, toolName));
+  return mergeToolAttachments(await normalizeGeneratedAttachments(raw));
 }
 
 function attachmentFromMcpContent(item = {}, toolName = 'tool') {
@@ -571,7 +573,8 @@ function attachmentFromMcpContent(item = {}, toolName = 'tool') {
       name: item.name || `${toolName}-image`,
       mime,
       dataUrl: item.data ? base64ToDataUrl(item.data, mime) : '',
-      url: item.url || ''
+      url: isLocalFileReference(item.url) ? '' : item.url || '',
+      path: normalizeLocalFileReference(item.path || item.filePath || item.file_path || item.url || '')
     };
   }
   if (type === 'audio') {
@@ -581,7 +584,8 @@ function attachmentFromMcpContent(item = {}, toolName = 'tool') {
       name: item.name || `${toolName}-audio`,
       mime,
       dataUrl: item.data ? base64ToDataUrl(item.data, mime) : '',
-      url: item.url || '',
+      url: isLocalFileReference(item.url) ? '' : item.url || '',
+      path: normalizeLocalFileReference(item.path || item.filePath || item.file_path || item.url || ''),
       duration: Number(item.duration) || 0
     };
   }
@@ -589,7 +593,8 @@ function attachmentFromMcpContent(item = {}, toolName = 'tool') {
     const resource = item.resource || {};
     const mime = resource.mimeType || resource.mime_type || item.mimeType || item.mime_type || 'application/octet-stream';
     const uri = resource.uri || item.uri || '';
-    const name = resource.name || fileNameFromUri(uri) || `${toolName}-resource`;
+    const path = normalizeLocalFileReference(resource.path || item.path || uri);
+    const name = resource.name || fileNameFromUri(path || uri) || `${toolName}-resource`;
     const data = resource.blob || resource.data || item.blob || item.data || '';
     const text = typeof resource.text === 'string' ? resource.text : '';
     return {
@@ -597,20 +602,126 @@ function attachmentFromMcpContent(item = {}, toolName = 'tool') {
       name,
       mime,
       dataUrl: data ? base64ToDataUrl(data, mime) : (text ? textToDataUrl(text, mime || 'text/plain') : ''),
-      url: !data && !text ? uri : ''
+      url: !data && !text && !path ? uri : '',
+      path
     };
   }
-  if (item.data || item.blob || item.url || item.uri) {
-    const mime = item.mimeType || item.mime_type || item.mime || 'application/octet-stream';
+  if (item.data || item.blob || item.dataBase64 || item.data_base64 || item.dataUrl || item.url || item.uri || item.path || item.filePath || item.file_path) {
+    const path = normalizeLocalFileReference(item.path || item.filePath || item.file_path || item.url || item.uri || '');
+    const name = item.name || fileNameFromUri(path || item.url || item.uri) || `${toolName}-attachment`;
+    const mime = item.mimeType || item.mime_type || item.mime || inferMimeFromName(name) || 'application/octet-stream';
+    const data = item.data || item.blob || item.dataBase64 || item.data_base64 || '';
     return {
       type: attachmentTypeFromMime(mime),
-      name: item.name || fileNameFromUri(item.url || item.uri) || `${toolName}-attachment`,
+      name,
       mime,
-      dataUrl: item.data || item.blob ? base64ToDataUrl(item.data || item.blob, mime) : '',
-      url: item.url || item.uri || ''
+      dataUrl: item.dataUrl || item.data_url || (data ? base64ToDataUrl(data, mime) : ''),
+      url: !path ? item.url || item.uri || '' : '',
+      path
     };
   }
   return null;
+}
+
+function extractChangedFileAttachments(result, toolName = 'tool') {
+  const candidates = [
+    result?.changedFiles,
+    result?.changed_files,
+    result?.files,
+    result?.metadata?.changedFiles,
+    result?.metadata?.changed_files
+  ].filter(Array.isArray).flat();
+  return candidates
+    .map(file => normalizeChangedFileAttachment(file, toolName))
+    .filter(Boolean);
+}
+
+function normalizeChangedFileAttachment(file = {}, toolName = 'tool') {
+  if (!file || typeof file !== 'object') return null;
+  const rawPath = file.path || file.filePath || file.file_path || file.localPath || file.local_path || file.uri || file.url || '';
+  const path = normalizeLocalFileReference(rawPath);
+  const remoteUrl = !path ? String(file.url || file.uri || '').trim() : '';
+  const name = file.name || fileNameFromUri(path || remoteUrl) || `${toolName}-file`;
+  const mime = file.mime || file.mimeType || file.mime_type || inferMimeFromName(name || path || remoteUrl) || 'application/octet-stream';
+  const data = file.dataBase64 || file.data_base64 || file.base64 || file.data || file.blob || '';
+  const dataUrl = file.dataUrl || file.data_url || (data ? base64ToDataUrl(data, mime) : '');
+  const text = typeof file.text === 'string' ? file.text : '';
+  return {
+    id: file.id || '',
+    type: ['image', 'audio', 'file'].includes(file.type) ? file.type : attachmentTypeFromMime(mime),
+    name,
+    mime,
+    size: Number(file.size) || 0,
+    duration: Number(file.duration) || 0,
+    dataUrl: dataUrl || (text ? textToDataUrl(text, mime || 'text/plain') : ''),
+    url: remoteUrl,
+    path,
+    source: file.source || 'mcp-changed-file'
+  };
+}
+
+function extractFileReferenceAttachments(resultText = '', args = {}, toolName = 'tool') {
+  const refs = [];
+  collectFileReferencesFromText(resultText, refs);
+  collectFileReferencesFromValue(args, refs);
+  return dedupeRawAttachments(refs).map(reference => {
+    const name = fileNameFromUri(reference) || `${toolName}-file`;
+    const mime = inferMimeFromName(name || reference) || 'application/octet-stream';
+    return {
+      type: attachmentTypeFromMime(mime),
+      name,
+      mime,
+      path: normalizeLocalFileReference(reference) || reference,
+      source: 'mcp-file-reference'
+    };
+  });
+}
+
+function collectFileReferencesFromText(text = '', refs = []) {
+  const source = String(text || '');
+  const patterns = [
+    /file:\/\/\/?[^\s"'<>]+/gi,
+    /[A-Za-z]:[\\/][^\s"'<>|]+/g,
+    /(?:^|[\s"'(])((?:\/[^\/\s"'<>|]+)+\.[A-Za-z0-9]{1,12})/g,
+    /[\w\u4e00-\u9fa5 .()[\]-]+\.(?:png|jpe?g|webp|gif|bmp|svg|mp3|wav|ogg|m4a|flac|aac|pdf|json|txt|csv|zip|7z|tar|gz|apk|docx?|xlsx?|pptx?)/gi
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(source))) {
+      const value = String(match[1] || match[0] || '').trim().replace(/^[\s"'(]+|[\s"')，。；,;]+$/g, '');
+      if (looksLikeFileReference(value)) refs.push(value);
+    }
+  }
+  return refs;
+}
+
+function collectFileReferencesFromValue(value, refs = [], key = '') {
+  if (Array.isArray(value)) {
+    value.forEach(item => collectFileReferencesFromValue(item, refs, key));
+    return refs;
+  }
+  if (value && typeof value === 'object') {
+    Object.entries(value).forEach(([childKey, childValue]) => collectFileReferencesFromValue(childValue, refs, childKey));
+    return refs;
+  }
+  if (typeof value !== 'string') return refs;
+  const source = value.trim();
+  if (!source) return refs;
+  if (looksLikeFileReference(source) || /file|path|name|output|save|screenshot/i.test(key)) {
+    collectFileReferencesFromText(source, refs);
+    if (looksLikeFileReference(source)) refs.push(source);
+  }
+  return refs;
+}
+
+function dedupeRawAttachments(values = []) {
+  const seen = new Set();
+  return values.filter(value => {
+    const key = String(value || '').trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function normalizeGeneratedAttachments(attachments = []) {
@@ -644,21 +755,27 @@ async function normalizeGeneratedAttachments(attachments = []) {
 
 function normalizeToolAttachment(raw = {}) {
   if (!raw || typeof raw !== 'object') return null;
-  const mime = raw.mime || raw.mimeType || raw.mime_type || '';
+  const rawPath = String(raw.path || raw.filePath || raw.file_path || raw.localPath || raw.local_path || '').trim();
+  const path = normalizeLocalFileReference(rawPath) || (rawPath && !/^https?:\/\//i.test(rawPath) ? rawPath : '');
+  const url = path ? '' : raw.url || raw.uri || '';
+  const name = raw.name || fileNameFromUri(path || url) || defaultAttachmentName(raw.type, raw.mime || raw.mimeType || raw.mime_type || '');
+  const mime = raw.mime || raw.mimeType || raw.mime_type || mimeFromDataUrl(raw.dataUrl || raw.data_url || '') || inferMimeFromName(name || path || url) || '';
   const type = ['image', 'audio', 'file'].includes(raw.type) ? raw.type : attachmentTypeFromMime(mime);
-  const dataUrl = raw.dataUrl || (raw.data ? base64ToDataUrl(raw.data, mime) : '');
-  const url = raw.url || raw.uri || '';
-  if (!dataUrl && !url && !raw.dataRef) return null;
+  const data = raw.dataBase64 || raw.data_base64 || raw.base64 || raw.data || raw.blob || '';
+  const dataUrl = raw.dataUrl || raw.data_url || (data ? base64ToDataUrl(data, mime) : '');
+  if (!dataUrl && !url && !raw.dataRef && !path) return null;
   return {
     id: raw.id || createId('att'),
     type,
-    name: raw.name || fileNameFromUri(url) || defaultAttachmentName(type, mime),
+    name,
     mime,
     size: Number(raw.size) || estimateDataUrlSize(dataUrl),
     duration: Number(raw.duration) || 0,
     dataRef: raw.dataRef || '',
     dataUrl,
-    url
+    url,
+    path,
+    source: raw.source || ''
   };
 }
 
@@ -673,8 +790,24 @@ function summarizeAttachmentForTrace(attachment = {}) {
     type: attachment.type || 'file',
     name: attachment.name || attachment.mime || '附件',
     mime: attachment.mime || '',
-    size: Number(attachment.size) || 0
+    size: Number(attachment.size) || 0,
+    path: attachment.path || ''
   };
+}
+
+function mergeToolAttachments(...groups) {
+  const flattened = groups.flat().filter(Boolean);
+  const seen = new Set();
+  return flattened.filter(attachment => {
+    const key = attachment.dataRef
+      || attachment.url
+      || attachment.path
+      || (attachment.dataUrl ? attachment.dataUrl.slice(0, 160) : '')
+      || `${attachment.name || ''}:${attachment.mime || ''}:${attachment.size || ''}`;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function shouldContinueToolLoop(replyText, context = {}) {
@@ -743,6 +876,64 @@ function fileNameFromUri(uri = '') {
   const source = String(uri || '').split(/[?#]/)[0];
   const last = source.split(/[\\/]/).filter(Boolean).pop() || '';
   return decodeURIComponent(last).slice(0, 120);
+}
+
+function normalizeLocalFileReference(value = '') {
+  const source = String(value || '').trim();
+  if (!isLocalFileReference(source)) return '';
+  if (/^file:\/\//i.test(source)) {
+    try {
+      const url = new URL(source);
+      const pathname = decodeURIComponent(url.pathname || '');
+      if (/^\/[A-Za-z]:\//.test(pathname)) return pathname.slice(1).replace(/\//g, '\\');
+      return pathname;
+    } catch {
+      return source.replace(/^file:\/\//i, '');
+    }
+  }
+  return source;
+}
+
+function isLocalFileReference(value = '') {
+  const source = String(value || '').trim();
+  return /^file:\/\//i.test(source)
+    || /^[A-Za-z]:[\\/]/.test(source)
+    || /^\/[^/]+/.test(source);
+}
+
+function looksLikeFileReference(value = '') {
+  const source = String(value || '').trim();
+  if (!source || /^https?:\/\//i.test(source)) return false;
+  return isLocalFileReference(source) || /\.[A-Za-z0-9]{1,12}(?:$|[?#])/.test(source);
+}
+
+function inferMimeFromName(name = '') {
+  const lower = String(name || '').split(/[?#]/)[0].toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.bmp')) return 'image/bmp';
+  if (lower.endsWith('.svg')) return 'image/svg+xml';
+  if (lower.endsWith('.mp3')) return 'audio/mpeg';
+  if (lower.endsWith('.wav')) return 'audio/wav';
+  if (lower.endsWith('.ogg')) return 'audio/ogg';
+  if (lower.endsWith('.m4a')) return 'audio/mp4';
+  if (lower.endsWith('.flac')) return 'audio/flac';
+  if (lower.endsWith('.aac')) return 'audio/aac';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.txt')) return 'text/plain';
+  if (lower.endsWith('.csv')) return 'text/csv';
+  if (lower.endsWith('.zip')) return 'application/zip';
+  if (lower.endsWith('.7z')) return 'application/x-7z-compressed';
+  if (lower.endsWith('.apk')) return 'application/vnd.android.package-archive';
+  if (/\.[A-Za-z0-9]{1,12}$/.test(lower)) return 'application/octet-stream';
+  return '';
+}
+
+function mimeFromDataUrl(dataUrl = '') {
+  return /^data:([^;,]+)/.exec(String(dataUrl || ''))?.[1] || '';
 }
 
 function defaultAttachmentName(type, mime = '') {

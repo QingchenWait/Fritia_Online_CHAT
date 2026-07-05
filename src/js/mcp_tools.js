@@ -8,6 +8,7 @@ import { requestCharacterReply } from './chat_engine.js';
 
 export const MCP_CONFIG_KEY = 'fritia_mcp_tool_config';
 export const MCP_CONFIG_EVENT = 'fritia-mcp-config-updated';
+export const MCP_LOG_EVENT = 'fritia-mcp-log-updated';
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
 
 export const MCP_TRANSPORTS = Object.freeze({
@@ -446,9 +447,12 @@ export function buildWebMcpManifest(store = loadAppStore()) {
 export function addMcpLog(entry = {}) {
   const config = getMcpConfig();
   const log = normalizeMcpLog(entry);
-  saveMcpConfig({
+  const normalized = normalizeMcpConfig({
+    ...config,
     logs: [log, ...(config.logs || [])].slice(0, MAX_LOGS)
   });
+  saveJson(MCP_CONFIG_KEY, normalized);
+  document.dispatchEvent(new CustomEvent(MCP_LOG_EVENT, { detail: { log, config: normalized } }));
   return log;
 }
 
@@ -721,9 +725,31 @@ function getNativeRelaySessionId(result) {
 
 function getNativeRelayResponse(result) {
   if (result && typeof result === 'object' && !Array.isArray(result) && 'response' in result) {
-    return result.response;
+    const response = result.response;
+    const changedFiles = normalizeNativeChangedFiles(result.changedFiles || result.changed_files || result.files);
+    if (changedFiles.length && response && typeof response === 'object' && !Array.isArray(response)) {
+      const existing = normalizeNativeChangedFiles(response.changedFiles || response.changed_files || response.files);
+      return {
+        ...response,
+        changedFiles: [...existing, ...changedFiles]
+      };
+    }
+    return response;
   }
   return result;
+}
+
+function normalizeNativeChangedFiles(files) {
+  if (!Array.isArray(files)) return [];
+  return files.filter(file => file && typeof file === 'object').map(file => ({
+    ...file,
+    path: String(file.path || file.filePath || file.file_path || '').trim(),
+    name: String(file.name || '').trim(),
+    mime: String(file.mime || file.mimeType || file.mime_type || '').trim(),
+    dataBase64: file.dataBase64 || file.data_base64 || file.base64 || '',
+    dataUrl: file.dataUrl || file.data_url || '',
+    size: Number(file.size) || 0
+  }));
 }
 
 async function fetchMcpHttp(url, options, actionLabel = '请求 MCP') {
@@ -958,7 +984,7 @@ async function sendStdioRelayRequest(client, method, params = {}) {
       client: client.config,
       request
     });
-    return parseMcpJsonRpcResponse(response, request.id);
+    return parseMcpJsonRpcResponse(getNativeRelayResponse(response), request.id);
   }
   const relayUrl = client.config.relayUrl || DEFAULT_RELAY_URL;
   const response = await fetch(relayUrl, {
@@ -975,7 +1001,7 @@ async function sendStdioRelayRequest(client, method, params = {}) {
       request
     })
   });
-  return parseMcpJsonRpcResponse(await response.json(), request.id);
+  return parseMcpJsonRpcResponse(getNativeRelayResponse(await response.json()), request.id);
 }
 
 function buildMcpHeaders(client, sessionId = '') {
@@ -1084,7 +1110,7 @@ function parseSseJsonRpc(text = '') {
 
 function parseMcpJsonRpcResponse(response, id) {
   if (response && typeof response === 'object' && !Array.isArray(response) && !response.jsonrpc && 'response' in response) {
-    return parseMcpJsonRpcResponse(response.response, id);
+    return parseMcpJsonRpcResponse(getNativeRelayResponse(response), id);
   }
   if (Array.isArray(response)) {
     const matched = response.find(item => item.id === id) || response[0];
@@ -1093,7 +1119,16 @@ function parseMcpJsonRpcResponse(response, id) {
   if (response?.error) {
     throw new Error(response.error.message || JSON.stringify(response.error));
   }
-  return response?.result || response || {};
+  const result = response?.result || response || {};
+  const changedFiles = normalizeNativeChangedFiles(response?.changedFiles || response?.changed_files || response?.files);
+  if (changedFiles.length && result && typeof result === 'object' && !Array.isArray(result)) {
+    const existing = normalizeNativeChangedFiles(result.changedFiles || result.changed_files || result.files);
+    return {
+      ...result,
+      changedFiles: [...existing, ...changedFiles]
+    };
+  }
+  return result;
 }
 
 function createJsonRpcRequest(method, params = {}) {
