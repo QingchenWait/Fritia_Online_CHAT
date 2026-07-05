@@ -1,5 +1,33 @@
 # STRUCTURE
 
+## 2026-07-06 Tool Calling / WebMCP / MCP Relay Mapping
+
+- 新增 `src/js/mcp_tools.js`：导出 `getMcpConfig()`、`saveMcpConfig()`、`createDefaultMcpClient()`、`upsertMcpClient()`、`deleteMcpClient()`、`parseMcpServerConfigJson()`、`formatMcpServerConfigJson()`、`getAvailableMcpClients()`、`getSelectedMcpClientIds()`、`setSelectedMcpClientIds()`、`isMcpEnabledForConversation()`、`collectMcpToolDefinitions()`、`listMcpTools()`、`callMcpToolByRegistryEntry()`、`initWebMcpServer()`、`getWebMcpTools()`、`buildWebMcpManifest()`、`addMcpLog()`、`clearMcpLogs()` 和 `formatMcpContentText()`。
+- 新增 `src/js/tool_chat_engine.js`：导出 `completeToolPrivateMessageReply()`，用于启用 MCP 后的独立私聊回复流程。该流程支持流式输出、OpenAI-compatible tool calls、MCP 工具结果回填和 `message.meta.toolTrace`。
+- `src/js/tool_chat_engine.js` 的工具流程为通用多步 agent loop：`MAX_TOOL_AGENT_STEPS = 50`，每步都允许模型继续选择任意 MCP tool；工具结果作为本轮临时 `role: "tool"` message 回填给模型，不写入长期记忆或后续聊天上下文。异常或达到上限时，`toolTrace.resumeState` 保存压缩后的续跑上下文。
+- 新增 `backend/mcp_relay.mjs`：通用 Node.js stdio MCP Relay，供 Tauri/Electron/Capacitor/WebView 壳层启动或直接运行。
+- 新增资源 `src/_logo/icons/wrench.svg`：左侧工具调用入口、MCP 客户端列表和工具调用状态栏使用的工具图标。
+- 新增存储键 `localStorage.fritia_mcp_tool_config`：保存 WebMCP 服务端开关、MCP 客户端配置、用户填写的 `configJson` 配置文本、会话选中 MCP、权限和系统日志。
+- 新增 DOM：左侧导航 `data-panel-open="tool-call-panel"`；聊天头 `#external-tools-toggle-btn`；工具多选浮层 `#mcp-picker-popover`；配置窗口 `#tool-call-panel`。
+- `#tool-call-panel` 内部 DOM：`[data-tool-section]` / `[data-tool-view]` 切换 MCP 客户端、MCP 服务端、Skills、权限设置、系统日志。
+- MCP 客户端 DOM：`[data-mcp-transport]`、`#mcp-client-list`、`#mcp-client-add`、`#mcp-client-name`、`#mcp-client-enabled`、`#mcp-client-json`、`#mcp-client-save`、`#mcp-client-delete`、`#mcp-client-json-status`。
+- WebMCP 服务端 DOM：`#webmcp-server-enabled`、`#webmcp-server-confirm`、`#webmcp-server-json`、`#webmcp-server-save`、`#webmcp-server-manifest`；运行时还会在 `<head>` 写入 `#fritia-webmcp-manifest` JSON script。
+- 权限和日志 DOM：`#mcp-permission-level`、`#mcp-permission-manual`、`#mcp-permission-remote`、`#mcp-permission-stdio`、`#mcp-permission-share-character`、`#mcp-permission-share-memory`、`#mcp-log-count`、`#mcp-log-clear`、`#mcp-log-list`。
+- `src/js/ui.js` 新增状态：`toolPanelSection`、`mcpTransport`、`selectedMcpClientId`、`mcpPickerOpen`。新增 UI 函数：`bindToolCallPanel()`、`showToolSection()`、`renderToolCallPanel()`、`renderMcpClientEditor()`、`saveSelectedMcpClientFromForm()`、`renderWebMcpServerPanel()`、`renderMcpPermissionPanel()`、`renderMcpLogPanel()`、`renderMcpPicker()`、`createToolTraceNode()`、`createToolCallGroupNode()`、`createMessageAttachmentNode()`、`saveAttachmentToUserDevice()`。
+- `src/js/ui.js` 的 `continueConversationAfterOutgoing()` 在私聊中检测当前会话的 MCP 选择；选中 MCP 时调用 `completeToolPrivateMessageReply()`，否则保持原 `completePrivateMessageReply()` 日常聊天路径。
+- `src/styles/app.css` 新增 CSS 分区：`.mcp-picker-*`、`.message-tool-trace`、`.tool-trace-card`、`.tool-trace-call-group`、`.tool-trace-call-list`、`.message-attachment-file`、`.tool-shell`、`.tool-layout`、`.tool-nav`、`.tool-client-*`、`.tool-card`、`.tool-log-*`、`.tool-skill-*`；移动端追加 `@media (max-width: 760px)` 工具窗口单列布局。
+- `sw.js`：缓存版本 `fritia-next-chat-v11`，核心缓存新增工具调用模块和 `wrench.svg`。
+- `src/js/mcp_tools.js` 配置解析：`parseMcpServerConfigJson()` 接受标准 `{ "mcpServers": { "<name>": { ... } } }`，并为历史存档兼容扁平 `{ "transport": "...", ... }`；`formatMcpServerConfigJson()` 只生成标准 `mcpServers` 结构，不再生成扁平模板。Streamable HTTP 新建、删除兜底和空白保存时，`configJson` / `#mcp-client-json` 保持空白。
+- `src/js/mcp_tools.js` Streamable HTTP：桌面打包端检测 `window.__FRITIA_MCP_HTTP_RELAY__` 后优先走原生 HTTP MCP relay；纯网页端继续走浏览器 `fetch`，并支持按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream`。原生 relay 返回的 `sessionId` / `session_id` 都会写回会话缓存；`getRemoteUrlCandidates()` / `withClientUrl()` 只在运行时对 `localhost` / `127.0.0.1` 做同机 fallback，不改写保存的 `configJson`。
+- `src/js/mcp_tools.js` Legacy SSE：`MCP_TRANSPORTS.SSE` 通过 GET 打开 SSE 流、解析 endpoint、POST JSON-RPC 消息，并按 JSON-RPC `id` 从 SSE message 事件匹配响应。
+- `backend/mcp_relay.mjs`：首次请求前自动初始化 stdio MCP session；Windows 下 `createSpawnCommand()` 会对 `.cmd` / `.bat` / 无扩展命令使用 `cmd.exe /d /s /c` 包装，解决 `npx` 类 MCP server 无法稳定启动的问题。
+- `src/js/tool_chat_engine.js` 工具选择策略保持通用：依据 MCP 工具列表的名称、描述和参数 schema 让模型选择工具，不绑定具体 MCP Server。
+- `src/js/tool_chat_engine.js` 会识别“我继续处理 / 要我继续吗 / 下一步我会操作”等中间话术，通过追加临时 system 指令继续推进工具调用，避免 bot 输出一句自然语言后提前结束 MCP 流程。
+- `src/js/tool_chat_engine.js` 续跑映射：`getResumableToolState()` 识别用户“继续”请求，读取最近一条 `toolTrace.interrupted` 消息的 `resumeState`；`setTraceResumeState()` / `compactResumeMessages()` 保存中断点；成功完成时 `finishTrace()` 清理 `resumeState`。
+- `src/js/tool_chat_engine.js` 附件映射：`extractMessageAttachments()` 读取模型 content parts；`extractMcpResultAttachments()` 读取 MCP `image` / `audio` / `resource` / file-like content；`normalizeGeneratedAttachments()` 尝试写入 IndexedDB 媒体库；最终消息附件由 `createMessageAttachmentNode()` 渲染。
+- `src/js/mcp_tools.js` 权限映射：`assertMcpPermission()` 使用全局 `permissions.level` 与 `permissions.requireManualApproval` 决定是否弹窗，客户端 `permission: "off"` 作为单客户端禁用开关。
+- Windows v0.3.0 Tauri 外部打包壳层映射：`desktop_mcp_relay.js` 暴露 `window.__FRITIA_MCP_RELAY__`、`window.__FRITIA_MCP_HTTP_RELAY__` 并监听 `F12`；Rust command 包含 `mcp_stdio_request`、`mcp_http_request`、`open_devtools`。
+
 ## 2026-07-05 Runtime Environment Detection And WebDAV CORS Mapping
 
 - 新增 `src/js/runtime_env.js`：导出 `RUNTIME_ENV_TYPES`、`initRuntimeEnvironment()`、`detectRuntimeEnvironment()`、`getRuntimeEnvironment()`、`getRuntimeEnvironmentType()`、`isBrowserFrontendRuntime()`。

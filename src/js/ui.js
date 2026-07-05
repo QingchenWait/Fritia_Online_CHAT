@@ -44,6 +44,26 @@ import {
 } from './long_term_memory.js';
 import { addStickerFiles, deleteSticker, isWideSticker, listStickers, stickerToAttachment } from './stickers.js';
 import { completePrivateMessageReply } from './chat_engine.js';
+import { completeToolPrivateMessageReply } from './tool_chat_engine.js';
+import {
+  MCP_CONFIG_EVENT,
+  MCP_TRANSPORTS,
+  buildWebMcpManifest,
+  clearMcpLogs,
+  createDefaultMcpClient,
+  deleteMcpClient,
+  formatMcpServerConfigJson,
+  getAvailableMcpClients,
+  getMcpConfig,
+  getSelectedMcpClientIds,
+  getWebMcpTools,
+  initWebMcpServer,
+  isMcpEnabledForConversation,
+  parseMcpServerConfigJson,
+  saveMcpConfig,
+  setSelectedMcpClientIds,
+  upsertMcpClient
+} from './mcp_tools.js';
 import { getRoundtableError, runRoundtableTurn } from './roundtable.js';
 import { getMediaDataUrl, isMediaRef, saveFileAsMedia } from './media_store.js';
 import {
@@ -105,6 +125,10 @@ const state = {
     progress: 0
   },
   archiveConflict: null,
+  toolPanelSection: 'client',
+  mcpTransport: MCP_TRANSPORTS.STREAMABLE_HTTP,
+  selectedMcpClientId: '',
+  mcpPickerOpen: false,
   stickerPopoverOpen: false,
   voiceNotice: null,
   characterImport: {
@@ -143,6 +167,7 @@ const state = {
 
 export function initUi() {
   state.store = loadAppStore();
+  initWebMcpServer({ getStore: () => state.store });
   bindGlobalEvents();
   applyStoredConversationListWidth();
   syncSettingsToForm();
@@ -185,6 +210,11 @@ function bindGlobalEvents() {
   });
   document.addEventListener('fritia-archive-sync-updated', () => {
     renderArchivePanel();
+  });
+  document.addEventListener(MCP_CONFIG_EVENT, () => {
+    renderToolCallPanel();
+    renderMcpPicker();
+    updateConversationChrome(getActiveConversation());
   });
   document.addEventListener('fritia-archive-sync-status', event => {
     state.archiveProgress = event.detail || state.archiveProgress;
@@ -237,6 +267,10 @@ function bindGlobalEvents() {
 
   document.getElementById('conversation-search')?.addEventListener('input', renderConversationList);
   document.getElementById('voice-reply-toggle-btn')?.addEventListener('click', togglePrivateVoiceReply);
+  document.getElementById('external-tools-toggle-btn')?.addEventListener('click', event => {
+    event.stopPropagation();
+    toggleMcpPicker();
+  });
   document.querySelector('[data-chat-info-toggle]')?.addEventListener('click', handleChatInfoToggle);
   document.getElementById('roundtable-error-btn')?.addEventListener('click', event => {
     event.stopPropagation();
@@ -287,12 +321,20 @@ function bindGlobalEvents() {
     closeStickerPopover();
   });
   document.addEventListener('click', event => {
+    if (!state.mcpPickerOpen) return;
+    const popover = document.getElementById('mcp-picker-popover');
+    const button = document.getElementById('external-tools-toggle-btn');
+    if (popover?.contains(event.target) || button?.contains(event.target)) return;
+    closeMcpPicker();
+  });
+  document.addEventListener('click', event => {
     if (!event.target.closest('.custom-select')) closeCustomSelects();
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       closeQuickCreateMenu();
       closeCustomSelects();
+      closeMcpPicker();
     }
   });
 
@@ -306,6 +348,7 @@ function bindGlobalEvents() {
   bindKnowledge();
   bindMemoryPanel();
   bindArchivePanel();
+  bindToolCallPanel();
 }
 
 function bindQuickCreateMenu() {
@@ -347,6 +390,72 @@ function closeQuickCreateMenu() {
   if (!state.quickCreateMenuOpen) return;
   state.quickCreateMenuOpen = false;
   renderQuickCreateMenu();
+}
+
+function toggleMcpPicker() {
+  const conversation = getActiveConversation();
+  if (!conversation || conversation.type !== 'private') return;
+  state.mcpPickerOpen = !state.mcpPickerOpen;
+  renderMcpPicker();
+}
+
+function closeMcpPicker() {
+  if (!state.mcpPickerOpen) return;
+  state.mcpPickerOpen = false;
+  renderMcpPicker();
+}
+
+function renderMcpPicker() {
+  const popover = document.getElementById('mcp-picker-popover');
+  const button = document.getElementById('external-tools-toggle-btn');
+  if (!popover || !button) return;
+  const conversation = getActiveConversation();
+  const isPrivate = conversation?.type === 'private';
+  const clients = getAvailableMcpClients();
+  const selectedIds = new Set(isPrivate ? getSelectedMcpClientIds(conversation.id) : []);
+  button.classList.toggle('hidden', !isPrivate);
+  button.classList.toggle('is-active', selectedIds.size > 0);
+  button.setAttribute('aria-pressed', String(selectedIds.size > 0));
+  button.setAttribute('aria-expanded', String(state.mcpPickerOpen && isPrivate));
+  if (!isPrivate || !state.mcpPickerOpen) {
+    popover.classList.add('hidden');
+    return;
+  }
+  popover.classList.remove('hidden');
+  if (!clients.length) {
+    popover.innerHTML = `
+      <div class="mcp-picker-empty">
+        <strong>暂无可用 MCP 客户端</strong>
+        <span>请先在“工具调用”中添加 Streamable HTTP 服务。</span>
+      </div>
+    `;
+    return;
+  }
+  popover.innerHTML = clients.map(client => `
+    <label class="mcp-picker-item">
+      <input type="checkbox" value="${escapeHtml(client.id)}" ${selectedIds.has(client.id) ? 'checked' : ''}>
+      <span class="mcp-picker-icon"><img src="src/_logo/icons/${client.transport === MCP_TRANSPORTS.STDIO ? 'mic' : 'wrench'}.svg" alt=""></span>
+      <span><strong>${escapeHtml(client.name)}</strong><small>${escapeHtml(clientSubtitle(client))}</small></span>
+    </label>
+  `).join('');
+  popover.querySelectorAll('input[type="checkbox"]').forEach(input => {
+    input.addEventListener('change', event => {
+      event.stopPropagation();
+      const next = new Set(getSelectedMcpClientIds(conversation.id));
+      if (event.target.checked) next.add(event.target.value);
+      else next.delete(event.target.value);
+      setSelectedMcpClientIds(conversation.id, [...next]);
+      const character = getCharacterById(state.store.characters, conversation.memberIds[0]);
+      if (next.size) {
+        showVoiceNotice({
+          conversationId: conversation.id,
+          level: 'info',
+          text: `现在 ${character?.name || conversationTitle(conversation)} 可以调用外部工具了。`
+        });
+      }
+      renderMcpPicker();
+    });
+  });
 }
 
 function bindComposer() {
@@ -498,6 +607,21 @@ function continueConversationAfterOutgoing(committed) {
   }
   const character = getCharacterById(store.characters, conversation.memberIds[0]);
   if (!character) return;
+  const selectedMcpClientIds = getSelectedMcpClientIds(conversation.id);
+  if (selectedMcpClientIds.length) {
+    completeToolPrivateMessageReply({
+      store,
+      conversation,
+      character,
+      text: message.text,
+      userMessage: message,
+      selectedClientIds: selectedMcpClientIds,
+      onStore: updateStore
+    }).catch(error => {
+      console.warn('[ui] tool private reply failed', error);
+    });
+    return;
+  }
   completePrivateMessageReply({
     store,
     conversation,
@@ -1102,6 +1226,283 @@ function setArchiveButtonsDisabled(disabled) {
   });
 }
 
+function bindToolCallPanel() {
+  document.querySelectorAll('[data-tool-section]').forEach(button => {
+    button.addEventListener('click', () => showToolSection(button.dataset.toolSection));
+  });
+  document.querySelectorAll('[data-mcp-transport]').forEach(button => {
+    button.addEventListener('click', () => {
+      state.mcpTransport = button.dataset.mcpTransport === MCP_TRANSPORTS.STDIO
+        ? MCP_TRANSPORTS.STDIO
+        : MCP_TRANSPORTS.STREAMABLE_HTTP;
+      state.selectedMcpClientId = '';
+      renderToolCallPanel();
+    });
+  });
+  document.getElementById('mcp-client-add')?.addEventListener('click', () => {
+    const client = createDefaultMcpClient(state.mcpTransport);
+    state.selectedMcpClientId = client.id;
+    upsertMcpClient(client);
+  });
+  document.getElementById('mcp-client-save')?.addEventListener('click', saveSelectedMcpClientFromForm);
+  document.getElementById('mcp-client-delete')?.addEventListener('click', () => {
+    if (!state.selectedMcpClientId) return;
+    deleteMcpClient(state.selectedMcpClientId);
+    state.selectedMcpClientId = '';
+    renderToolCallPanel();
+  });
+  document.getElementById('mcp-client-name')?.addEventListener('input', updateMcpClientDraftHeader);
+  document.getElementById('mcp-client-json')?.addEventListener('input', updateMcpClientDraftHeader);
+  document.getElementById('webmcp-server-save')?.addEventListener('click', saveWebMcpServerFromForm);
+  document.getElementById('mcp-permission-save')?.addEventListener('click', saveMcpPermissionsFromForm);
+  document.getElementById('mcp-log-clear')?.addEventListener('click', () => {
+    clearMcpLogs();
+    renderToolCallPanel();
+  });
+  renderToolCallPanel();
+}
+
+function showToolSection(section = 'client') {
+  state.toolPanelSection = section;
+  document.querySelectorAll('[data-tool-section]').forEach(button => {
+    button.classList.toggle('is-active', button.dataset.toolSection === section);
+  });
+  document.querySelectorAll('[data-tool-view]').forEach(view => {
+    view.classList.toggle('is-active', view.dataset.toolView === section);
+  });
+  renderToolCallPanel();
+}
+
+function renderToolCallPanel() {
+  const panel = document.getElementById('tool-call-panel');
+  if (!panel) return;
+  document.querySelectorAll('[data-mcp-transport]').forEach(button => {
+    button.classList.toggle('is-active', button.dataset.mcpTransport === state.mcpTransport);
+  });
+  renderMcpClientEditor();
+  renderWebMcpServerPanel();
+  renderWebMcpSkills();
+  renderMcpPermissionPanel();
+  renderMcpLogPanel();
+}
+
+function renderMcpClientEditor() {
+  const config = getMcpConfig();
+  const clients = config.clients.filter(client => (
+    state.mcpTransport === MCP_TRANSPORTS.STDIO
+      ? client.transport === MCP_TRANSPORTS.STDIO
+      : client.transport !== MCP_TRANSPORTS.STDIO
+  ));
+  const list = document.getElementById('mcp-client-list');
+  if (!list) return;
+  if (!clients.some(client => client.id === state.selectedMcpClientId)) {
+    state.selectedMcpClientId = clients[0]?.id || '';
+  }
+  list.innerHTML = '';
+  for (const client of clients) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `tool-client-item${client.id === state.selectedMcpClientId ? ' is-active' : ''}`;
+    button.innerHTML = `
+      <img src="src/_logo/icons/${client.transport === MCP_TRANSPORTS.STDIO ? 'mic' : 'wrench'}.svg" alt="">
+      <span><strong>${escapeHtml(client.name)}</strong><small>${escapeHtml(clientSubtitle(client))}</small></span>
+      <em>${client.enabled ? 'ON' : 'OFF'}</em>
+    `;
+    button.addEventListener('click', () => {
+      state.selectedMcpClientId = client.id;
+      renderToolCallPanel();
+    });
+    list.appendChild(button);
+  }
+  if (!clients.length) {
+    list.innerHTML = '<div class="tool-empty">当前传输类型还没有 MCP 服务。</div>';
+  }
+  const selected = clients.find(client => client.id === state.selectedMcpClientId) || null;
+  syncMcpClientForm(selected);
+}
+
+function syncMcpClientForm(client) {
+  const disabled = !client;
+  ['mcp-client-name', 'mcp-client-enabled', 'mcp-client-json', 'mcp-client-save', 'mcp-client-delete'].forEach(id => {
+    const element = document.getElementById(id);
+    if (element) element.disabled = disabled;
+  });
+  setValue('mcp-client-name', client?.name || '');
+  setChecked('mcp-client-enabled', client?.enabled);
+  const json = client
+    ? (client.configJson || (client.transport === MCP_TRANSPORTS.STDIO
+      ? formatMcpServerConfigJson(client.config, client.transport, client.name)
+      : ''))
+    : '';
+  setValue('mcp-client-json', json);
+  setText('mcp-client-title', client?.name || '未选择服务');
+  setText('mcp-client-subtitle', client ? clientSubtitle(client) : '点击新增创建 MCP 客户端');
+  setText('mcp-client-json-status', client ? '填写 JSON 后点击保存。' : '没有可编辑的 MCP 服务。');
+}
+
+function updateMcpClientDraftHeader() {
+  const name = document.getElementById('mcp-client-name')?.value.trim() || 'MCP 服务';
+  const rawJson = document.getElementById('mcp-client-json')?.value || '';
+  setText('mcp-client-title', name);
+  if (!rawJson.trim()) {
+    setText('mcp-client-subtitle', '服务器配置 JSON');
+    setText('mcp-client-json-status', '服务器配置 JSON 为空，保存后该客户端不会执行。');
+    return;
+  }
+  try {
+    const config = parseMcpServerConfigJson(rawJson, state.mcpTransport);
+    setText('mcp-client-subtitle', config.url || config.command || '服务器配置 JSON');
+    setText('mcp-client-json-status', 'JSON 格式有效，保存后会保留当前原文。');
+  } catch (error) {
+    setText('mcp-client-subtitle', '服务器配置 JSON');
+    setText('mcp-client-json-status', error?.message || 'JSON 格式无效。');
+  }
+}
+
+function saveSelectedMcpClientFromForm() {
+  const config = getMcpConfig();
+  const current = config.clients.find(client => client.id === state.selectedMcpClientId);
+  if (!current) return;
+  try {
+    const rawJson = (document.getElementById('mcp-client-json')?.value || '').trim();
+    const serverConfig = rawJson
+      ? parseMcpServerConfigJson(rawJson, state.mcpTransport)
+      : createBlankMcpClientConfig(state.mcpTransport);
+    const name = document.getElementById('mcp-client-name')?.value.trim() || serverConfig.name || current.name;
+    const saved = upsertMcpClient({
+      ...current,
+      name,
+      enabled: document.getElementById('mcp-client-enabled')?.checked === true,
+      transport: serverConfig.transport || state.mcpTransport,
+      config: serverConfig,
+      configJson: rawJson
+    });
+    state.mcpTransport = serverConfig.transport === MCP_TRANSPORTS.STDIO
+      ? MCP_TRANSPORTS.STDIO
+      : MCP_TRANSPORTS.STREAMABLE_HTTP;
+    state.selectedMcpClientId = current.id;
+    setText('mcp-client-json-status', '配置已保存，服务器配置 JSON 原文已保留。');
+    renderMcpPicker();
+    return saved;
+  } catch (error) {
+    setText('mcp-client-json-status', error?.message || '配置保存失败。');
+    return null;
+  }
+}
+
+function createBlankMcpClientConfig(transport) {
+  if (transport === MCP_TRANSPORTS.STDIO) {
+    return {
+      transport: MCP_TRANSPORTS.STDIO,
+      command: '',
+      args: [],
+      env: {},
+      cwd: '',
+      relayUrl: 'http://127.0.0.1:17373/mcp',
+      timeout: 30
+    };
+  }
+  return {
+    transport: transport === MCP_TRANSPORTS.SSE ? MCP_TRANSPORTS.SSE : MCP_TRANSPORTS.STREAMABLE_HTTP,
+    url: '',
+    headers: {},
+    timeout: 10,
+    sse_read_timeout: 300
+  };
+}
+
+function renderWebMcpServerPanel() {
+  const config = getMcpConfig();
+  const server = config.webMcpServer || {};
+  setChecked('webmcp-server-enabled', server.enabled);
+  setChecked('webmcp-server-confirm', server.requireConfirmation);
+  setValue('webmcp-server-json', JSON.stringify(server, null, 2));
+  const manifest = document.getElementById('webmcp-server-manifest');
+  if (manifest) manifest.textContent = JSON.stringify(buildWebMcpManifest(state.store), null, 2);
+}
+
+function saveWebMcpServerFromForm() {
+  try {
+    const raw = JSON.parse(document.getElementById('webmcp-server-json')?.value || '{}');
+    saveMcpConfig({
+      webMcpServer: {
+        ...raw,
+        enabled: document.getElementById('webmcp-server-enabled')?.checked === true,
+        requireConfirmation: document.getElementById('webmcp-server-confirm')?.checked === true
+      }
+    });
+  } catch (error) {
+    window.alert(`WebMCP 服务端配置 JSON 无效：${error?.message || '未知错误'}`);
+  }
+}
+
+function renderWebMcpSkills() {
+  const container = document.getElementById('webmcp-skill-list');
+  if (!container) return;
+  container.innerHTML = getWebMcpTools().map(tool => `
+    <article class="tool-skill-item">
+      <img src="src/_logo/icons/bot.svg" alt="">
+      <div>
+        <strong>${escapeHtml(tool.name)}</strong>
+        <p>${escapeHtml(tool.description)}</p>
+      </div>
+    </article>
+  `).join('');
+}
+
+function renderMcpPermissionPanel() {
+  const permissions = getMcpConfig().permissions;
+  setValue('mcp-permission-level', permissions.level);
+  setChecked('mcp-permission-manual', permissions.requireManualApproval);
+  setChecked('mcp-permission-remote', permissions.allowRemoteHttp);
+  setChecked('mcp-permission-stdio', permissions.allowLocalStdio);
+  setChecked('mcp-permission-share-character', permissions.shareCharacterProfile);
+  setChecked('mcp-permission-share-memory', permissions.shareLongTermMemory);
+}
+
+function saveMcpPermissionsFromForm() {
+  saveMcpConfig({
+    permissions: {
+      level: document.getElementById('mcp-permission-level')?.value || 'ask',
+      requireManualApproval: document.getElementById('mcp-permission-manual')?.checked === true,
+      allowRemoteHttp: document.getElementById('mcp-permission-remote')?.checked === true,
+      allowLocalStdio: document.getElementById('mcp-permission-stdio')?.checked === true,
+      shareCharacterProfile: document.getElementById('mcp-permission-share-character')?.checked === true,
+      shareLongTermMemory: document.getElementById('mcp-permission-share-memory')?.checked === true
+    }
+  });
+}
+
+function renderMcpLogPanel() {
+  const config = getMcpConfig();
+  const logs = config.logs || [];
+  setText('mcp-log-count', `${logs.length} 条日志`);
+  const container = document.getElementById('mcp-log-list');
+  if (!container) return;
+  if (!logs.length) {
+    container.innerHTML = '<div class="tool-empty">暂无 MCP 调用日志。</div>';
+    return;
+  }
+  container.innerHTML = logs.map(log => `
+    <article class="tool-log-item is-${escapeHtml(log.status)}">
+      <header>
+        <strong>${escapeHtml(log.toolName || 'MCP')}</strong>
+        <span>${escapeHtml(log.source)} · ${formatMessageTime(log.createdAt)}</span>
+      </header>
+      <dl>
+        <div><dt>参数</dt><dd><pre>${escapeHtml(JSON.stringify(log.args || {}, null, 2))}</pre></dd></div>
+        <div><dt>结果</dt><dd><pre>${escapeHtml(log.result || '')}</pre></dd></div>
+      </dl>
+    </article>
+  `).join('');
+}
+
+function clientSubtitle(client) {
+  return client?.transport === MCP_TRANSPORTS.STDIO
+    ? `${client.config.command || 'stdio'} ${(client.config.args || []).join(' ')}`.trim()
+    : client?.config?.url || '';
+}
+
 function bindSettings() {
   enhanceCustomSelects();
   document.querySelectorAll('[data-model-tab]').forEach(button => {
@@ -1543,6 +1944,7 @@ function renderAll() {
   renderMentionPicker();
   renderStickerPopover();
   renderStickerManager();
+  renderMcpPicker();
   updateContextStatus();
   renderRoundtableErrorIndicator();
   renderVoiceErrorIndicator();
@@ -1687,29 +2089,148 @@ function createMessageNode(message) {
     const stickerOnly = isStickerOnlyMessage(text, attachments);
     if (stickerOnly) content.classList.add('message-content--sticker-only');
     if (text.trim()) renderMessageText(content, text);
-    for (const attachment of attachments) {
-      if (attachment.type === 'image' && (attachment.dataRef || attachment.dataUrl)) {
-        const image = document.createElement('img');
-        const stickerMeta = resolveStickerAttachmentMeta(attachment);
-        image.className = `message-image${stickerMeta ? ` message-image-sticker ${getStickerAttachmentOrientation(stickerMeta)}` : ''}`;
-        setImageSource(image, attachment.dataRef || attachment.dataUrl);
-        image.alt = attachment.name || '图片';
-        if (content.childNodes.length) content.appendChild(document.createElement('br'));
-        content.appendChild(image);
-      } else {
-        const line = document.createElement('div');
-        line.textContent = `[附件] ${attachment.name || attachment.mime || '未命名'}`;
-        content.appendChild(line);
-      }
+    for (const [index, attachment] of attachments.entries()) {
+      const node = createMessageAttachmentNode(message, attachment, index);
+      if (!node) continue;
+      if (content.childNodes.length) content.appendChild(document.createElement('br'));
+      content.appendChild(node);
     }
   }
   const meta = document.createElement('div');
   meta.className = 'message-meta';
   meta.textContent = `${formatMessageTime(message.createdAt)}${message.status === 'error' ? ' · 失败' : ''}`;
-  bubble.append(name, content, meta);
+  bubble.append(name);
+  if (message.meta?.toolTrace) {
+    bubble.appendChild(createToolTraceNode(message.meta.toolTrace));
+  }
+  bubble.append(content, meta);
   if (message.role === 'user') row.append(bubble, avatar);
   else row.append(avatar, bubble);
   return row;
+}
+
+function createMessageAttachmentNode(message, attachment, index = 0) {
+  if (!attachment) return null;
+  if (attachment.type === 'image' && (attachment.dataRef || attachment.dataUrl || attachment.url)) {
+    const image = document.createElement('img');
+    const stickerMeta = resolveStickerAttachmentMeta(attachment);
+    image.className = `message-image${stickerMeta ? ` message-image-sticker ${getStickerAttachmentOrientation(stickerMeta)}` : ''}`;
+    setImageSource(image, attachment.dataRef || attachment.dataUrl || attachment.url);
+    image.alt = attachment.name || '图片';
+    return image;
+  }
+  if (attachment.type === 'audio' && (attachment.dataRef || attachment.dataUrl || attachment.url)) {
+    return createVoiceBubble(message, attachment, `${message.id}:attachment:${index}`);
+  }
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'message-attachment-file';
+  button.title = '保存附件';
+  button.setAttribute('aria-label', `保存附件 ${attachment.name || attachment.mime || '未命名'}`);
+  const icon = document.createElement('img');
+  icon.src = 'src/_logo/icons/paperclip.svg';
+  icon.alt = '';
+  const text = document.createElement('span');
+  const name = document.createElement('strong');
+  name.textContent = attachment.name || attachment.mime || '未命名附件';
+  const meta = document.createElement('small');
+  meta.textContent = [attachment.mime || attachment.type || 'attachment', attachment.size ? formatBytes(attachment.size) : ''].filter(Boolean).join(' · ');
+  text.append(name, meta);
+  button.append(icon, text);
+  button.addEventListener('click', () => {
+    saveAttachmentToUserDevice(attachment).catch(error => {
+      console.warn('[ui] attachment save failed', error);
+      window.alert(`附件保存失败：${error?.message || '未知错误'}`);
+    });
+  });
+  return button;
+}
+
+function createToolTraceNode(trace = {}) {
+  const wrap = document.createElement('div');
+  wrap.className = 'message-tool-trace';
+  const thoughts = Array.isArray(trace.thoughts) ? trace.thoughts : [];
+  for (const thought of thoughts.length ? thoughts : [{ title: '思考中', content: '正在处理。', status: 'running' }]) {
+    wrap.appendChild(createTraceDetails({
+      icon: 'sparkles_3d.png',
+      title: thought.title || '思考中',
+      status: thought.status || 'running',
+      body: thought.content || ''
+    }, trace.collapsed));
+  }
+  const calls = Array.isArray(trace.calls) ? trace.calls : [];
+  if (calls.length) wrap.appendChild(createToolCallGroupNode(calls));
+  return wrap;
+}
+
+function createToolCallGroupNode(calls = []) {
+  const latest = calls[calls.length - 1] || {};
+  const status = calls.some(call => call.status === 'error')
+    ? 'error'
+    : calls.some(call => !['success', 'done'].includes(call.status))
+      ? 'running'
+      : 'success';
+  const details = document.createElement('details');
+  details.className = `tool-trace-card tool-trace-call-group is-${status}`;
+  const summary = createTraceSummary({
+    icon: 'wrench.svg',
+    title: `MCP 调用：${latest.toolName || 'tool'}`,
+    status,
+    statusLabel: `${traceStatusLabel(status)} · ${calls.length} 次`
+  });
+  const list = document.createElement('div');
+  list.className = 'tool-trace-call-list';
+  calls.forEach((call, index) => {
+    list.appendChild(createTraceDetails({
+      icon: 'wrench.svg',
+      title: `${index + 1}. ${call.toolName || 'tool'}`,
+      status: call.status || 'running',
+      body: buildToolCallTraceBody(call)
+    }, true));
+  });
+  details.append(summary, list);
+  return details;
+}
+
+function buildToolCallTraceBody(call = {}) {
+  return [
+    call.clientName ? `服务：${call.clientName}` : '',
+    `参数：\n${JSON.stringify(call.args || {}, null, 2)}`,
+    call.result ? `结果：\n${call.result}` : '',
+    Array.isArray(call.attachments) && call.attachments.length
+      ? `附件：\n${call.attachments.map(item => item.name || item.mime || item.type || '附件').join('\n')}`
+      : ''
+  ].filter(Boolean).join('\n\n');
+}
+
+function createTraceDetails(item, collapsed) {
+  const details = document.createElement('details');
+  details.className = `tool-trace-card is-${item.status || 'running'}`;
+  details.open = !collapsed && item.status === 'error';
+  const summary = createTraceSummary(item);
+  const body = document.createElement('pre');
+  body.textContent = item.body || '';
+  details.append(summary, body);
+  return details;
+}
+
+function createTraceSummary(item) {
+  const summary = document.createElement('summary');
+  const icon = document.createElement('img');
+  icon.alt = '';
+  icon.src = item.icon?.endsWith('.png') ? `src/_logo/emoji/${item.icon}` : `src/_logo/icons/${item.icon || 'wrench.svg'}`;
+  const title = document.createElement('strong');
+  title.textContent = item.title;
+  const status = document.createElement('span');
+  status.textContent = item.statusLabel || traceStatusLabel(item.status);
+  summary.append(icon, title, status);
+  return summary;
+}
+
+function traceStatusLabel(status) {
+  if (status === 'success' || status === 'done') return '完成';
+  if (status === 'error') return '异常';
+  return '运行中';
 }
 
 function createVoiceNoticeNode(notice) {
@@ -1727,12 +2248,13 @@ function getMessageVoiceAttachment(message) {
   return (message?.attachments || []).find(item => item.type === 'audio' && (item.dataRef || item.dataUrl)) || null;
 }
 
-function createVoiceBubble(message) {
-  const attachment = getMessageVoiceAttachment(message);
+function createVoiceBubble(message, attachmentOverride = null, playbackId = '') {
+  const attachment = attachmentOverride || getMessageVoiceAttachment(message);
+  const voiceId = playbackId || message.id;
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'voice-bubble';
-  button.dataset.voiceMessageId = message.id;
+  button.dataset.voiceMessageId = voiceId;
   button.setAttribute('aria-label', `播放 ${message.speakerName || '角色'} 的语音回复`);
   const icon = document.createElement('img');
   icon.src = 'src/_logo/icons/volume-2.svg';
@@ -1746,9 +2268,81 @@ function createVoiceBubble(message) {
   bars.className = 'voice-bubble__bars';
   bars.innerHTML = '<i></i><i></i><i></i>';
   button.append(icon, bars, duration);
-  button.addEventListener('click', () => toggleVoicePlayback(message.id, attachment));
-  updateVoiceBubblePlaybackState(button, message.id);
+  button.addEventListener('click', () => toggleVoicePlayback(voiceId, attachment));
+  updateVoiceBubblePlaybackState(button, voiceId);
   return button;
+}
+
+async function saveAttachmentToUserDevice(attachment = {}) {
+  const dataUrl = await resolveAttachmentDataUrl(attachment);
+  const fileName = safeDownloadName(attachment.name || `mcp-attachment${fileExtensionForMime(attachment.mime)}`);
+  if (dataUrl) {
+    const blob = dataUrlToBlob(dataUrl);
+    if (window.showDirectoryPicker) {
+      const directory = await window.showDirectoryPicker({ mode: 'readwrite' });
+      const fileHandle = await directory.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    }
+    if (window.showSaveFilePicker) {
+      const fileHandle = await window.showSaveFilePicker({ suggestedName: fileName });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    }
+    triggerBrowserDownload(dataUrl, fileName);
+    return;
+  }
+  const url = attachment.url || attachment.uri || '';
+  if (!url) throw new Error('附件没有可保存的数据。');
+  triggerBrowserDownload(url, fileName);
+}
+
+async function resolveAttachmentDataUrl(attachment = {}) {
+  if (attachment.dataRef) return getMediaDataUrl(attachment.dataRef);
+  return attachment.dataUrl || '';
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [meta, payload = ''] = String(dataUrl || '').split(',');
+  const mime = /^data:([^;,]+)/.exec(meta)?.[1] || 'application/octet-stream';
+  const binary = meta.includes(';base64') ? atob(payload) : decodeURIComponent(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mime });
+}
+
+function triggerBrowserDownload(url, fileName) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function safeDownloadName(name) {
+  const cleaned = String(name || 'mcp-attachment.bin').replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '_').trim();
+  return cleaned || 'mcp-attachment.bin';
+}
+
+function fileExtensionForMime(mime = '') {
+  const lower = String(mime || '').toLowerCase();
+  if (lower.includes('png')) return '.png';
+  if (lower.includes('jpeg') || lower.includes('jpg')) return '.jpg';
+  if (lower.includes('gif')) return '.gif';
+  if (lower.includes('webp')) return '.webp';
+  if (lower.includes('mpeg') || lower.includes('mp3')) return '.mp3';
+  if (lower.includes('wav')) return '.wav';
+  if (lower.includes('ogg')) return '.ogg';
+  if (lower.includes('json')) return '.json';
+  if (lower.includes('pdf')) return '.pdf';
+  if (lower.includes('text')) return '.txt';
+  return '.bin';
 }
 
 async function toggleVoicePlayback(messageId, attachment) {
@@ -3232,6 +3826,7 @@ function updateContextStatus() {
 
 function openPanel(id, options = {}) {
   closeQuickCreateMenu();
+  closeMcpPicker();
   if (id === 'character-edit-panel') {
     openCharacterEditPanel();
     syncMobileBackAvailability();
@@ -3248,6 +3843,7 @@ function openPanel(id, options = {}) {
     renderStickerManager();
   }
   if (id === 'archive-panel') renderArchivePanel();
+  if (id === 'tool-call-panel') renderToolCallPanel();
   syncMobileBackAvailability();
 }
 
@@ -3428,6 +4024,7 @@ function updateConversationChrome(conversation) {
   const app = document.getElementById('app');
   const infoButton = document.getElementById('chat-info-btn');
   const voiceButton = document.getElementById('voice-reply-toggle-btn');
+  const toolButton = document.getElementById('external-tools-toggle-btn');
   if (!app) return;
   const isPrivate = conversation?.type === 'private';
   const isGroup = conversation?.type === 'group';
@@ -3447,6 +4044,13 @@ function updateConversationChrome(conversation) {
     voiceButton.classList.toggle('is-active', enabled);
     voiceButton.setAttribute('aria-pressed', String(enabled));
     voiceButton.title = enabled ? '关闭语音回复' : '开启语音回复';
+  }
+  if (toolButton) {
+    const enabled = Boolean(isPrivate && isMcpEnabledForConversation(conversation?.id || ''));
+    toolButton.classList.toggle('hidden', !isPrivate);
+    toolButton.classList.toggle('is-active', enabled);
+    toolButton.setAttribute('aria-pressed', String(enabled));
+    toolButton.title = enabled ? '外部工具已启用' : '调用外部工具';
   }
   document.querySelectorAll('.detail-group-action').forEach(button => {
     button.classList.toggle('hidden', !isGroup);

@@ -1,5 +1,18 @@
 # Fritia Online NEXT Chat
 
+## 2026-07-06 Tool Calling / WebMCP / MCP Relay
+
+- 左侧主导航在“记忆节点”和“设置”之间新增“工具调用”入口，可配置 WebMCP 服务端、Streamable HTTP MCP 客户端、Stdio MCP 客户端、权限设置和系统日志。
+- 纯网页部署时，聊天头右上角原“视频通话占位”按钮会作为外部工具选择入口，只显示可用的 Streamable HTTP MCP 客户端；打包到 Tauri/Electron/Capacitor/WebView 后可同时显示本地 Stdio MCP。
+- 私聊启用外部工具后，会切换到独立的 `tool_chat_engine.js` 流式工具对话流程，消息中展示可折叠“思考中”和合并后的“MCP 调用”状态栏；状态详情保存到聊天历史，但不会写入长期记忆或后续 LLM 上下文。
+- 工具模式现在使用多步 agent loop：工具结果返回后会继续允许模型发起后续 MCP 调用，直到任务完成、工具不可用、权限被拒绝、明确失败或达到 50 步保护上限；“我继续处理 / 要我继续吗 / 下一步我会操作”这类中间话术不会直接结束 MCP 流程。达到上限或网络异常后，发送“继续”可从中断点续跑。
+- 工具模式回复支持文本以外的输出：图片直接展示，音频显示为可播放语音条，其他类型作为可保存附件展示。
+- WebMCP 服务端通过 `window.FritiaWebMCP` 和页面内 `#fritia-webmcp-manifest` 暴露角色列表、角色上下文和按角色对话能力，让支持的浏览器 agent 继承本 APP 的人物人格、知识库、长期记忆和默认 LLM 配置。
+- 新增 `backend/mcp_relay.mjs`，作为打包客户端可复用的轻量 stdio MCP Relay。启动后默认监听 `127.0.0.1:17373`，前端 Stdio MCP 配置通过 relay 调用本地 MCP Server。
+- MCP 客户端 JSON 使用标准 `mcpServers` 配置文本，运行时按 `url` / `command` / `transport` / `type` 识别 Streamable HTTP、SSE 或 stdio；Streamable HTTP 新建、删除兜底和空白保存时不会预置模板，也不会把用户输入改写成内部扁平格式。对 `localhost` / `127.0.0.1` 会做运行时 loopback fallback，不改写存档。
+- Windows v0.3.0 Tauri 打包端对 Streamable HTTP MCP 使用原生 HTTP relay，按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应；stdio relay 会自动完成 MCP `initialize` / `notifications/initialized` 握手，并在 Windows 上兼容 `npx`、`npm` 等无扩展命令。
+- Windows v0.3.0 Tauri 打包端支持按 `F12` 呼出 WebView2 DevTools。
+
 ## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
 
 - 新增通用运行环境检测机制，项目启动时会识别当前运行在普通浏览器网页、localhost、本地 file 页面、Tauri、Electron、通用 WebView 或未知环境。
@@ -63,6 +76,7 @@
 - @ 机制：群聊输入框输入 `@` 会弹出成员候选列表，支持键盘选择、点击头像插入 @，bot 回复会按正确回复对象补 @ 前缀，避免角色 @ 自己。
 - 表情包：点击聊天输入栏“表情”按钮会打开表情包悬浮窗口，支持上传图片添加表情包，点击表情后按图片消息发送。表情管理窗口可添加、删除表情包，并预留“自动标签”页面。
 - 多模型配置：“设置 / 大模型”支持多个 OpenAI Compatible 对话提供商和多个 MiMO 文字转语音提供商，并可分别设置默认对话、默认文字转语音和默认图像转述模型。
+- 工具调用：支持 WebMCP 服务端、Streamable HTTP / SSE MCP 客户端和打包端 Stdio MCP Relay；工具调用配置、权限和日志保存在浏览器本地。
 - 存档备份：左侧“存档备份”窗口可导出/导入 ZIP 全量备份，并可通过 WebDAV 按具体数据文件增量同步到云端。
 - 私聊语音回复：私聊聊天头的电话按钮可切换语音回复模式。开启后，bot 会先生成回复文字，再按 MiMO `chat/completions` 音色复刻协议调用默认文字转语音模型生成声音克隆音频，并以语音气泡展示；后台仍保存回复文字供后续上下文使用。
 - 角色导入：支持上传头像、人格设定提示词、示例对话和 TTS 参考语音；保存后角色会出现在好友列表。
@@ -124,6 +138,79 @@ http://127.0.0.1:3000/
 旧版本保存的 `API Key`、`Base URL` 和模型名称会在读取设置时自动迁移为一个“对话”提供商源。
 
 未配置模型时，聊天会使用本地占位回复，方便检查 UI 和数据流。
+
+## 工具调用
+
+点击左侧“工具调用”按钮打开配置窗口：
+
+- “MCP 客户端”：新增或编辑服务器，填写标准 `mcpServers` 服务器配置 JSON。网页端可使用 Streamable HTTP / SSE；打包端可同时使用 Streamable HTTP / SSE 和 stdio。Streamable HTTP 的“服务器配置 JSON”默认保持空白，用户需要自行粘贴真实配置。
+- “MCP 服务端”：启用后页面会暴露 `window.FritiaWebMCP`，外部浏览器 agent 可读取 manifest 或调用角色工具。
+- “权限设置”：可设置默认调用级别、是否每次手动授权、是否允许远程 HTTP MCP 和本地 Stdio MCP。
+- “系统日志”：记录调用来源、工具名、参数、结果、时间和状态。
+
+推荐直接粘贴标准 MCP 客户端配置。保存后，配置框会保存你填写的标准 JSON 文本，不会改写成 APP 内部格式；如果 JSON 为空、格式错误或缺少 `url` / `command`，运行时会报错而不是自动套用模板。
+
+启用工具后，私聊会进入独立的工具对话流程。模型可以在同一轮回复中连续执行多个 MCP 工具步骤；如果模型先输出了“我继续帮你处理”“下一步我会点击”等中间文本，APP 会继续推进工具调用，而不是把这句文本当成最终回复。连续 MCP 调用会合并显示在同一个折叠框里，展开后可逐条查看参数和结果。只有最终回复会写入长期记忆，工具 trace 只保存到该条聊天记录中。
+
+权限设置中的“默认调用级别”和“工具调用前需要手动授权”会直接决定实际授权流程：设置为“允许已启用 MCP”且关闭手动授权时，不会每次弹出确认框。
+
+工具流程最多连续执行 50 步。若因为网络、模型输出或达到上限中断，消息 trace 会保存续跑状态；用户发送“继续”即可让工具模式从上次中断点继续处理。
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "url": "http://localhost:8931/mcp"
+    }
+  }
+}
+```
+
+Playwright MCP 的 HTTP 端口有 Host 检查，官方启动日志通常打印 `http://localhost:<port>/mcp`。如果写成 `127.0.0.1`，部分版本会返回 `403 Access is only allowed at localhost:<port>`；本 APP 会在运行时对 `localhost` 和 `127.0.0.1` 做同机 fallback，但推荐仍按 MCP 服务端打印的 URL 填写。
+
+Legacy SSE transport 可显式声明 `transport`：
+
+```json
+{
+  "mcpServers": {
+    "sse-server": {
+      "transport": "sse",
+      "url": "http://localhost:8931/sse"
+    }
+  }
+}
+```
+
+或 stdio：
+
+```json
+{
+  "mcpServers": {
+    "server-name": {
+      "command": "npx.cmd",
+      "args": ["-y", "your-mcp-server-package"],
+      "env": {},
+      "cwd": ""
+    }
+  }
+}
+```
+
+历史版本保存过的扁平配置仍可读取，但新建和保存不会再生成扁平 JSON。若工具列表读取失败，先确认 MCP 服务进程正在监听对应地址；纯网页端还需要 MCP HTTP 服务允许浏览器 CORS，打包端会走原生 HTTP relay 并携带 `Mcp-Session-Id`。
+
+Stdio 配置会由 relay 自动初始化 MCP Server。Windows 下可以直接写 `"command": "npx"`；relay 会用通用 Windows shell 包装启动 `.cmd` / 无扩展命令，不需要把配置写死成某个 MCP 工具专用格式。
+
+Stdio Relay 可在打包壳层里启动，也可开发时单独运行：
+
+```bash
+node backend/mcp_relay.mjs
+```
+
+默认地址为：
+
+```text
+http://127.0.0.1:17373/mcp
+```
 
 ## 角色导入
 

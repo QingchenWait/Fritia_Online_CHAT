@@ -9,7 +9,8 @@ const entries = [
   'index.html',
   'manifest.webmanifest',
   'sw.js',
-  'src'
+  'src',
+  'backend'
 ];
 
 async function copyIfExists(relativePath) {

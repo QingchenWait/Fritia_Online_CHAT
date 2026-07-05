@@ -26,6 +26,9 @@
       <button class="rail-btn" type="button" data-panel-open="memory-node-panel" title="记忆节点">
         <img src="src/_logo/icons/network.svg" alt="">
       </button>
+      <button class="rail-btn" type="button" data-panel-open="tool-call-panel" title="工具调用">
+        <img src="src/_logo/icons/wrench.svg" alt="">
+      </button>
       <button class="rail-btn" type="button" data-panel-open="settings-panel" title="设置">
         <img src="src/_logo/icons/settings.svg" alt="">
       </button>
@@ -93,7 +96,7 @@
           <button class="icon-btn voice-toggle-btn" id="voice-reply-toggle-btn" type="button" title="语音回复" aria-label="切换语音回复" aria-pressed="false">
             <img src="src/_logo/icons/phone.svg" alt="">
           </button>
-          <button class="icon-btn" type="button" title="视频通话占位">
+          <button class="icon-btn external-tools-toggle-btn" id="external-tools-toggle-btn" type="button" title="调用外部工具" aria-label="选择外部工具" aria-pressed="false" aria-haspopup="menu" aria-expanded="false">
             <img src="src/_logo/icons/video.svg" alt="">
           </button>
           <button class="icon-btn" id="chat-info-btn" type="button" data-chat-info-toggle title="会话信息">
@@ -117,6 +120,8 @@
         </div>
         <pre id="voice-error-detail"></pre>
       </aside>
+
+      <aside id="mcp-picker-popover" class="mcp-picker-popover hidden" role="menu" aria-label="MCP 客户端列表"></aside>
 
       <section id="message-list" class="message-list" aria-live="polite">
         <div class="empty-state">
@@ -1144,6 +1149,184 @@
           <div class="settings-view" data-sticker-view="auto-tags">
             <div class="panel-title"><h3>自动标签</h3><p>后续会在这里添加表情包自动标签能力。</p></div>
             <div class="sticker-empty-panel">暂未开放。</div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="tool-call-panel" class="modal hidden tool-modal" role="dialog" aria-modal="true" aria-labelledby="tool-call-title">
+    <div class="modal-shell modal-shell-wide tool-shell">
+      <header class="modal-head">
+        <div>
+          <small>TOOLS</small>
+          <h2 id="tool-call-title">工具调用</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="tool-call-panel" aria-label="关闭工具调用">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <div class="tool-layout">
+        <nav class="tool-nav" aria-label="工具调用分组">
+          <button class="is-active" type="button" data-tool-section="client">
+            <img src="src/_logo/icons/bot.svg" alt="">
+            <span>MCP 客户端</span>
+          </button>
+          <button type="button" data-tool-section="server">
+            <img src="src/_logo/icons/database.svg" alt="">
+            <span>MCP 服务端</span>
+          </button>
+          <button type="button" data-tool-section="skills">
+            <img src="src/_logo/emoji/sparkles_3d.png" alt="">
+            <span>Skills</span>
+          </button>
+          <button type="button" data-tool-section="permissions">
+            <img src="src/_logo/icons/settings.svg" alt="">
+            <span>权限设置</span>
+          </button>
+          <button type="button" data-tool-section="logs">
+            <img src="src/_logo/icons/database.svg" alt="">
+            <span>系统日志</span>
+          </button>
+        </nav>
+        <section class="tool-content">
+          <div class="tool-view is-active" data-tool-view="client">
+            <div class="panel-title">
+              <h3>MCP 客户端</h3>
+              <p>连接外部 MCP 服务，让角色在对话中调用远程或本地工具。</p>
+            </div>
+            <div class="tool-transport-tabs" role="tablist" aria-label="MCP 传输类型">
+              <button class="is-active" type="button" data-mcp-transport="streamable_http">
+                <img src="src/_logo/icons/message-circle.svg" alt="">
+                <span>Streamable HTTP</span>
+              </button>
+              <button type="button" data-mcp-transport="stdio">
+                <img src="src/_logo/icons/mic.svg" alt="">
+                <span>Stdio MCP</span>
+              </button>
+            </div>
+            <div class="tool-client-workbench">
+              <aside class="tool-client-list-card">
+                <div class="tool-list-head">
+                  <strong>服务列表</strong>
+                  <button id="mcp-client-add" class="btn btn-soft" type="button">
+                    <img src="src/_logo/icons/plus.svg" alt="">
+                    <span>新增</span>
+                  </button>
+                </div>
+                <div id="mcp-client-list" class="tool-client-list"></div>
+              </aside>
+              <section class="tool-client-editor">
+                <div class="tool-editor-head">
+                  <img src="src/_logo/icons/wrench.svg" alt="">
+                  <div>
+                    <h4 id="mcp-client-title">openai</h4>
+                    <p id="mcp-client-subtitle">https://your-mcp-server-url</p>
+                  </div>
+                  <div class="tool-editor-actions">
+                    <button id="mcp-client-delete" class="icon-btn danger-icon-btn" type="button" title="删除服务" aria-label="删除 MCP 服务">
+                      <img src="src/_logo/icons/trash-2.svg" alt="">
+                    </button>
+                    <button id="mcp-client-save" class="btn btn-primary" type="button">
+                      <img src="src/_logo/icons/download.svg" alt="">
+                      <span>保存配置</span>
+                    </button>
+                  </div>
+                </div>
+                <label class="tool-field">
+                  <span>服务器名称</span>
+                  <input id="mcp-client-name" maxlength="80" placeholder="openai">
+                </label>
+                <label class="switch-row tool-switch">
+                  <input id="mcp-client-enabled" type="checkbox">
+                  <span>启用该 MCP 客户端</span>
+                </label>
+                <label class="tool-field tool-json-field">
+                  <span>服务器配置 JSON</span>
+                  <textarea id="mcp-client-json" spellcheck="false" rows="10"></textarea>
+                </label>
+                <div id="mcp-client-json-status" class="kb-status">填写 JSON 后点击保存。</div>
+              </section>
+            </div>
+          </div>
+
+          <div class="tool-view" data-tool-view="server">
+            <div class="panel-title">
+              <h3>WebMCP 服务端</h3>
+              <p>网页打开后会暴露浏览器内的 WebMCP 接口，外部 agent 可继承本 APP 中的角色人格。</p>
+            </div>
+            <section class="tool-card">
+              <label class="switch-row">
+                <input id="webmcp-server-enabled" type="checkbox">
+                <span>启用 WebMCP 服务端</span>
+              </label>
+              <label class="switch-row">
+                <input id="webmcp-server-confirm" type="checkbox">
+                <span>外部 Agent 调用前需要手动确认</span>
+              </label>
+              <label class="tool-field tool-json-field">
+                <span>服务端配置 JSON</span>
+                <textarea id="webmcp-server-json" spellcheck="false" rows="7"></textarea>
+              </label>
+              <div class="form-actions">
+                <button id="webmcp-server-save" class="btn btn-primary" type="button">保存服务端设置</button>
+              </div>
+            </section>
+            <section class="tool-card">
+              <div class="tool-card-head">
+                <img src="src/_logo/icons/bot.svg" alt="">
+                <h4>WebMCP Manifest</h4>
+              </div>
+              <pre id="webmcp-server-manifest" class="tool-code-preview"></pre>
+            </section>
+          </div>
+
+          <div class="tool-view" data-tool-view="skills">
+            <div class="panel-title">
+              <h3>Skills</h3>
+              <p>当前页面向浏览器 agent 暴露的角色继承能力。</p>
+            </div>
+            <div id="webmcp-skill-list" class="tool-skill-list"></div>
+          </div>
+
+          <div class="tool-view" data-tool-view="permissions">
+            <div class="panel-title">
+              <h3>权限设置</h3>
+              <p>控制本 APP 以什么级别调用 MCP，以及是否需要人工授权。</p>
+            </div>
+            <section class="tool-card permission-grid">
+              <label class="tool-field">
+                <span>默认调用级别</span>
+                <select id="mcp-permission-level">
+                  <option value="ask">每次询问</option>
+                  <option value="allow">允许已启用 MCP</option>
+                  <option value="off">禁止调用</option>
+                </select>
+              </label>
+              <label class="switch-row"><input id="mcp-permission-manual" type="checkbox"><span>工具调用前需要手动授权</span></label>
+              <label class="switch-row"><input id="mcp-permission-remote" type="checkbox"><span>允许远程 Streamable HTTP MCP</span></label>
+              <label class="switch-row"><input id="mcp-permission-stdio" type="checkbox"><span>允许本地 Stdio MCP Relay</span></label>
+              <label class="switch-row"><input id="mcp-permission-share-character" type="checkbox"><span>允许 WebMCP 共享角色人格</span></label>
+              <label class="switch-row"><input id="mcp-permission-share-memory" type="checkbox"><span>允许工具对话读取长期记忆摘要</span></label>
+              <div class="form-actions">
+                <button id="mcp-permission-save" class="btn btn-primary" type="button">保存权限设置</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="tool-view" data-tool-view="logs">
+            <div class="panel-title">
+              <h3>系统日志</h3>
+              <p>记录调用来源、工具名、参数、结果和时间。</p>
+            </div>
+            <div class="tool-log-toolbar">
+              <span id="mcp-log-count" class="status-pill">0 条日志</span>
+              <button id="mcp-log-clear" class="btn btn-soft" type="button">
+                <img src="src/_logo/icons/trash-2.svg" alt="">
+                <span>清空日志</span>
+              </button>
+            </div>
+            <div id="mcp-log-list" class="tool-log-list"></div>
           </div>
         </section>
       </div>

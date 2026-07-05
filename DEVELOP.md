@@ -1,5 +1,29 @@
 # DEVELOP
 
+## 2026-07-06 Tool Calling / WebMCP / MCP Relay
+
+- 新增 `src/js/mcp_tools.js`：集中管理 `localStorage.fritia_mcp_tool_config`、MCP 客户端配置、权限、系统日志、Streamable HTTP MCP 初始化/`tools/list`/`tools/call`、Stdio Relay 调用，以及 WebMCP 服务端 `window.FritiaWebMCP`。
+- 新增 `src/js/tool_chat_engine.js`：工具模式私聊独立流程。该流程不复用 `completePrivateMessageReply()`，而是自行构建角色 prompt、RAG、长期记忆和历史上下文，调用支持 tool calls 的 OpenAI-compatible `chat/completions` 流式接口，并把工具调用状态写入 `message.meta.toolTrace`。
+- `tool_chat_engine.js` 只把最终回复写入长期记忆；`toolTrace` 中的“思考中”和“MCP 调用”详情只保存到聊天历史，不进入后续 LLM 上下文，工具模式消息附件也不会进入后续 LLM 上下文。
+- `tool_chat_engine.js` 工具模式为多步 agent loop：每轮模型响应仍携带完整 MCP tools，工具结果回填后继续请求模型判断下一步；只有无工具调用且不是“继续处理/要我继续/下一步操作”等中间话术时才结束。循环上限为 50 步；达到上限或异常中断时会把压缩后的 agent messages 写入 `toolTrace.resumeState`，用户发送“继续”可续跑。
+- 新增 `backend/mcp_relay.mjs`：无框架 Node.js stdio MCP Relay，默认监听 `127.0.0.1:17373`，接收前端 JSON-RPC 请求后启动/复用本地 stdio MCP Server。该目录会随 `tools/build_static.mjs` 复制到 `dist/backend`，供 Tauri/Electron/Capacitor/WebView 打包流程复用。
+- `index.html` 新增 `#tool-call-panel` 工具调用悬浮窗口、`#mcp-picker-popover` 聊天头工具选择下拉，以及左侧 `data-panel-open="tool-call-panel"` 入口。聊天头原视频按钮改为 `#external-tools-toggle-btn`。
+- `src/js/ui.js` 新增工具配置窗口绑定、MCP 客户端列表/JSON 编辑器/权限/日志渲染、聊天头多选下拉、工具开关状态同步和工具模式发送分流。
+- `src/styles/app.css` 新增工具配置窗口桌面/移动两套布局、MCP 多选下拉、工具调用状态栏和自绘滚动条样式，继续使用本项目蓝紫 Soft UI 设计变量。
+- `sw.js` 缓存版本升级到 `fritia-next-chat-v11`，核心缓存清单加入 `mcp_tools.js`、`tool_chat_engine.js` 和 `wrench.svg`；本次同时用于刷新 MCP transport、配置保存逻辑和工具对话多步循环。
+- `package.json` 的 `check` 脚本加入新增模块和 `backend/mcp_relay.mjs`；`tools/static_server.mjs` 增加 `.mjs` MIME；`tools/build_static.mjs` 复制 `backend/`。
+- 网络沙箱阻止从 Lucide GitHub 下载 `wrench.svg`，因此本次先按项目现有 Lucide SVG 风格写入同名本地图标，后续可用官方下载资源覆盖。
+- `parseMcpServerConfigJson()` 以标准 `mcpServers` 配置为主，按 `url`、`command`、`transport`、`type` 解析 Streamable HTTP、legacy SSE 或 stdio；UI 不再把标准 JSON 改写成扁平内部模板。Streamable HTTP 新建、删除兜底和空白保存时 `#mcp-client-json` 保持空白，空白或错误 JSON 会在运行时报错，不再自动套默认 URL 模板。
+- Streamable HTTP MCP 在桌面打包端优先使用 `window.__FRITIA_MCP_HTTP_RELAY__`，原生 relay 按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应，并兼容 `sessionId` / `session_id` 两种返回字段，避免 initialize 后 `tools/list` 丢失 `Mcp-Session-Id`。远程 URL 运行时会对 `localhost` / `127.0.0.1` 做 loopback fallback，以适配带 Host 检查的本地 MCP 服务。
+- `backend/mcp_relay.mjs` 和 Windows Tauri stdio relay 均会在首次非 initialize 请求前自动完成 MCP `initialize` / `notifications/initialized` 握手；Windows 下对 `.cmd` / `.bat` / 无扩展命令使用通用 `cmd.exe /d /s /c` 包装，兼容 `npx @playwright/mcp@latest` 这类 stdio MCP 配置。
+- `src/js/mcp_tools.js` 新增 legacy SSE transport 流程：GET 打开 SSE 事件流、读取 endpoint 事件、POST JSON-RPC 消息，并从 SSE message 事件按 JSON-RPC `id` 匹配响应。
+- 工具模式 prompt 保持通用 MCP 流程：根据工具名称、描述和参数 schema 判断是否调用工具，不写死任何具体 MCP Server 或工具名。
+- 工具模式 prompt 明确要求：任务未完成时继续发起 tool calls，不得在自然语言中间承诺后停止，也不得让用户重复确认本可继续用工具完成的步骤。
+- `src/js/ui.js` 的 `createToolTraceNode()` 将连续 `toolTrace.calls` 合并为单个“MCP 调用”折叠框，折叠时显示最新工具名，展开后再逐条查看参数、结果和附件摘要。
+- 工具模式最终消息可携带任意附件：`tool_chat_engine.js` 从模型 content parts 和 MCP result content 中抽取 image/audio/resource/file，图片直接渲染，音频复用语音条，其他附件通过 `saveAttachmentToUserDevice()` 保存到用户选择的位置。
+- `assertMcpPermission()` 改为以全局权限设置驱动实际授权流程；客户端级 `off` 仍禁止调用，但客户端默认 `ask` 不再覆盖“默认调用级别：允许已启用 MCP + 关闭手动授权”。
+- Windows v0.3.0 Tauri 壳层启用 `devtools` feature，注入脚本监听 `F12` 调用 `open_devtools`；stdio MCP 子进程 stderr 会被采集为最近日志摘要，并在启动、初始化或读写失败时附加到错误中。
+
 ## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
 
 - 新增 `src/js/runtime_env.js`，导出 `initRuntimeEnvironment()`、`getRuntimeEnvironment()`、`getRuntimeEnvironmentType()`、`isBrowserFrontendRuntime()` 和 `RUNTIME_ENV_TYPES`。

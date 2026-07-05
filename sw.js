@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v6';
+const CACHE_NAME = 'fritia-next-chat-v11';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -14,7 +14,10 @@ const CORE_ASSETS = [
   './src/js/chat_engine.js',
   './src/js/roundtable.js',
   './src/js/archive_sync.js',
+  './src/js/mcp_tools.js',
+  './src/js/tool_chat_engine.js',
   './src/js/ui.js',
+  './src/_logo/icons/wrench.svg',
   './src/_logo/emoji/speech_balloon_3d.png',
   './src/_logo/emoji/robot_3d.png',
   './src/_logo/emoji/sparkles_3d.png'
