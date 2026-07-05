@@ -5,6 +5,7 @@
 - 新增通用运行环境检测机制，项目启动时会识别当前运行在普通浏览器网页、localhost、本地 file 页面、Tauri、Electron、通用 WebView 或未知环境。
 - WebDAV 在普通浏览器/localhost/file 等纯前端环境下启用同步或点击“连接测试”时，会先执行浏览器 CORS 探测。
 - 如果 WebDAV 服务商不允许浏览器跨域同步，进度文本会显示：“错误：该 WebDAV 服务商不支持浏览器同步，请更换服务商或下载客户端。”
+- 对于部分 WebDAV 服务端返回 `204 No Content` / 空响应时触发的浏览器 Response 构造异常，非 GET 同步请求会按无内容成功响应处理；同步完成后显示“同步成功，时间：YYYY/MM/DD HH:MM”。
 - Tauri、Electron 或其他打包 WebView 环境会跳过该浏览器 CORS 探测，交由客户端网络能力处理。
 
 ## 2026-07-05 Archive Backup And WebDAV Sync

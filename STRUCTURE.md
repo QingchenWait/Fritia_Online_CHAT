@@ -7,6 +7,8 @@
 - 运行环境类型：`web`、`localhost`、`file` 表示普通浏览器纯前端；`tauri`、`electron`、`webview` 表示打包或 WebView 环境；`unknown` 用于无法判断的环境。
 - `src/js/archive_sync.js`：新增 `ensureWebDavCorsSupport(config, options)`。纯前端环境下用当前 WebDAV 配置发起 CORS 探测；Tauri/Electron/WebView 环境直接返回通过。
 - `src/js/archive_sync.js`：`testWebDavConnection()` 会先调用 `ensureWebDavCorsSupport()`，因此用户点击“连接测试”也会执行 CORS 检测。
+- `src/js/archive_sync.js`：`webDavFetch()` 会把非 GET 请求中 `Response with null body status cannot have body` 的空响应异常合成为 `204 No Content`，适配返回空 body 的 WebDAV 服务商。
+- `src/js/archive_sync.js`：同步成功文案由 `formatSyncSuccessMessage()` 生成，格式为 `同步成功，时间：YYYY/MM/DD HH:MM`。
 - `src/js/ui.js`：`#archive-webdav-enabled` 和 `#archive-config-save` 在启用 WebDAV 前调用 `ensureWebDavCorsSupport()`；CORS 不支持时保持未启用，并通过 `#archive-progress-label` / `#archive-config-progress-label` 显示固定错误文本。
 - `package.json`：`check` 脚本加入 `node --check src/js/runtime_env.js`。
 - `sw.js`：缓存版本更新到 `fritia-next-chat-v6`，核心资源加入 `src/js/runtime_env.js`。

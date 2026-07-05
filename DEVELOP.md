@@ -7,6 +7,8 @@
 - 运行环境类型覆盖 `web`、`localhost`、`file`、`tauri`、`electron`、`webview` 和 `unknown`；普通网页/localhost/file 归为纯前端环境，Tauri/Electron/WebView 归为打包环境。
 - `src/js/archive_sync.js` 新增 `ensureWebDavCorsSupport()`：仅在纯前端环境下对当前 WebDAV 配置执行浏览器 CORS 探测，打包环境直接跳过。
 - 用户尝试启用 WebDAV 同步，以及点击“连接测试”时都会先调用 CORS 探测；若浏览器 fetch 因 CORS 阻断失败，进度文本显示固定错误：“错误：该 WebDAV 服务商不支持浏览器同步，请更换服务商或下载客户端。”
+- WebDAV `webDavFetch()` 对 `OPTIONS / PUT / MKCOL / DELETE` 增加空响应兼容：如果浏览器抛出 `Response with null body status cannot have body`，会合成为 `204 No Content` 成功响应，避免实际同步成功后被错误文案覆盖。
+- WebDAV 上传或云端恢复完成后的进度文案统一为 `同步成功，时间：YYYY/MM/DD HH:MM`。
 - `package.json` 的 `check` 脚本加入 `src/js/runtime_env.js`；`sw.js` 缓存版本升级到 `fritia-next-chat-v6` 并加入 `runtime_env.js`。
 
 ## 2026-07-05 Archive Backup And WebDAV Sync

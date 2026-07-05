@@ -223,6 +223,17 @@ export function formatArchiveDate(ts) {
   return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+function formatSyncSuccessMessage(ts = Date.now()) {
+  const date = new Date(ts);
+  const stamp = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('/');
+  const clock = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  return `同步成功，时间：${stamp} ${clock}`;
+}
+
 async function buildArchiveSnapshot(options = {}) {
   const localStorageData = collectLocalStorageData(options);
   const indexedDb = {};
@@ -454,13 +465,13 @@ async function uploadSnapshot(config, snapshot, remoteManifest, options) {
   saveWebDavConfig({
     ...config,
     lastSyncAt: now,
-    lastStatus: '已同步到 WebDAV',
+    lastStatus: formatSyncSuccessMessage(now),
     lastLocalManifestHash: snapshot.manifest.hash,
     lastRemoteManifestHash: snapshot.manifest.hash,
     lastRemoteUpdatedAt: snapshot.manifest.updatedAt,
     lastRemoteSize: snapshot.manifest.totalSize
   });
-  setSyncStatus('idle', '同步完成', 1, options);
+  setSyncStatus('idle', formatSyncSuccessMessage(now), 1, options);
 }
 
 async function applyRemoteSnapshot(config, remoteManifest, options) {
@@ -478,16 +489,17 @@ async function applyRemoteSnapshot(config, remoteManifest, options) {
   await applyArchiveSnapshot(snapshot, progress => {
     setSyncStatus('working', '正在应用云端数据', 0.58 + progress * 0.34, options);
   });
+  const now = Date.now();
   saveWebDavConfig({
     ...config,
-    lastSyncAt: Date.now(),
-    lastStatus: '已从 WebDAV 恢复',
+    lastSyncAt: now,
+    lastStatus: formatSyncSuccessMessage(now),
     lastLocalManifestHash: remoteManifest.hash,
     lastRemoteManifestHash: remoteManifest.hash,
     lastRemoteUpdatedAt: remoteManifest.updatedAt,
     lastRemoteSize: remoteManifest.totalSize
   });
-  setSyncStatus('idle', '云端数据已应用', 1, options);
+  setSyncStatus('idle', formatSyncSuccessMessage(now), 1, options);
 }
 
 async function fetchRemoteManifest(config) {
@@ -558,7 +570,20 @@ function webDavFetch(config, url, options = {}) {
       ...(options.headers || {}),
       Authorization: `Basic ${basicAuthToken(config.username, config.password)}`
     }
+  }).catch(error => {
+    if (isNullBodyResponseError(error) && allowsSyntheticNoContent(options.method)) {
+      return new Response(null, { status: 204, statusText: 'No Content' });
+    }
+    throw error;
   });
+}
+
+function isNullBodyResponseError(error) {
+  return String(error?.message || error || '').includes("Response with null body status cannot have body");
+}
+
+function allowsSyntheticNoContent(method = 'GET') {
+  return ['OPTIONS', 'PUT', 'MKCOL', 'DELETE'].includes(String(method || 'GET').toUpperCase());
 }
 
 function remoteUrl(config, filePath) {
