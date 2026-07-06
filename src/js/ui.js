@@ -172,6 +172,7 @@ const state = {
 
 export function initUi() {
   state.store = loadAppStore();
+  installNativeBackHandler();
   initWebMcpServer({ getStore: () => state.store });
   bindGlobalEvents();
   applyStoredConversationListWidth();
@@ -411,6 +412,11 @@ function closeMcpPicker() {
   if (!state.mcpPickerOpen) return;
   state.mcpPickerOpen = false;
   renderMcpPicker();
+}
+
+function installNativeBackHandler() {
+  if (typeof window === 'undefined') return;
+  window.__FRITIA_HANDLE_ANDROID_BACK__ = handleAndroidBackAction;
 }
 
 function isPureFrontendToolRuntime() {
@@ -2123,6 +2129,61 @@ function performMobileBackGesture() {
   }
   syncMobileBackAvailability();
   return false;
+}
+
+function handleAndroidBackAction() {
+  if (closeTransientBackSurface()) {
+    syncMobileBackAvailability();
+    clearMobileTouchActivationState();
+    return true;
+  }
+  return performMobileBackGesture();
+}
+
+function closeTransientBackSurface() {
+  if (state.quickCreateMenuOpen) {
+    closeQuickCreateMenu();
+    return true;
+  }
+  if (state.mcpPickerOpen) {
+    closeMcpPicker();
+    return true;
+  }
+  if (state.stickerPopoverOpen) {
+    closeStickerPopover();
+    return true;
+  }
+  if (state.mention.active) {
+    closeMentionPicker();
+    return true;
+  }
+  if (state.roundtableErrorPopoverOpen) {
+    state.roundtableErrorPopoverOpen = false;
+    renderRoundtableErrorIndicator();
+    return true;
+  }
+  if (state.voiceErrorPopoverOpen) {
+    state.voiceErrorPopoverOpen = false;
+    renderVoiceErrorIndicator();
+    return true;
+  }
+  if (hideOpenElement('#memory-search-results')) return true;
+  if (hideOpenElement('#memory-archive-popover')) return true;
+  if (hideOpenElement('#memory-settings-popover')) return true;
+  if (document.querySelector('.custom-select.is-open')) {
+    closeCustomSelects();
+    return true;
+  }
+  return false;
+}
+
+function hideOpenElement(selector) {
+  const element = document.querySelector(selector);
+  if (!element || element.classList.contains('hidden')) return false;
+  const style = window.getComputedStyle(element);
+  if (style.display === 'none' || style.visibility === 'hidden') return false;
+  element.classList.add('hidden');
+  return true;
 }
 
 function clearMobileTouchActivationState() {

@@ -1,5 +1,12 @@
 # Fritia Online NEXT Chat
 
+## 2026-07-07 Android WebView Shell Fix
+
+- Android v0.3.6 壳层改用系统栏 Insets 给 WebView 根容器加 padding，修复状态栏显示后页面内容仍覆盖到状态栏下的问题。
+- Android 系统返回改为先调用前端暴露的 `window.__FRITIA_HANDLE_ANDROID_BACK__`，再由壳层兜底执行 WebView history 或退出 APP；聊天页返回会回到会话 / 角色消息列表，列表页无上级时退出 APP。
+- 返回逻辑不再因为输入框获得焦点就直接吞掉返回手势；弹层、群聊信息、角色详情、临时浮层仍会优先关闭。
+- 已重新生成 `D:\Models\vibe_coding\fritia_online_next_desktop\chat_v0.3.6\android_arm\dist\FritiaNextChat-v0.3.6-android-arm-signed.apk`，详细构建与验证记录见外部 Android 打包目录的 `BUILD_PROCESS.md`。
+
 ## 2026-07-06 Tool Calling / WebMCP / MCP Relay
 
 - 左侧主导航在“记忆节点”和“设置”之间新增“工具调用”入口，可配置 WebMCP 服务端、Streamable HTTP MCP 客户端、Stdio MCP 客户端、权限设置和系统日志。
