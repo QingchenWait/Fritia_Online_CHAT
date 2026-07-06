@@ -11,10 +11,12 @@
 - WebMCP 服务端通过 `window.FritiaWebMCP` 和页面内 `#fritia-webmcp-manifest` 暴露角色列表、角色上下文和按角色对话能力，让支持的浏览器 agent 继承本 APP 的人物人格、知识库、长期记忆和默认 LLM 配置。
 - 新增 `backend/mcp_relay.mjs`，作为打包客户端可复用的轻量 stdio MCP Relay。启动后默认监听 `127.0.0.1:17373`，前端 Stdio MCP 配置通过 relay 调用本地 MCP Server。
 - MCP 客户端 JSON 使用标准 `mcpServers` 配置文本，运行时按 `url` / `command` / `transport` / `type` 识别 Streamable HTTP、SSE 或 stdio；Streamable HTTP 新建、删除兜底和空白保存时不会预置模板，也不会把用户输入改写成内部扁平格式。对 `localhost` / `127.0.0.1` 会做运行时 loopback fallback，不改写存档。
-- Windows v0.3.4 Tauri 打包端对 Streamable HTTP MCP 使用原生 HTTP relay，按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应；stdio relay 会自动完成 MCP `initialize` / `notifications/initialized` 握手，并在 Windows 上兼容 `npx`、`npm` 等无扩展命令。
-- Windows v0.3.4 Tauri 打包端支持按 `F12` 呼出 WebView2 DevTools，并提供通用本地文件读取桥，让 stdio MCP 工具创建/修改的图片、音频、视频和普通文件可以回传到聊天附件。
+- Windows v0.3.5 Tauri 打包端对 Streamable HTTP MCP 使用原生 HTTP relay，按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应；stdio relay 会自动完成 MCP `initialize` / `notifications/initialized` 握手，并在 Windows 上兼容 `npx`、`npm` 等无扩展命令。
+- Windows v0.3.5 Tauri 打包端支持按 `F12` 呼出 WebView2 DevTools，并提供通用本地文件读取桥，让 stdio MCP 工具创建/修改的图片、音频、视频和普通文件可以回传到聊天附件。
 - 打包端预置隐藏的 `Filesystem` stdio MCP 客户端，服务器配置为 `npx -y @modelcontextprotocol/server-filesystem .`。它不会出现在聊天头 MCP 多选下拉中，但当用户至少选择一个可见 MCP 客户端进入工具模式时会一并激活；网页端只保留该预置配置并始终禁用。
 - 权限设置新增“调用工具记录不注入日常对话上下文”和“每次文件写入时都需要授权”。前者会让工具模式历史只在工具模式上下文中使用；后者会在 MCP 工具写入、移动、复制、删除文件前合并列出目标文件并请求授权。
+- v0.3.5 调整工具调用 UI：左侧工具入口和聊天头“调用外部工具”按钮统一使用联网下载的 AI Agent 图标；工具窗口移动端 MCP 客户端页、transport 横向页签和 JSON 区域都有自绘滚动条；配置 JSON 输入/预览改为横向滚动且不自动换行。
+- 权限设置按“功能 / 权限 / 对话”分组展示，停止按钮移动到当前 bot 工具回复内容下方；工具尚未生成内容时，停止按钮与“正在输入”提示位于工具状态栏下方同一行。
 
 ## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
 
@@ -26,7 +28,7 @@
 
 ## 2026-07-05 Archive Backup And WebDAV Sync
 
-- 左侧主导航原“导入角色”按钮改为“存档备份”入口，使用与项目一致的 Lucide 数据库图标，点击打开“导入和导出存档”悬浮窗口。
+- 左侧主导航原“导入角色”按钮改为“存档备份”入口，使用与项目一致的 Lucide 图标；v0.3.5 起主侧栏入口改为刷新图标，点击打开“导入和导出存档”悬浮窗口。
 - 存档窗口支持导出本地 ZIP 备份，覆盖聊天记录、角色资料、设置、高级设置、知识库、长期记忆、表情包元数据和 IndexedDB 媒体文件。
 - 支持导入本客户端导出的 ZIP 备份；导入会覆盖当前本地数据，建议导入前先创建一次备份。
 - 新增 WebDAV 同步配置，可填写服务器地址、同步路径、用户名、密码和自动同步间隔。同步时按具体 JSON 数据文件增量上传/下载，不使用 ZIP 包。
@@ -148,12 +150,12 @@ http://127.0.0.1:3000/
 
 - “MCP 客户端”：新增或编辑服务器，填写标准 `mcpServers` 服务器配置 JSON。网页端可使用 Streamable HTTP / SSE；打包端可同时使用 Streamable HTTP / SSE 和 stdio。Streamable HTTP 的“服务器配置 JSON”默认保持空白，用户需要自行粘贴真实配置。
 - “MCP 服务端”：启用后页面会暴露 `window.FritiaWebMCP`，外部浏览器 agent 可读取 manifest 或调用角色工具。
-- “权限设置”：可设置默认调用级别、是否每次手动授权、是否允许远程 HTTP MCP 和本地 Stdio MCP、工具记录是否隔离于日常上下文，以及文件写入/删除是否每次额外授权。保存权限设置后工具调用窗口会关闭。
+- “权限设置”：按“功能 / 权限 / 对话”分组，可设置默认调用级别、是否每次手动授权、是否允许远程 HTTP MCP 和本地 Stdio MCP、工具记录是否隔离于日常上下文，以及文件写入/删除是否每次额外授权。保存权限设置后工具调用窗口会关闭。
 - “系统日志”：记录调用来源、工具名、参数、结果、时间和状态。
 
 推荐直接粘贴标准 MCP 客户端配置。保存后，配置框会保存你填写的标准 JSON 文本，不会改写成 APP 内部格式；如果 JSON 为空、格式错误或缺少 `url` / `command`，运行时会报错而不是自动套用模板。
 
-启用工具后，私聊会进入独立的工具对话流程。模型可以在同一轮回复中连续执行多个 MCP 工具步骤；如果模型先输出了“我继续帮你处理”“下一步我会点击”等中间文本，APP 会继续推进工具调用，而不是把这句文本当成最终回复。连续 MCP 调用会合并显示在同一个折叠框里，展开后可逐条查看参数和结果。工具运行中的日志和消息增量只刷新相关区域，不会反复刷新联系人头像和聊天主框架。运行中可点击当前回复旁的圆形停止按钮中止本轮工具流程。最终回复会写入长期记忆，但不会生成知识图谱节点；工具 trace 只保存到该条聊天记录中。
+启用工具后，私聊会进入独立的工具对话流程。模型可以在同一轮回复中连续执行多个 MCP 工具步骤；如果模型先输出了“我继续帮你处理”“下一步我会点击”等中间文本，APP 会继续推进工具调用，而不是把这句文本当成最终回复。连续 MCP 调用会合并显示在同一个折叠框里，展开后可逐条查看参数和结果。工具运行中的日志和消息增量只刷新相关区域，不会反复刷新联系人头像和聊天主框架。运行中可点击当前 bot 工具回复下方的圆形停止按钮中止本轮工具流程；未生成文字时停止按钮会与输入中提示同排显示。最终回复会写入长期记忆，但不会生成知识图谱节点；工具 trace 只保存到该条聊天记录中。
 
 如果 MCP 工具返回图片、音频、视频、resource、resource_link、structuredContent 或 file-like content，APP 会把可查看或可保存的内容作为 bot 最终回复附件展示。打包端 stdio Relay 和开发用 `backend/mcp_relay.mjs` 会在 `tools/call` 前后记录配置 `cwd` 内的新建/修改文件，并把可读取文件随响应回传；远程 `http(s)` 文件 URL 会直接用于预览，用户点击保存时会优先拉取真实数据写入选择目录，若跨域限制导致无法读取则保留直接下载链接。`.log`、常见临时文件和确实没有可保存数据的空占位不会进入附件列表。
 

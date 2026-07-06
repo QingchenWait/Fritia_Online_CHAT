@@ -131,6 +131,10 @@ img {
   color: var(--brand);
 }
 
+.rail-btn[data-panel-open="settings-panel"] {
+  margin-top: auto;
+}
+
 .conversation-list {
   min-width: 0;
   background: var(--surface-soft);
@@ -775,10 +779,33 @@ img {
   margin: 0 0 8px;
 }
 
+.tool-runtime-row,
+.tool-stop-row {
+  width: min(560px, 100%);
+  display: flex;
+}
+
+.tool-runtime-row {
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+
+.tool-runtime-row .message-content {
+  margin: 0;
+}
+
+.tool-stop-row {
+  justify-content: flex-end;
+  margin: 6px 0 8px;
+}
+
 .tool-stop-button {
   width: 38px;
   height: 38px;
-  margin: 0 0 8px auto;
+  flex: 0 0 auto;
+  margin: 0;
   border: 1px solid rgba(217, 58, 58, 0.18);
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.92);
@@ -4912,11 +4939,22 @@ select:focus {
   gap: 16px;
 }
 
+.tool-view,
+.tool-client-list,
+.tool-log-list,
+.tool-code-preview,
+.tool-json-field textarea,
+.tool-transport-tabs {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 91, 255, 0.42) transparent;
+}
+
 .tool-view::-webkit-scrollbar,
 .tool-client-list::-webkit-scrollbar,
 .tool-log-list::-webkit-scrollbar,
 .tool-code-preview::-webkit-scrollbar,
-.tool-json-field textarea::-webkit-scrollbar {
+.tool-json-field textarea::-webkit-scrollbar,
+.tool-transport-tabs::-webkit-scrollbar {
   width: 9px;
   height: 9px;
 }
@@ -4925,11 +4963,21 @@ select:focus {
 .tool-client-list::-webkit-scrollbar-thumb,
 .tool-log-list::-webkit-scrollbar-thumb,
 .tool-code-preview::-webkit-scrollbar-thumb,
-.tool-json-field textarea::-webkit-scrollbar-thumb {
+.tool-json-field textarea::-webkit-scrollbar-thumb,
+.tool-transport-tabs::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
   background: rgba(99, 91, 255, 0.42);
   background-clip: padding-box;
+}
+
+.tool-view::-webkit-scrollbar-track,
+.tool-client-list::-webkit-scrollbar-track,
+.tool-log-list::-webkit-scrollbar-track,
+.tool-code-preview::-webkit-scrollbar-track,
+.tool-json-field textarea::-webkit-scrollbar-track,
+.tool-transport-tabs::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .tool-transport-tabs {
@@ -5219,6 +5267,9 @@ select:focus {
   min-height: 230px;
   resize: vertical;
   overflow: auto;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
   border-radius: 14px;
   background: #1f2329;
   color: #d8f3ff;
@@ -5245,8 +5296,9 @@ select:focus {
   color: #d8f3ff;
   padding: 12px;
   font: 12px/1.6 "Cascadia Code", "Consolas", monospace;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .tool-skill-list {
@@ -5282,6 +5334,24 @@ select:focus {
 
 .permission-grid {
   grid-template-columns: 1fr;
+}
+
+.permission-group {
+  display: grid;
+  gap: 10px;
+  padding: 2px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.permission-group:last-of-type {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
+.permission-group h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
 }
 
 .permission-grid .form-actions {
@@ -5337,14 +5407,17 @@ select:focus {
 }
 
 .tool-log-item pre {
+  max-width: 100%;
+  overflow: auto;
   margin: 0;
   border-radius: 12px;
   background: var(--surface-soft);
   color: var(--text);
   padding: 9px 10px;
   font: 12px/1.5 "Cascadia Code", "Consolas", monospace;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .tool-empty {
@@ -5480,6 +5553,10 @@ select:focus {
     height: 48px;
     border-radius: 17px;
     box-shadow: none;
+  }
+
+  .rail-btn[data-panel-open="settings-panel"] {
+    margin-top: 0;
   }
 
   .rail-btn.is-active {
@@ -6627,6 +6704,10 @@ select:focus {
 
   .tool-view {
     padding: 14px 12px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .tool-view.is-active[data-tool-view="client"] {
+    overflow-y: auto;
   }
 
   .tool-transport-tabs {

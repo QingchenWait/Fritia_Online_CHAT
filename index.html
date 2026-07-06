@@ -21,13 +21,13 @@
         <img src="src/_logo/icons/users.svg" alt="">
       </button>
       <button class="rail-btn" type="button" data-panel-open="archive-panel" title="存档备份">
-        <img src="src/_logo/icons/database.svg" alt="">
+        <img src="src/_logo/icons/refresh-cw.svg" alt="">
       </button>
       <button class="rail-btn" type="button" data-panel-open="memory-node-panel" title="记忆节点">
         <img src="src/_logo/icons/network.svg" alt="">
       </button>
       <button class="rail-btn" type="button" data-panel-open="tool-call-panel" title="工具调用">
-        <img src="src/_logo/icons/wrench.svg" alt="">
+        <img src="src/_logo/icons/ai-agent.svg" alt="">
       </button>
       <button class="rail-btn" type="button" data-panel-open="settings-panel" title="设置">
         <img src="src/_logo/icons/settings.svg" alt="">
@@ -97,7 +97,7 @@
             <img src="src/_logo/icons/phone.svg" alt="">
           </button>
           <button class="icon-btn external-tools-toggle-btn" id="external-tools-toggle-btn" type="button" title="调用外部工具" aria-label="选择外部工具" aria-pressed="false" aria-haspopup="menu" aria-expanded="false">
-            <img src="src/_logo/icons/video.svg" alt="">
+            <img src="src/_logo/icons/ai-agent.svg" alt="">
           </button>
           <button class="icon-btn" id="chat-info-btn" type="button" data-chat-info-toggle title="会话信息">
             <img src="src/_logo/icons/users.svg" alt="">
@@ -1246,7 +1246,7 @@
                 </label>
                 <label class="tool-field tool-json-field">
                   <span>服务器配置 JSON</span>
-                  <textarea id="mcp-client-json" spellcheck="false" rows="10"></textarea>
+                  <textarea id="mcp-client-json" spellcheck="false" rows="10" wrap="off"></textarea>
                 </label>
                 <div id="mcp-client-json-status" class="kb-status">填写 JSON 后点击保存。</div>
               </section>
@@ -1269,7 +1269,7 @@
               </label>
               <label class="tool-field tool-json-field">
                 <span>服务端配置 JSON</span>
-                <textarea id="webmcp-server-json" spellcheck="false" rows="7"></textarea>
+                <textarea id="webmcp-server-json" spellcheck="false" rows="7" wrap="off"></textarea>
               </label>
               <div class="form-actions">
                 <button id="webmcp-server-save" class="btn btn-primary" type="button">保存服务端设置</button>
@@ -1298,42 +1298,51 @@
               <p>控制本 APP 以什么级别调用 MCP，以及是否需要人工授权。</p>
             </div>
             <section class="tool-card permission-grid">
-              <label class="tool-field">
-                <span>默认调用级别</span>
-                <select id="mcp-permission-level">
-                  <option value="ask">每次询问</option>
-                  <option value="allow">允许已启用 MCP</option>
-                  <option value="off">禁止调用</option>
-                </select>
-              </label>
-              <label class="switch-row tool-switch tool-toggle-row">
-                <span>工具调用前需要手动授权</span>
-                <span class="tool-toggle-control"><input id="mcp-permission-manual" type="checkbox"><span></span></span>
-              </label>
-              <label class="switch-row tool-switch tool-toggle-row">
-                <span>允许远程 Streamable HTTP MCP</span>
-                <span class="tool-toggle-control"><input id="mcp-permission-remote" type="checkbox"><span></span></span>
-              </label>
-              <label class="switch-row tool-switch tool-toggle-row">
-                <span>允许本地 Stdio MCP Relay</span>
-                <span class="tool-toggle-control"><input id="mcp-permission-stdio" type="checkbox"><span></span></span>
-              </label>
-              <label class="switch-row tool-switch tool-toggle-row">
-                <span>允许 WebMCP 共享角色人格</span>
-                <span class="tool-toggle-control"><input id="mcp-permission-share-character" type="checkbox"><span></span></span>
-              </label>
-              <label class="switch-row tool-switch tool-toggle-row">
-                <span>允许工具对话读取长期记忆摘要</span>
-                <span class="tool-toggle-control"><input id="mcp-permission-share-memory" type="checkbox"><span></span></span>
-              </label>
-              <label class="switch-row tool-switch tool-toggle-row">
-                <span>调用工具记录不注入日常对话上下文</span>
-                <span class="tool-toggle-control"><input id="mcp-permission-isolate-tool-context" type="checkbox"><span></span></span>
-              </label>
-              <label class="switch-row tool-switch tool-toggle-row">
-                <span>每次文件写入时都需要授权</span>
-                <span class="tool-toggle-control"><input id="mcp-permission-file-write" type="checkbox"><span></span></span>
-              </label>
+              <div class="permission-group">
+                <h4>功能</h4>
+                <label class="switch-row tool-switch tool-toggle-row">
+                  <span>允许远程 Streamable HTTP MCP</span>
+                  <span class="tool-toggle-control"><input id="mcp-permission-remote" type="checkbox"><span></span></span>
+                </label>
+                <label class="switch-row tool-switch tool-toggle-row">
+                  <span>允许本地 Stdio MCP Relay</span>
+                  <span class="tool-toggle-control"><input id="mcp-permission-stdio" type="checkbox"><span></span></span>
+                </label>
+              </div>
+              <div class="permission-group">
+                <h4>权限</h4>
+                <label class="tool-field">
+                  <span>默认调用级别</span>
+                  <select id="mcp-permission-level">
+                    <option value="ask">每次询问</option>
+                    <option value="allow">允许已启用 MCP</option>
+                    <option value="off">禁止调用</option>
+                  </select>
+                </label>
+                <label class="switch-row tool-switch tool-toggle-row">
+                  <span>工具调用前需要手动授权</span>
+                  <span class="tool-toggle-control"><input id="mcp-permission-manual" type="checkbox"><span></span></span>
+                </label>
+                <label class="switch-row tool-switch tool-toggle-row">
+                  <span>每次文件写入时都需要授权</span>
+                  <span class="tool-toggle-control"><input id="mcp-permission-file-write" type="checkbox"><span></span></span>
+                </label>
+              </div>
+              <div class="permission-group">
+                <h4>对话</h4>
+                <label class="switch-row tool-switch tool-toggle-row">
+                  <span>允许 WebMCP 共享角色人格</span>
+                  <span class="tool-toggle-control"><input id="mcp-permission-share-character" type="checkbox"><span></span></span>
+                </label>
+                <label class="switch-row tool-switch tool-toggle-row">
+                  <span>允许工具对话读取长期记忆摘要</span>
+                  <span class="tool-toggle-control"><input id="mcp-permission-share-memory" type="checkbox"><span></span></span>
+                </label>
+                <label class="switch-row tool-switch tool-toggle-row">
+                  <span>调用工具记录不注入日常对话上下文</span>
+                  <span class="tool-toggle-control"><input id="mcp-permission-isolate-tool-context" type="checkbox"><span></span></span>
+                </label>
+              </div>
               <div class="form-actions">
                 <button id="mcp-permission-save" class="btn btn-primary" type="button">保存权限设置</button>
               </div>

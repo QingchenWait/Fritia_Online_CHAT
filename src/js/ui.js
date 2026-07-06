@@ -2149,14 +2149,15 @@ function createMessageNode(message) {
   name.textContent = message.speakerName || (message.role === 'user' ? '分析员' : '角色');
   const content = document.createElement('div');
   content.className = 'message-content';
-  if (message.status === 'typing') {
+  const text = message.text || '';
+  const attachments = message.attachments || [];
+  const hasGeneratedToolContent = Boolean(message.meta?.toolMode && (text.trim() || attachments.length));
+  if (message.status === 'typing' && !hasGeneratedToolContent) {
     content.innerHTML = '<span class="typing-indicator"><span></span><span></span><span></span></span>';
   } else if (isVoiceReplyMessage(message)) {
     content.classList.add('message-content--voice');
     content.appendChild(createVoiceBubble(message));
   } else {
-    const text = message.text || '';
-    const attachments = message.attachments || [];
     const stickerOnly = isStickerOnlyMessage(text, attachments);
     if (stickerOnly) content.classList.add('message-content--sticker-only');
     if (text.trim()) renderMessageText(content, text);
@@ -2170,14 +2171,26 @@ function createMessageNode(message) {
   const meta = document.createElement('div');
   meta.className = 'message-meta';
   meta.textContent = `${formatMessageTime(message.createdAt)}${message.status === 'error' ? ' · 失败' : ''}`;
+  const stopButton = isActiveToolMessage(message) ? createToolStopButton() : null;
   bubble.append(name);
   if (message.meta?.toolTrace) {
     bubble.appendChild(createToolTraceNode(message.meta.toolTrace));
   }
-  if (isActiveToolMessage(message)) {
-    bubble.appendChild(createToolStopButton());
+  if (stopButton && !hasGeneratedToolContent) {
+    const runtimeRow = document.createElement('div');
+    runtimeRow.className = 'tool-runtime-row';
+    runtimeRow.append(content, stopButton);
+    bubble.append(runtimeRow, meta);
+  } else {
+    bubble.append(content);
+    if (stopButton) {
+      const stopRow = document.createElement('div');
+      stopRow.className = 'tool-stop-row';
+      stopRow.appendChild(stopButton);
+      bubble.appendChild(stopRow);
+    }
+    bubble.append(meta);
   }
-  bubble.append(content, meta);
   if (message.role === 'user') row.append(bubble, avatar);
   else row.append(avatar, bubble);
   return row;
