@@ -20,14 +20,14 @@
       <button class="rail-btn" type="button" data-view-btn="contacts" title="角色">
         <img src="src/_logo/icons/users.svg" alt="">
       </button>
-      <button class="rail-btn" type="button" data-panel-open="archive-panel" title="存档备份">
-        <img src="src/_logo/icons/refresh-cw.svg" alt="">
+      <button class="rail-btn" type="button" data-panel-open="tool-call-panel" title="工具调用">
+        <img src="src/_logo/icons/ai-agent.svg" alt="">
       </button>
       <button class="rail-btn" type="button" data-panel-open="memory-node-panel" title="记忆节点">
         <img src="src/_logo/icons/network.svg" alt="">
       </button>
-      <button class="rail-btn" type="button" data-panel-open="tool-call-panel" title="工具调用">
-        <img src="src/_logo/icons/ai-agent.svg" alt="">
+      <button class="rail-btn" type="button" data-panel-open="archive-panel" title="存档备份">
+        <img src="src/_logo/icons/refresh-cw.svg" alt="">
       </button>
       <button class="rail-btn" type="button" data-panel-open="settings-panel" title="设置">
         <img src="src/_logo/icons/settings.svg" alt="">
@@ -100,7 +100,7 @@
             <img src="src/_logo/icons/ai-agent.svg" alt="">
           </button>
           <button class="icon-btn" id="chat-info-btn" type="button" data-chat-info-toggle title="会话信息">
-            <img src="src/_logo/icons/users.svg" alt="">
+            <img src="src/_logo/icons/role-card.svg" alt="">
           </button>
         </div>
       </header>
@@ -1209,9 +1209,8 @@
               <aside class="tool-client-list-card">
                 <div class="tool-list-head">
                   <strong>服务列表</strong>
-                  <button id="mcp-client-add" class="btn btn-soft" type="button">
+                  <button id="mcp-client-add" class="btn btn-soft tool-icon-only-btn" type="button" title="新增 MCP 客户端" aria-label="新增 MCP 客户端">
                     <img src="src/_logo/icons/plus.svg" alt="">
-                    <span>新增</span>
                   </button>
                 </div>
                 <div id="mcp-client-list" class="tool-client-list"></div>
@@ -1228,7 +1227,6 @@
                       <img src="src/_logo/icons/trash-2.svg" alt="">
                     </button>
                     <button id="mcp-client-save" class="btn btn-primary" type="button">
-                      <img src="src/_logo/icons/download.svg" alt="">
                       <span>保存配置</span>
                     </button>
                   </div>
@@ -1356,9 +1354,8 @@
             </div>
             <div class="tool-log-toolbar">
               <span id="mcp-log-count" class="status-pill">0 条日志</span>
-              <button id="mcp-log-clear" class="btn btn-soft" type="button">
+              <button id="mcp-log-clear" class="btn btn-soft tool-icon-only-btn" type="button" title="清空日志" aria-label="清空日志">
                 <img src="src/_logo/icons/trash-2.svg" alt="">
-                <span>清空日志</span>
               </button>
             </div>
             <div id="mcp-log-list" class="tool-log-list"></div>

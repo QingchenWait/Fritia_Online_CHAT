@@ -9,8 +9,8 @@
 - 新增 `backend/mcp_relay.mjs`：无框架 Node.js stdio MCP Relay，默认监听 `127.0.0.1:17373`，接收前端 JSON-RPC 请求后启动/复用本地 stdio MCP Server。该目录会随 `tools/build_static.mjs` 复制到 `dist/backend`，供 Tauri/Electron/Capacitor/WebView 打包流程复用。
 - `index.html` 新增 `#tool-call-panel` 工具调用悬浮窗口、`#mcp-picker-popover` 聊天头工具选择下拉，以及左侧 `data-panel-open="tool-call-panel"` 入口。聊天头原视频按钮改为 `#external-tools-toggle-btn`。
 - `src/js/ui.js` 新增工具配置窗口绑定、MCP 客户端列表/JSON 编辑器/权限/日志渲染、聊天头多选下拉、工具开关状态同步和工具模式发送分流；纯网页运行时隐藏 Stdio MCP 配置页签，MCP 客户端启用开关切换后立即保存，权限页全部使用自绘开关且每行一个选项。v0.3.5 起权限页 DOM 按“功能 / 权限 / 对话”分组。
-- `src/styles/app.css` 新增工具配置窗口桌面/移动两套布局、MCP 多选下拉、工具调用状态栏和自绘滚动条样式，继续使用本项目蓝紫 Soft UI 设计变量。v0.3.5 起移动端 MCP 客户端页、transport 页签和配置 JSON 区域补齐自绘滚动条，配置 JSON 输入/预览不再自动换行。
-- `sw.js` 缓存版本升级到 `fritia-next-chat-v16`，核心缓存清单加入 `mcp_tools.js`、`tool_chat_engine.js`、工具入口 `ai-agent.svg`、存档入口 `refresh-cw.svg`、`wrench.svg`、停止按钮 `x.svg` 和工具窗口下载图标 `tool-server.svg`、`tool-skills.svg`、`tool-streamable-http.svg`、`tool-stdio.svg`。
+- `src/styles/app.css` 新增工具配置窗口桌面/移动两套布局、MCP 多选下拉、工具调用状态栏和自绘滚动条样式，继续使用本项目蓝紫 Soft UI 设计变量。v0.3.5 起移动端 MCP 客户端页、transport 页签和配置 JSON 区域补齐自绘滚动条，配置 JSON 输入/预览不再自动换行；权限设置分组内项目使用高级设置式行列表，不再逐项包裹卡片。
+- `sw.js` 缓存版本升级到 `fritia-next-chat-v17`，核心缓存清单加入 `mcp_tools.js`、`tool_chat_engine.js`、工具入口 `ai-agent.svg`、存档入口 `refresh-cw.svg`、角色卡入口 `role-card.svg`、`wrench.svg`、停止按钮 `x.svg` 和工具窗口下载图标 `tool-server.svg`、`tool-skills.svg`、`tool-streamable-http.svg`、`tool-stdio.svg`。
 - `package.json` 的 `check` 脚本加入新增模块和 `backend/mcp_relay.mjs`；`tools/static_server.mjs` 增加 `.mjs` MIME；`tools/build_static.mjs` 复制 `backend/`。
 - 网络沙箱阻止从 Lucide GitHub 下载 `wrench.svg`，因此本次先按项目现有 Lucide SVG 风格写入同名本地图标，后续可用官方下载资源覆盖。
 - `parseMcpServerConfigJson()` 以标准 `mcpServers` 配置为主，按 `url`、`command`、`transport`、`type` 解析 Streamable HTTP、legacy SSE 或 stdio；UI 不再把标准 JSON 改写成扁平内部模板。Streamable HTTP 新建、删除兜底和空白保存时 `#mcp-client-json` 保持空白，空白或错误 JSON 会在运行时报错，不再自动套默认 URL 模板。
@@ -23,6 +23,7 @@
 - 工具模式 prompt 明确要求：任务未完成时继续发起 tool calls，不得在自然语言中间承诺后停止，也不得让用户重复确认本可继续用工具完成的步骤。
 - `src/js/ui.js` 的 `createToolTraceNode()` 将连续 `toolTrace.calls` 合并为单个“MCP 调用”折叠框，折叠时显示最新工具名，展开后再逐条查看参数、结果和附件摘要。
 - `src/js/ui.js` 在工具流程运行时记录 `activeToolRun`，当前 typing 工具回复下方显示圆形停止按钮；工具尚未生成内容时停止按钮与 typing 提示同排，已有内容后停止按钮移动到内容下方。点击后触发 `AbortController.abort()`，隐藏按钮并等待工具引擎把 trace 标记为可续跑中断。
+- `src/js/ui.js` 的 MCP 多选下拉顶部新增“小字标题：可调用 MCP 列表”；聊天头私聊角色卡按钮改用 `role-card.svg`，与工具调用 `ai-agent.svg` 区分。
 - 工具模式最终消息可携带任意附件：`tool_chat_engine.js` 从模型 content parts、MCP result content、`resource_link`、`structuredContent`、Relay `changedFiles`、结果文本和工具参数中的远程文件 URL / 本地文件引用抽取 image/audio/video/resource/file；图片直接渲染，音频复用语音条，视频使用原生 video 控件，其他附件通过 `saveAttachmentToUserDevice()` 保存到用户选择的位置。`.log`、常见临时文件和没有可保存数据的空占位会在 `normalizeGeneratedAttachments()` 阶段过滤。
 - `backend/mcp_relay.mjs` 在 stdio `tools/call` 前后对配置 `cwd` 做有限文件快照，并额外读取请求参数中明确出现的文件路径/文件名；返回 `{ response, changedFiles }`，前端通过 `getNativeRelayResponse()` 保留 MCP JSON-RPC 结果并把文件变更映射为聊天附件。
 - `src/js/mcp_tools.js` 将 `MCP_LOG_EVENT` 从 `MCP_CONFIG_EVENT` 中拆出，MCP 调用日志写入只刷新日志面板，不再触发工具配置、会话 chrome 和 WebMCP manifest 的整套刷新。
@@ -46,7 +47,7 @@
 
 ## 2026-07-05 Archive Backup And WebDAV Sync
 
-- 左侧主导航原 `data-panel-open="character-import-panel"` 的“导入角色”按钮改为 `data-panel-open="archive-panel"` 存档备份入口；v0.3.5 起图标改为联网下载的 Lucide `refresh-cw.svg`。导入角色入口仍保留在搜索框 `+` 添加菜单和角色卡快捷操作中。
+- 左侧主导航原 `data-panel-open="character-import-panel"` 的“导入角色”按钮改为 `data-panel-open="archive-panel"` 存档备份入口；v0.3.5 起图标改为联网下载的 Lucide `refresh-cw.svg`，并与工具调用入口互换位置。导入角色入口仍保留在搜索框 `+` 添加菜单和角色卡快捷操作中。
 - 新增 `src/js/archive_sync.js`，集中实现 ZIP 导出/导入、IndexedDB 全量导出/恢复、WebDAV 配置保存、文件级增量同步、同步状态事件和冲突事件。
 - ZIP 备份使用标准 ZIP 容器的 stored 条目，不引入额外 npm 依赖；内容包含 `localStorage` 中的聊天/设置/知识库状态/长期记忆/表情包等键，以及 `fritia_media_store` 和 `fritia_knowledge_base_db` 的记录。
 - WebDAV 同步不上传 ZIP 包，而是按 `localStorage/<key>.json`、`indexeddb/<db>/<store>.json` 和 `manifest.json` 拆分为具体 JSON 文件；每个文件使用内容 hash 判断是否需要上传，冲突判断基于上次本地/远端 manifest hash。

@@ -552,6 +552,14 @@ img {
   padding: 10px;
 }
 
+.mcp-picker-title {
+  padding: 2px 8px 7px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
 .mcp-picker-popover::-webkit-scrollbar,
 .message-tool-trace pre::-webkit-scrollbar {
   width: 8px;
@@ -2432,6 +2440,14 @@ select:focus {
   background: #fff;
   color: var(--text);
   padding: 8px 12px;
+}
+
+.tool-icon-only-btn {
+  width: 38px;
+  min-width: 38px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
 }
 
 .btn:hover {
@@ -5338,8 +5354,8 @@ select:focus {
 
 .permission-group {
   display: grid;
-  gap: 10px;
-  padding: 2px 0 14px;
+  gap: 0;
+  padding: 2px 0 8px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -5350,8 +5366,42 @@ select:focus {
 
 .permission-group h4 {
   margin: 0;
+  padding: 0 0 6px;
   color: var(--text);
   font-size: 14px;
+}
+
+.permission-group .tool-field,
+.permission-group .tool-toggle-row {
+  min-height: 56px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 0;
+  box-shadow: none;
+}
+
+.permission-group .tool-field + .tool-field,
+.permission-group .tool-field + .tool-toggle-row,
+.permission-group .tool-toggle-row + .tool-field,
+.permission-group .tool-toggle-row + .tool-toggle-row {
+  border-top: 1px solid rgba(120, 140, 180, 0.14);
+}
+
+.permission-group .tool-field {
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 15rem);
+  align-items: center;
+  gap: 14px;
+}
+
+.permission-group .tool-field > span:first-child,
+.permission-group .tool-toggle-row > span:first-child {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.permission-group .tool-field select {
+  min-height: 38px;
 }
 
 .permission-grid .form-actions {
@@ -6762,6 +6812,11 @@ select:focus {
 
   .permission-grid {
     grid-template-columns: 1fr;
+  }
+
+  .permission-group .tool-field {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .tool-log-item header {

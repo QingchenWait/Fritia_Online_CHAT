@@ -438,6 +438,7 @@ function renderMcpPicker() {
   popover.classList.remove('hidden');
   if (!clients.length) {
     popover.innerHTML = `
+      <div class="mcp-picker-title">可调用 MCP 列表</div>
       <div class="mcp-picker-empty">
         <strong>暂无可用 MCP 客户端</strong>
         <span>请先在“工具调用”中添加 Streamable HTTP 服务。</span>
@@ -445,13 +446,16 @@ function renderMcpPicker() {
     `;
     return;
   }
-  popover.innerHTML = clients.map(client => `
-    <label class="mcp-picker-item">
-      <input type="checkbox" value="${escapeHtml(client.id)}" ${selectedIds.has(client.id) ? 'checked' : ''}>
-      <span class="mcp-picker-icon"><img src="src/_logo/icons/${mcpTransportIconName(client.transport)}.svg" alt=""></span>
-      <span><strong>${escapeHtml(client.name)}</strong><small>${escapeHtml(clientSubtitle(client))}</small></span>
-    </label>
-  `).join('');
+  popover.innerHTML = `
+    <div class="mcp-picker-title">可调用 MCP 列表</div>
+    ${clients.map(client => `
+      <label class="mcp-picker-item">
+        <input type="checkbox" value="${escapeHtml(client.id)}" ${selectedIds.has(client.id) ? 'checked' : ''}>
+        <span class="mcp-picker-icon"><img src="src/_logo/icons/${mcpTransportIconName(client.transport)}.svg" alt=""></span>
+        <span><strong>${escapeHtml(client.name)}</strong><small>${escapeHtml(clientSubtitle(client))}</small></span>
+      </label>
+    `).join('')}
+  `;
   popover.querySelectorAll('input[type="checkbox"]').forEach(input => {
     input.addEventListener('change', event => {
       event.stopPropagation();
@@ -4279,7 +4283,7 @@ function updateConversationChrome(conversation) {
     infoButton.title = isPrivate ? '角色卡片' : '群聊成员';
     infoButton.setAttribute('aria-label', isPrivate ? '打开角色卡片' : '打开群聊成员');
     const icon = infoButton.querySelector('img');
-    if (icon) icon.src = isPrivate ? 'src/_logo/icons/bot.svg' : 'src/_logo/icons/users.svg';
+    if (icon) icon.src = isPrivate ? 'src/_logo/icons/role-card.svg' : 'src/_logo/icons/users.svg';
   }
   if (voiceButton) {
     const enabled = Boolean(isPrivate && conversation?.voiceReplyEnabled === true);
