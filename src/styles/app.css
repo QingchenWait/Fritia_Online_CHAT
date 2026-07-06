@@ -6916,18 +6916,28 @@ select:focus {
     height: auto;
     min-height: 0;
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    overflow: visible;
   }
 
   .tool-client-list-card {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 280px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
 
   .tool-client-list {
-    max-height: 210px;
+    flex: 0 0 clamp(224px, 42dvh, 320px);
+    height: clamp(224px, 42dvh, 320px);
+    min-height: 224px;
+    max-height: clamp(224px, 42dvh, 320px);
   }
 
   .tool-client-editor {
+    grid-column: 1;
+    grid-row: 2;
     padding: 12px;
   }
 
