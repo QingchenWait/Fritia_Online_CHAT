@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v17';
+const CACHE_NAME = 'fritia-next-chat-v18';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -17,9 +17,12 @@ const CORE_ASSETS = [
   './src/js/mcp_tools.js',
   './src/js/tool_chat_engine.js',
   './src/js/ui.js',
+  './src/docs/mcp_help.md',
   './src/_logo/icons/ai-agent.svg',
   './src/_logo/icons/refresh-cw.svg',
   './src/_logo/icons/role-card.svg',
+  './src/_logo/icons/save-config.svg',
+  './src/_logo/icons/tool-help.svg',
   './src/_logo/icons/wrench.svg',
   './src/_logo/icons/tool-server.svg',
   './src/_logo/icons/tool-skills.svg',

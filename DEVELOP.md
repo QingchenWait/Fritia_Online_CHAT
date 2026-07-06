@@ -9,8 +9,9 @@
 - 新增 `backend/mcp_relay.mjs`：无框架 Node.js stdio MCP Relay，默认监听 `127.0.0.1:17373`，接收前端 JSON-RPC 请求后启动/复用本地 stdio MCP Server。该目录会随 `tools/build_static.mjs` 复制到 `dist/backend`，供 Tauri/Electron/Capacitor/WebView 打包流程复用。
 - `index.html` 新增 `#tool-call-panel` 工具调用悬浮窗口、`#mcp-picker-popover` 聊天头工具选择下拉，以及左侧 `data-panel-open="tool-call-panel"` 入口。聊天头原视频按钮改为 `#external-tools-toggle-btn`。
 - `src/js/ui.js` 新增工具配置窗口绑定、MCP 客户端列表/JSON 编辑器/权限/日志渲染、聊天头多选下拉、工具开关状态同步和工具模式发送分流；纯网页运行时隐藏 Stdio MCP 配置页签，MCP 客户端启用开关切换后立即保存，权限页全部使用自绘开关且每行一个选项。v0.3.5 起权限页 DOM 按“功能 / 权限 / 对话”分组。
-- `src/styles/app.css` 新增工具配置窗口桌面/移动两套布局、MCP 多选下拉、工具调用状态栏和自绘滚动条样式，继续使用本项目蓝紫 Soft UI 设计变量。v0.3.5 起移动端 MCP 客户端页、transport 页签和配置 JSON 区域补齐自绘滚动条，配置 JSON 输入/预览不再自动换行；权限设置分组内项目使用高级设置式行列表，不再逐项包裹卡片。
-- `sw.js` 缓存版本升级到 `fritia-next-chat-v17`，核心缓存清单加入 `mcp_tools.js`、`tool_chat_engine.js`、工具入口 `ai-agent.svg`、存档入口 `refresh-cw.svg`、角色卡入口 `role-card.svg`、`wrench.svg`、停止按钮 `x.svg` 和工具窗口下载图标 `tool-server.svg`、`tool-skills.svg`、`tool-streamable-http.svg`、`tool-stdio.svg`。
+- `src/js/ui.js` 新增工具配置窗口绑定、MCP 客户端列表/JSON 编辑器/权限/日志渲染、聊天头多选下拉、工具开关状态同步和工具模式发送分流；纯网页运行时隐藏 Stdio MCP 配置页签，MCP 客户端启用开关切换后立即保存，权限页全部使用自绘开关且每行一个选项。v0.3.5 起权限页 DOM 按“功能 / 权限 / 对话”分组；工具窗口新增“使用说明”页，读取 `src/docs/mcp_help.md` 并用轻量 Markdown 渲染器展示标题、列表、代码、表格和远程图片。
+- `src/styles/app.css` 新增工具配置窗口桌面/移动两套布局、MCP 多选下拉、工具调用状态栏和自绘滚动条样式，继续使用本项目蓝紫 Soft UI 设计变量。v0.3.5 起移动端 MCP 客户端页、transport 页签和配置 JSON 区域补齐自绘滚动条，配置 JSON 输入/预览不再自动换行；权限设置分组内项目使用高级设置式行列表，不再逐项包裹卡片；MCP 客户端服务列表在桌面工作台内拥有独立纵向滚动条，激活态语音/外部工具按钮 hover 时保持蓝紫可见状态。
+- `sw.js` 缓存版本升级到 `fritia-next-chat-v18`，核心缓存清单加入 `mcp_tools.js`、`tool_chat_engine.js`、`src/docs/mcp_help.md`、工具入口 `ai-agent.svg`、存档入口 `refresh-cw.svg`、角色卡入口 `role-card.svg`、保存按钮 `save-config.svg`、使用说明入口 `tool-help.svg`、`wrench.svg`、停止按钮 `x.svg` 和工具窗口下载图标 `tool-server.svg`、`tool-skills.svg`、`tool-streamable-http.svg`、`tool-stdio.svg`。
 - `package.json` 的 `check` 脚本加入新增模块和 `backend/mcp_relay.mjs`；`tools/static_server.mjs` 增加 `.mjs` MIME；`tools/build_static.mjs` 复制 `backend/`。
 - 网络沙箱阻止从 Lucide GitHub 下载 `wrench.svg`，因此本次先按项目现有 Lucide SVG 风格写入同名本地图标，后续可用官方下载资源覆盖。
 - `parseMcpServerConfigJson()` 以标准 `mcpServers` 配置为主，按 `url`、`command`、`transport`、`type` 解析 Streamable HTTP、legacy SSE 或 stdio；UI 不再把标准 JSON 改写成扁平内部模板。Streamable HTTP 新建、删除兜底和空白保存时 `#mcp-client-json` 保持空白，空白或错误 JSON 会在运行时报错，不再自动套默认 URL 模板。
@@ -32,7 +33,7 @@
 - `assertMcpPermission()` 改为以全局权限设置驱动实际授权流程；客户端级 `off` 仍禁止调用，但客户端默认 `ask` 不再覆盖“默认调用级别：允许已启用 MCP + 关闭手动授权”。
 - `assertMcpFileWritePermission()` 会在 `permissions.requireFileWriteApproval` 开启时，对通用 MCP 工具名和参数键做文件写入/删除/移动/复制意图检测，并把同一次调用涉及的目标路径合并成一次授权提示。
 - `src/js/chat_engine.js` 和 `src/js/roundtable.js` 在普通私聊/群聊 LLM 上下文构建前读取 `permissions.isolateToolContext`；开启后过滤 `message.meta.toolMode === true` 的历史。工具模式自身的 `buildToolMessages()` 不做该过滤。
-- Windows v0.3.5 Tauri 壳层启用 `devtools` feature，注入脚本监听 `F12` 调用 `open_devtools`；stdio MCP 子进程 stderr 会被采集为最近日志摘要，并在启动、初始化或读写失败时附加到错误中。打包壳层提供通用 `read_local_file` 命令和 stdio `tools/call` 文件快照，把本地 MCP 工具创建/修改的输出文件作为附件回传网页层。
+- Windows v0.3.6 Tauri 壳层启用 `devtools` feature，注入脚本监听 `F12` 调用 `open_devtools`；stdio MCP 子进程 stderr 会被采集为最近日志摘要，并在启动、初始化或读写失败时附加到错误中。打包壳层提供通用 `read_local_file` 命令和 stdio `tools/call` 文件快照，把本地 MCP 工具创建/修改的输出文件作为附件回传网页层。
 
 ## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
 

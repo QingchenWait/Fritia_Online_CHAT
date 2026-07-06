@@ -1188,6 +1188,10 @@
             <img src="src/_logo/icons/database.svg" alt="">
             <span>系统日志</span>
           </button>
+          <button type="button" data-tool-section="help">
+            <img src="src/_logo/icons/tool-help.svg" alt="">
+            <span>使用说明</span>
+          </button>
         </nav>
         <section class="tool-content">
           <div class="tool-view is-active" data-tool-view="client">
@@ -1227,6 +1231,7 @@
                       <img src="src/_logo/icons/trash-2.svg" alt="">
                     </button>
                     <button id="mcp-client-save" class="btn btn-primary" type="button">
+                      <img src="src/_logo/icons/save-config.svg" alt="">
                       <span>保存配置</span>
                     </button>
                   </div>
@@ -1359,6 +1364,14 @@
               </button>
             </div>
             <div id="mcp-log-list" class="tool-log-list"></div>
+          </div>
+
+          <div class="tool-view" data-tool-view="help">
+            <div class="panel-title">
+              <h3>使用说明</h3>
+              <p>查看 MCP / WebMCP 配置和工具调用流程说明。</p>
+            </div>
+            <section id="mcp-help-content" class="tool-help-content" aria-live="polite"></section>
           </div>
         </section>
       </div>

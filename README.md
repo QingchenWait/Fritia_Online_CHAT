@@ -11,13 +11,14 @@
 - WebMCP 服务端通过 `window.FritiaWebMCP` 和页面内 `#fritia-webmcp-manifest` 暴露角色列表、角色上下文和按角色对话能力，让支持的浏览器 agent 继承本 APP 的人物人格、知识库、长期记忆和默认 LLM 配置。
 - 新增 `backend/mcp_relay.mjs`，作为打包客户端可复用的轻量 stdio MCP Relay。启动后默认监听 `127.0.0.1:17373`，前端 Stdio MCP 配置通过 relay 调用本地 MCP Server。
 - MCP 客户端 JSON 使用标准 `mcpServers` 配置文本，运行时按 `url` / `command` / `transport` / `type` 识别 Streamable HTTP、SSE 或 stdio；Streamable HTTP 新建、删除兜底和空白保存时不会预置模板，也不会把用户输入改写成内部扁平格式。对 `localhost` / `127.0.0.1` 会做运行时 loopback fallback，不改写存档。
-- Windows v0.3.5 Tauri 打包端对 Streamable HTTP MCP 使用原生 HTTP relay，按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应；stdio relay 会自动完成 MCP `initialize` / `notifications/initialized` 握手，并在 Windows 上兼容 `npx`、`npm` 等无扩展命令。
-- Windows v0.3.5 Tauri 打包端支持按 `F12` 呼出 WebView2 DevTools，并提供通用本地文件读取桥，让 stdio MCP 工具创建/修改的图片、音频、视频和普通文件可以回传到聊天附件。
+- Windows v0.3.6 Tauri 打包端对 Streamable HTTP MCP 使用原生 HTTP relay，按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应；stdio relay 会自动完成 MCP `initialize` / `notifications/initialized` 握手，并在 Windows 上兼容 `npx`、`npm` 等无扩展命令。
+- Windows v0.3.6 Tauri 打包端支持按 `F12` 呼出 WebView2 DevTools，并提供通用本地文件读取桥，让 stdio MCP 工具创建/修改的图片、音频、视频和普通文件可以回传到聊天附件。
 - 打包端预置隐藏的 `Filesystem` stdio MCP 客户端，服务器配置为 `npx -y @modelcontextprotocol/server-filesystem .`。它不会出现在聊天头 MCP 多选下拉中，但当用户至少选择一个可见 MCP 客户端进入工具模式时会一并激活；网页端只保留该预置配置并始终禁用。
 - 权限设置新增“调用工具记录不注入日常对话上下文”和“每次文件写入时都需要授权”。前者会让工具模式历史只在工具模式上下文中使用；后者会在 MCP 工具写入、移动、复制、删除文件前合并列出目标文件并请求授权。
 - v0.3.5 调整工具调用 UI：左侧工具入口和聊天头“调用外部工具”按钮统一使用联网下载的 AI Agent 图标；工具窗口移动端 MCP 客户端页、transport 横向页签和 JSON 区域都有自绘滚动条；配置 JSON 输入/预览改为横向滚动且不自动换行。
 - 权限设置按“功能 / 权限 / 对话”分组展示，停止按钮移动到当前 bot 工具回复内容下方；工具尚未生成内容时，停止按钮与“正在输入”提示位于工具状态栏下方同一行。
 - v0.3.5 追加 UI 修正：权限设置分组内项目改为高级设置式行列表，不再逐项包裹卡片；聊天头角色卡按钮使用联网下载的身份卡图标；MCP 多选下拉顶部显示“可调用 MCP 列表”；MCP 客户端新增、保存配置和系统日志清空按钮按图标/文字要求精简；主侧栏中“工具调用”和“存档备份”位置互换。
+- 本次工具调用 UI 修正：激活状态下的语音回复和外部工具按钮在 hover / touch hover 时保持可见；MCP 客户端服务列表拥有独立纵向滚动条；保存配置按钮补回联网下载的保存图标；工具窗口新增“使用说明”页，渲染 `src/docs/mcp_help.md` 的 Markdown 内容。
 
 ## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
 
@@ -153,6 +154,7 @@ http://127.0.0.1:3000/
 - “MCP 服务端”：启用后页面会暴露 `window.FritiaWebMCP`，外部浏览器 agent 可读取 manifest 或调用角色工具。
 - “权限设置”：按“功能 / 权限 / 对话”分组，可设置默认调用级别、是否每次手动授权、是否允许远程 HTTP MCP 和本地 Stdio MCP、工具记录是否隔离于日常上下文，以及文件写入/删除是否每次额外授权。保存权限设置后工具调用窗口会关闭。
 - “系统日志”：记录调用来源、工具名、参数、结果、时间和状态。
+- “使用说明”：只读渲染 `src/docs/mcp_help.md`，支持分级标题、列表、行内代码、代码块、表格和 URL 图片。
 
 推荐直接粘贴标准 MCP 客户端配置。保存后，配置框会保存你填写的标准 JSON 文本，不会改写成 APP 内部格式；如果 JSON 为空、格式错误或缺少 `url` / `command`，运行时会报错而不是自动套用模板。
 

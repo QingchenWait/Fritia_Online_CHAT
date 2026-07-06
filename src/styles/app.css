@@ -531,6 +531,13 @@ img {
   box-shadow: 0 10px 22px rgba(79, 99, 255, 0.24);
 }
 
+.voice-toggle-btn.is-active:hover,
+.external-tools-toggle-btn.is-active:hover {
+  color: #fff;
+  background: var(--brand-gradient);
+  box-shadow: 0 10px 22px rgba(79, 99, 255, 0.24);
+}
+
 .voice-toggle-btn.is-active img,
 .external-tools-toggle-btn.is-active img {
   filter: brightness(0) invert(1);
@@ -4958,6 +4965,7 @@ select:focus {
 .tool-view,
 .tool-client-list,
 .tool-log-list,
+.tool-help-content,
 .tool-code-preview,
 .tool-json-field textarea,
 .tool-transport-tabs {
@@ -4968,6 +4976,7 @@ select:focus {
 .tool-view::-webkit-scrollbar,
 .tool-client-list::-webkit-scrollbar,
 .tool-log-list::-webkit-scrollbar,
+.tool-help-content::-webkit-scrollbar,
 .tool-code-preview::-webkit-scrollbar,
 .tool-json-field textarea::-webkit-scrollbar,
 .tool-transport-tabs::-webkit-scrollbar {
@@ -4978,6 +4987,7 @@ select:focus {
 .tool-view::-webkit-scrollbar-thumb,
 .tool-client-list::-webkit-scrollbar-thumb,
 .tool-log-list::-webkit-scrollbar-thumb,
+.tool-help-content::-webkit-scrollbar-thumb,
 .tool-code-preview::-webkit-scrollbar-thumb,
 .tool-json-field textarea::-webkit-scrollbar-thumb,
 .tool-transport-tabs::-webkit-scrollbar-thumb {
@@ -4990,6 +5000,7 @@ select:focus {
 .tool-view::-webkit-scrollbar-track,
 .tool-client-list::-webkit-scrollbar-track,
 .tool-log-list::-webkit-scrollbar-track,
+.tool-help-content::-webkit-scrollbar-track,
 .tool-code-preview::-webkit-scrollbar-track,
 .tool-json-field textarea::-webkit-scrollbar-track,
 .tool-transport-tabs::-webkit-scrollbar-track {
@@ -5029,6 +5040,7 @@ select:focus {
 }
 
 .tool-client-workbench {
+  height: clamp(380px, 52dvh, 540px);
   min-height: clamp(380px, 52dvh, 540px);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -5040,6 +5052,7 @@ select:focus {
 
 .tool-client-list-card {
   min-width: 0;
+  min-height: 0;
   border-right: 1px solid var(--line);
   background: var(--surface-soft);
   display: flex;
@@ -5189,6 +5202,10 @@ select:focus {
 .tool-editor-actions .btn {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.tool-editor-actions .btn-primary img {
+  filter: brightness(0) invert(1);
 }
 
 .danger-icon-btn img {
@@ -5470,6 +5487,130 @@ select:focus {
   word-break: normal;
 }
 
+.tool-view[data-tool-view="help"].is-active {
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+}
+
+.tool-help-content {
+  min-height: clamp(360px, 58dvh, 620px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.94);
+  padding: clamp(16px, 2vw, 24px);
+  box-shadow: 0 12px 30px rgba(40, 60, 120, 0.06);
+}
+
+.markdown-body {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.72;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 1.15em 0 0.55em;
+  line-height: 1.3;
+}
+
+.markdown-body h1:first-child,
+.markdown-body h2:first-child,
+.markdown-body h3:first-child {
+  margin-top: 0;
+}
+
+.markdown-body p {
+  margin: 0.65em 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.65em 0;
+  padding-left: 1.45em;
+}
+
+.markdown-body li + li {
+  margin-top: 0.28em;
+}
+
+.markdown-body code {
+  border-radius: 7px;
+  background: rgba(99, 91, 255, 0.10);
+  color: #3140d4;
+  padding: 0.12em 0.36em;
+  font: 0.92em/1.5 "Cascadia Code", "Consolas", monospace;
+}
+
+.markdown-body pre {
+  overflow: auto;
+  border-radius: 14px;
+  background: #1f2329;
+  color: #d8f3ff;
+  padding: 12px 14px;
+  font: 12px/1.6 "Cascadia Code", "Consolas", monospace;
+}
+
+.markdown-body pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.markdown-body a {
+  color: var(--brand);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  margin: 10px 0;
+}
+
+.markdown-table-wrap {
+  max-width: 100%;
+  overflow: auto;
+  margin: 0.85em 0;
+}
+
+.markdown-body table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-body th {
+  background: var(--surface-soft);
+  font-weight: 800;
+}
+
+.markdown-body tr:last-child td {
+  border-bottom: 0;
+}
+
 .tool-empty {
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius);
@@ -5619,7 +5760,7 @@ select:focus {
   }
 
   .rail-btn:hover:not(.is-active),
-  .icon-btn:hover {
+  .icon-btn:hover:not(.is-active) {
     background: transparent;
     box-shadow: none;
   }
@@ -6772,6 +6913,7 @@ select:focus {
   }
 
   .tool-client-workbench {
+    height: auto;
     min-height: 0;
     grid-template-columns: 1fr;
   }

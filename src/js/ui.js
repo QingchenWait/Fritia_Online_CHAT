@@ -131,6 +131,8 @@ const state = {
   mcpTransport: MCP_TRANSPORTS.STREAMABLE_HTTP,
   selectedMcpClientId: '',
   mcpPickerOpen: false,
+  mcpHelpLoaded: false,
+  mcpHelpHtml: '',
   activeToolRun: null,
   stickerPopoverOpen: false,
   voiceNotice: null,
@@ -1330,6 +1332,7 @@ function renderToolCallPanel() {
   renderWebMcpSkills();
   renderMcpPermissionPanel();
   renderMcpLogPanel();
+  renderMcpHelpPanel();
 }
 
 function renderMcpClientEditor() {
@@ -1570,6 +1573,155 @@ function renderMcpLogPanel() {
       </dl>
     </article>
   `).join('');
+}
+
+async function renderMcpHelpPanel() {
+  const container = document.getElementById('mcp-help-content');
+  if (!container) return;
+  if (state.mcpHelpLoaded) {
+    container.innerHTML = state.mcpHelpHtml;
+    return;
+  }
+  container.innerHTML = '<div class="tool-empty">正在加载使用说明。</div>';
+  try {
+    const response = await fetch('src/docs/mcp_help.md', { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const markdown = await response.text();
+    state.mcpHelpHtml = renderMarkdownDocument(markdown);
+    state.mcpHelpLoaded = true;
+    container.innerHTML = state.mcpHelpHtml;
+  } catch (error) {
+    container.innerHTML = `<div class="tool-empty">使用说明加载失败：${escapeHtml(error?.message || '未知错误')}</div>`;
+  }
+}
+
+function renderMarkdownDocument(markdown = '') {
+  const lines = String(markdown).replace(/\r\n?/g, '\n').split('\n');
+  const html = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+    const fence = line.match(/^```(\w+)?\s*$/);
+    if (fence) {
+      const code = [];
+      index += 1;
+      while (index < lines.length && !/^```\s*$/.test(lines[index])) {
+        code.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) index += 1;
+      const language = fence[1] ? ` data-language="${escapeHtml(fence[1])}"` : '';
+      html.push(`<pre${language}><code>${escapeHtml(code.join('\n'))}</code></pre>`);
+      continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const level = heading[1].length;
+      html.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
+      index += 1;
+      continue;
+    }
+    if (isMarkdownTableStart(lines, index)) {
+      const { tableHtml, nextIndex } = renderMarkdownTable(lines, index);
+      html.push(tableHtml);
+      index = nextIndex;
+      continue;
+    }
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      const tag = ordered ? 'ol' : 'ul';
+      const items = [];
+      const pattern = ordered ? /^\s*\d+[.)]\s+(.+)$/ : /^\s*[-*+]\s+(.+)$/;
+      while (index < lines.length) {
+        const item = lines[index].match(pattern);
+        if (!item) break;
+        items.push(`<li>${renderMarkdownInline(item[1])}</li>`);
+        index += 1;
+      }
+      html.push(`<${tag}>${items.join('')}</${tag}>`);
+      continue;
+    }
+    const paragraph = [line.trim()];
+    index += 1;
+    while (index < lines.length && lines[index].trim() && !isMarkdownBlockStart(lines, index)) {
+      paragraph.push(lines[index].trim());
+      index += 1;
+    }
+    html.push(`<p>${renderMarkdownInline(paragraph.join(' '))}</p>`);
+  }
+  return `<article class="markdown-body">${html.join('')}</article>`;
+}
+
+function isMarkdownBlockStart(lines, index) {
+  const line = lines[index] || '';
+  return /^```/.test(line)
+    || /^#{1,6}\s+/.test(line)
+    || /^\s*[-*+]\s+/.test(line)
+    || /^\s*\d+[.)]\s+/.test(line)
+    || isMarkdownTableStart(lines, index);
+}
+
+function isMarkdownTableStart(lines, index) {
+  const head = lines[index] || '';
+  const split = lines[index + 1] || '';
+  return head.includes('|') && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(split);
+}
+
+function renderMarkdownTable(lines, startIndex) {
+  const rows = [];
+  let index = startIndex;
+  const headers = splitMarkdownTableRow(lines[index]);
+  index += 2;
+  while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
+    rows.push(splitMarkdownTableRow(lines[index]));
+    index += 1;
+  }
+  const headHtml = `<thead><tr>${headers.map(cell => `<th>${renderMarkdownInline(cell)}</th>`).join('')}</tr></thead>`;
+  const bodyHtml = `<tbody>${rows.map(row => `<tr>${headers.map((_, cellIndex) => `<td>${renderMarkdownInline(row[cellIndex] || '')}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  return { tableHtml: `<div class="markdown-table-wrap"><table>${headHtml}${bodyHtml}</table></div>`, nextIndex: index };
+}
+
+function splitMarkdownTableRow(row = '') {
+  return row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+}
+
+function renderMarkdownInline(text = '') {
+  const tokens = [];
+  const remember = html => {
+    const token = `\u0000${tokens.length}\u0000`;
+    tokens.push(html);
+    return token;
+  };
+  let source = String(text)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => remember(renderMarkdownImage(alt, url)))
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => remember(renderMarkdownLink(label, url)))
+    .replace(/`([^`]+)`/g, (_, code) => remember(`<code>${escapeHtml(code)}</code>`));
+  source = escapeHtml(source);
+  return tokens.reduce((result, html, index) => result.replace(new RegExp(`\\u0000${index}\\u0000`, 'g'), html), source);
+}
+
+function normalizeMarkdownUrl(url = '') {
+  const clean = String(url).trim().replace(/^<|>$/g, '').split(/\s+/)[0] || '';
+  if (/^(https?:|data:image\/|\.{0,2}\/|src\/|\/)/i.test(clean)) return clean;
+  return '';
+}
+
+function renderMarkdownImage(alt, url) {
+  const src = normalizeMarkdownUrl(url);
+  if (!src) return escapeHtml(alt || '');
+  return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt || '')}" loading="lazy">`;
+}
+
+function renderMarkdownLink(label, url) {
+  const href = normalizeMarkdownUrl(url);
+  const text = escapeHtml(label || url || '');
+  if (!href) return text;
+  return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
 }
 
 function clientSubtitle(client) {
