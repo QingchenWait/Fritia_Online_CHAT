@@ -9,6 +9,7 @@ import { requestLlmCompletion } from './llm_request.js';
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
 const ALL_ID = 'all';
+const MCP_CONFIG_STORAGE_KEY = 'fritia_mcp_tool_config';
 const HANDOFF_INTENT = 'handoff_to_player';
 const DEFAULT_INTER_BOT_TURN_LIMIT = 3;
 const MIN_INTER_BOT_TURN_LIMIT = 1;
@@ -285,6 +286,7 @@ async function runSpeakerReply({
   const currentSettings = getSettings();
   const history = getConversationMessages(nextStore, conversation.id)
     .filter(item => item.status !== 'typing')
+    .filter(shouldKeepMessageForDailyToolContext)
     .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, currentSettings));
   const requestEvent = buildRequestEvent(event, {
     triggerText,
@@ -1018,6 +1020,7 @@ function getRoundtableRequestMessages(history = []) {
   const settings = getSettings();
   return history
     .filter(item => item && item.status !== 'typing')
+    .filter(shouldKeepMessageForDailyToolContext)
     .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, settings))
     .slice(-getAdvancedSettings().historyLimit)
     .map(item => ({
@@ -1029,6 +1032,21 @@ function getRoundtableRequestMessages(history = []) {
       intent: item.meta?.intent || item.intent || ''
     }))
     .filter(item => item.text);
+}
+
+function shouldKeepMessageForDailyToolContext(message) {
+  if (!shouldIsolateToolContextFromDailyChat()) return true;
+  return message?.meta?.toolMode !== true;
+}
+
+function shouldIsolateToolContextFromDailyChat() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const config = JSON.parse(window.localStorage.getItem(MCP_CONFIG_STORAGE_KEY) || '{}');
+    return config?.permissions?.isolateToolContext === true;
+  } catch {
+    return false;
+  }
 }
 
 function getRoundtableRequestTopicSummary(requestMessages = []) {

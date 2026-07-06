@@ -50,6 +50,24 @@ const DEFAULT_STDIO_CONFIG_JSON = `{
   }
 }`;
 
+export const BUILTIN_FILESYSTEM_MCP_ID = 'builtin-filesystem';
+
+const BUILTIN_FILESYSTEM_CONFIG_JSON = DEFAULT_STDIO_CONFIG_JSON;
+
+const BUILTIN_FILESYSTEM_CLIENT = Object.freeze({
+  id: BUILTIN_FILESYSTEM_MCP_ID,
+  name: 'Filesystem',
+  enabled: true,
+  transport: MCP_TRANSPORTS.STDIO,
+  permission: 'allow',
+  config: DEFAULT_STDIO_CONFIG,
+  configJson: BUILTIN_FILESYSTEM_CONFIG_JSON,
+  builtin: 'filesystem',
+  hiddenFromPicker: true,
+  createdAt: 0,
+  updatedAt: 0
+});
+
 const DEFAULT_MCP_CONFIG = Object.freeze({
   version: 1,
   selectedClientIdsByConversation: {},
@@ -77,9 +95,11 @@ const DEFAULT_MCP_CONFIG = Object.freeze({
     level: 'ask',
     requireManualApproval: true,
     allowRemoteHttp: true,
-    allowLocalStdio: false,
+    allowLocalStdio: true,
     shareCharacterProfile: true,
-    shareLongTermMemory: true
+    shareLongTermMemory: true,
+    isolateToolContext: false,
+    requireFileWriteApproval: false
   },
   logs: []
 });
@@ -231,6 +251,7 @@ export function getAvailableMcpClients(options = {}) {
   const pureFrontend = isBrowserFrontendRuntime(environment);
   return config.clients.filter(client => {
     if (!options.includeDisabled && !client.enabled) return false;
+    if (!options.includeHidden && client.hiddenFromPicker) return false;
     if (pureFrontend) return isRemoteMcpTransport(client.transport);
     return true;
   });
@@ -262,17 +283,19 @@ export function isMcpEnabledForConversation(conversationId) {
   return getSelectedMcpClientIds(conversationId).length > 0;
 }
 
-export async function collectMcpToolDefinitions(clientIds = []) {
+export async function collectMcpToolDefinitions(clientIds = [], options = {}) {
   const config = getMcpConfig();
-  const clientsById = new Map(getAvailableMcpClients().map(client => [client.id, client]));
+  const effectiveClientIds = withImplicitFilesystemClientIds(clientIds);
+  const clientsById = new Map(getAvailableMcpClients({ includeHidden: true }).map(client => [client.id, client]));
   const tools = [];
   const registry = {};
   const errors = [];
-  for (const clientId of clientIds) {
+  for (const clientId of effectiveClientIds) {
+    throwIfMcpAborted(options.signal);
     const client = clientsById.get(clientId);
     if (!client) continue;
     try {
-      const listed = await listMcpTools(client);
+      const listed = await listMcpTools(client, options);
       for (const tool of listed) {
         const functionName = createOpenAiToolName(client, tool, registry);
         registry[functionName] = {
@@ -290,6 +313,7 @@ export async function collectMcpToolDefinitions(clientIds = []) {
         });
       }
     } catch (error) {
+      if (isMcpAbortError(error)) throw error;
       const message = error?.message || '工具列表读取失败';
       errors.push({ clientId, message: `${client.name}: ${message}` });
       addMcpLog({
@@ -305,9 +329,9 @@ export async function collectMcpToolDefinitions(clientIds = []) {
   return { tools, registry, errors, permissions: config.permissions };
 }
 
-export async function listMcpTools(client) {
+export async function listMcpTools(client, options = {}) {
   assertRunnableMcpClient(client);
-  const result = await sendMcpRequest(client, 'tools/list', {});
+  const result = await sendMcpRequest(client, 'tools/list', {}, options);
   if (!result || !Array.isArray(result.tools)) {
     throw new Error(`tools/list 未返回工具列表：${formatMcpContentText(result) || JSON.stringify(result || {})}`);
   }
@@ -319,9 +343,13 @@ export async function listMcpTools(client) {
   })).filter(tool => tool.name);
 }
 
-export async function callMcpToolByRegistryEntry(entry, args = {}) {
+export async function callMcpToolByRegistryEntry(entry, args = {}, options = {}) {
   if (!entry?.client || !entry.toolName) throw new Error('MCP 工具不存在。');
+  throwIfMcpAborted(options.signal);
   await assertMcpPermission(entry.client, entry.toolName, args);
+  throwIfMcpAborted(options.signal);
+  await assertMcpFileWritePermission(entry.client, entry.toolName, args);
+  throwIfMcpAborted(options.signal);
   const startedAt = Date.now();
   addMcpLog({
     source: entry.client.transport === MCP_TRANSPORTS.STDIO ? 'local-mcp-relay' : 'webmcp-client',
@@ -336,7 +364,8 @@ export async function callMcpToolByRegistryEntry(entry, args = {}) {
     const result = await sendMcpRequest(entry.client, 'tools/call', {
       name: entry.toolName,
       arguments: args && typeof args === 'object' ? args : {}
-    });
+    }, options);
+    throwIfMcpAborted(options.signal);
     addMcpLog({
       source: entry.client.transport === MCP_TRANSPORTS.STDIO ? 'local-mcp-relay' : 'webmcp-client',
       clientId: entry.client.id,
@@ -602,34 +631,37 @@ function assertRunnableMcpClient(client) {
   if (!String(client.config?.url || '').trim()) throw new Error('Streamable HTTP / SSE MCP 配置需要 url。');
 }
 
-async function sendMcpRequest(client, method, params = {}) {
+async function sendMcpRequest(client, method, params = {}, options = {}) {
   assertRunnableMcpClient(client);
+  throwIfMcpAborted(options.signal);
   if (client.transport === MCP_TRANSPORTS.STDIO) {
-    return sendStdioRelayRequest(client, method, params);
+    return sendStdioRelayRequest(client, method, params, options);
   }
   if (client.transport === MCP_TRANSPORTS.SSE) {
-    return sendSseMcpRequest(client, method, params);
+    return sendSseMcpRequest(client, method, params, options);
   }
-  return sendStreamableHttpRequest(client, method, params);
+  return sendStreamableHttpRequest(client, method, params, options);
 }
 
-async function sendStreamableHttpRequest(client, method, params = {}) {
-  const session = await ensureStreamableHttpSession(client);
+async function sendStreamableHttpRequest(client, method, params = {}, options = {}) {
+  const session = await ensureStreamableHttpSession(client, options);
   const request = createJsonRpcRequest(method, params);
   const targetClient = withClientUrl(client, session.url || client.config.url);
-  const nativeResponse = await sendNativeStreamableHttpRequest(targetClient, session, request);
+  const nativeResponse = await sendNativeStreamableHttpRequest(targetClient, session, request, options);
+  throwIfMcpAborted(options.signal);
   if (nativeResponse) return parseMcpJsonRpcResponse(nativeResponse, request.id);
   const response = await fetchMcpHttp(targetClient.config.url, {
     method: 'POST',
     headers: buildMcpHeaders(targetClient, session.sessionId),
-    body: JSON.stringify(request)
+    body: JSON.stringify(request),
+    signal: options.signal
   }, 'tools/list' === method ? '读取工具列表' : `调用 ${method}`);
   const nextSessionId = response.headers.get('mcp-session-id');
   if (nextSessionId) session.sessionId = nextSessionId;
   return parseMcpJsonRpcResponse(await readMcpResponse(response, request.id), request.id);
 }
 
-async function ensureStreamableHttpSession(client) {
+async function ensureStreamableHttpSession(client, options = {}) {
   const cacheKey = client.id;
   const cached = mcpSessions.get(cacheKey);
   if (cached?.sessionId || cached?.initializedAt) return cached;
@@ -643,19 +675,21 @@ async function ensureStreamableHttpSession(client) {
   });
   let lastError = null;
   for (const url of getRemoteUrlCandidates(client.config.url)) {
+    throwIfMcpAborted(options.signal);
     const targetClient = withClientUrl(client, url);
     try {
-      const session = await initializeStreamableHttpSession(targetClient, initRequest);
+      const session = await initializeStreamableHttpSession(targetClient, initRequest, options);
       mcpSessions.set(cacheKey, session);
       return session;
     } catch (error) {
+      if (isMcpAbortError(error)) throw error;
       lastError = error;
     }
   }
   throw lastError || new Error('Streamable HTTP MCP 初始化失败。');
 }
 
-async function initializeStreamableHttpSession(client, initRequest) {
+async function initializeStreamableHttpSession(client, initRequest, options = {}) {
   const nativeRelay = getNativeHttpRelay();
   if (nativeRelay?.request) {
     const session = { sessionId: '', initializedAt: Date.now(), url: client.config.url };
@@ -664,6 +698,7 @@ async function initializeStreamableHttpSession(client, initRequest) {
       sessionId: '',
       request: initRequest
     });
+    throwIfMcpAborted(options.signal);
     const relaySessionId = getNativeRelaySessionId(relayResult);
     if (relaySessionId) session.sessionId = relaySessionId;
     parseMcpJsonRpcResponse(getNativeRelayResponse(relayResult), initRequest.id);
@@ -681,7 +716,8 @@ async function initializeStreamableHttpSession(client, initRequest) {
   const response = await fetchMcpHttp(client.config.url, {
     method: 'POST',
     headers: buildMcpHeaders(client),
-    body: JSON.stringify(initRequest)
+    body: JSON.stringify(initRequest),
+    signal: options.signal
   }, '初始化 Streamable HTTP MCP');
   const session = {
     sessionId: response.headers.get('mcp-session-id') || '',
@@ -692,6 +728,7 @@ async function initializeStreamableHttpSession(client, initRequest) {
   await fetchMcpHttp(client.config.url, {
     method: 'POST',
     headers: buildMcpHeaders(client, session.sessionId),
+    signal: options.signal,
     body: JSON.stringify({
       jsonrpc: '2.0',
       method: 'notifications/initialized',
@@ -701,14 +738,16 @@ async function initializeStreamableHttpSession(client, initRequest) {
   return session;
 }
 
-async function sendNativeStreamableHttpRequest(client, session, request) {
+async function sendNativeStreamableHttpRequest(client, session, request, options = {}) {
   const nativeRelay = getNativeHttpRelay();
   if (!nativeRelay?.request) return null;
+  throwIfMcpAborted(options.signal);
   const relayResult = await nativeRelay.request({
     client: client.config,
     sessionId: session.sessionId || '',
     request
   });
+  throwIfMcpAborted(options.signal);
   const relaySessionId = getNativeRelaySessionId(relayResult);
   if (relaySessionId) session.sessionId = relaySessionId;
   return getNativeRelayResponse(relayResult);
@@ -756,6 +795,7 @@ async function fetchMcpHttp(url, options, actionLabel = '请求 MCP') {
   try {
     return await fetch(url, options);
   } catch (error) {
+    if (options?.signal?.aborted || isMcpAbortError(error)) throw createMcpAbortError();
     throw new Error(`${actionLabel}失败，无法连接 MCP 服务 ${url}：${error?.message || error}`);
   }
 }
@@ -787,11 +827,17 @@ function withClientUrl(client, url) {
   };
 }
 
-async function sendSseMcpRequest(client, method, params = {}) {
-  const session = await ensureSseSession(client);
+async function sendSseMcpRequest(client, method, params = {}, options = {}) {
+  const session = await ensureSseSession(client, options);
   const request = createJsonRpcRequest(method, params);
-  const pending = waitForSseMessage(session, request.id, client.config.sse_read_timeout);
-  const directResponse = await postSseMessage(client, session, request, method);
+  const pending = waitForSseMessage(session, request.id, client.config.sse_read_timeout, options.signal);
+  let directResponse = null;
+  try {
+    directResponse = await postSseMessage(client, session, request, method, options);
+  } catch (error) {
+    clearSsePending(session, request.id);
+    throw error;
+  }
   if (directResponse) {
     clearSsePending(session, request.id);
     return parseMcpJsonRpcResponse(directResponse, request.id);
@@ -799,27 +845,30 @@ async function sendSseMcpRequest(client, method, params = {}) {
   return parseMcpJsonRpcResponse(await pending, request.id);
 }
 
-async function ensureSseSession(client) {
+async function ensureSseSession(client, options = {}) {
   const cacheKey = `${client.id}:sse`;
   const cached = mcpSessions.get(cacheKey);
   if (cached?.messageUrl && cached?.initializedAt) return cached;
   let lastError = null;
   for (const url of getRemoteUrlCandidates(client.config.url)) {
+    throwIfMcpAborted(options.signal);
     try {
-      const session = await openSseSessionAtUrl(withClientUrl(client, url), cacheKey);
+      const session = await openSseSessionAtUrl(withClientUrl(client, url), cacheKey, options);
       mcpSessions.set(cacheKey, session);
       return session;
     } catch (error) {
+      if (isMcpAbortError(error)) throw error;
       lastError = error;
     }
   }
   throw lastError || new Error('SSE MCP 初始化失败。');
 }
 
-async function openSseSessionAtUrl(client, cacheKey) {
+async function openSseSessionAtUrl(client, cacheKey, options = {}) {
   const response = await fetchMcpHttp(client.config.url, {
     method: 'GET',
-    headers: buildSseOpenHeaders(client)
+    headers: buildSseOpenHeaders(client),
+    signal: options.signal
   }, '打开 SSE MCP 连接');
   if (!response.ok) {
     const body = await response.text().catch(() => '');
@@ -839,7 +888,7 @@ async function openSseSessionAtUrl(client, cacheKey) {
     initializedAt: 0
   };
   pumpSseSession(session).catch(error => rejectAllSsePending(session, error));
-  await waitForSseEndpoint(session, client.config.timeout);
+  await waitForSseEndpoint(session, client.config.timeout, options.signal);
   const initRequest = createJsonRpcRequest('initialize', {
     protocolVersion: MCP_PROTOCOL_VERSION,
     capabilities: {},
@@ -848,24 +897,25 @@ async function openSseSessionAtUrl(client, cacheKey) {
       version: '0.1.0'
     }
   });
-  const initPending = waitForSseMessage(session, initRequest.id, client.config.sse_read_timeout);
-  const initDirect = await postSseMessage(client, session, initRequest, '初始化 SSE MCP');
+  const initPending = waitForSseMessage(session, initRequest.id, client.config.sse_read_timeout, options.signal);
+  const initDirect = await postSseMessage(client, session, initRequest, '初始化 SSE MCP', options);
   parseMcpJsonRpcResponse(initDirect || await initPending, initRequest.id);
   await postSseMessage(client, session, {
     jsonrpc: '2.0',
     method: 'notifications/initialized',
     params: {}
-  }, '发送 SSE MCP initialized 通知').catch(() => {});
+  }, '发送 SSE MCP initialized 通知', options).catch(() => {});
   session.initializedAt = Date.now();
   return session;
 }
 
-async function postSseMessage(client, session, request, actionLabel) {
+async function postSseMessage(client, session, request, actionLabel, options = {}) {
   if (!session.messageUrl) throw new Error('SSE MCP 未提供消息 POST endpoint。');
   const response = await fetchMcpHttp(session.messageUrl, {
     method: 'POST',
     headers: buildMcpHeaders(client),
-    body: JSON.stringify(request)
+    body: JSON.stringify(request),
+    signal: options.signal
   }, actionLabel);
   if (!response.ok) {
     const body = await response.text().catch(() => '');
@@ -925,19 +975,35 @@ function looksLikeSseEndpoint(data) {
   return data.startsWith('/') || data.startsWith('http://') || data.startsWith('https://');
 }
 
-function waitForSseEndpoint(session, timeoutSeconds = 10) {
+function waitForSseEndpoint(session, timeoutSeconds = 10, signal = null) {
   if (session.messageUrl) return Promise.resolve(session.messageUrl);
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createMcpAbortError());
+      return;
+    }
     const timeout = globalThis.setTimeout(() => {
       session.endpointWaiters = session.endpointWaiters.filter(waiter => waiter.reject !== reject);
       reject(new Error('SSE MCP 未在超时内返回 endpoint 事件。'));
     }, normalizeNumber(timeoutSeconds, 1, 120, 10) * 1000);
+    const cleanup = () => signal?.removeEventListener?.('abort', abort);
+    const abort = () => {
+      globalThis.clearTimeout(timeout);
+      session.endpointWaiters = session.endpointWaiters.filter(waiter => waiter.reject !== reject);
+      cleanup();
+      reject(createMcpAbortError());
+    };
+    signal?.addEventListener?.('abort', abort, { once: true });
     session.endpointWaiters.push({
       resolve: value => {
         globalThis.clearTimeout(timeout);
+        cleanup();
         resolve(value);
       },
-      reject
+      reject: error => {
+        cleanup();
+        reject(error);
+      }
     });
   });
 }
@@ -947,20 +1013,34 @@ function resolveSseEndpoint(session) {
   waiters.forEach(waiter => waiter.resolve(session.messageUrl));
 }
 
-function waitForSseMessage(session, id, timeoutSeconds = 300) {
+function waitForSseMessage(session, id, timeoutSeconds = 300, signal = null) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createMcpAbortError());
+      return;
+    }
     const key = String(id);
     const timeout = globalThis.setTimeout(() => {
       session.pending.delete(key);
       reject(new Error(`SSE MCP 等待 JSON-RPC 响应超时：${key}`));
     }, normalizeNumber(timeoutSeconds, 10, 3600, 300) * 1000);
+    const cleanup = () => signal?.removeEventListener?.('abort', abort);
+    const abort = () => {
+      globalThis.clearTimeout(timeout);
+      session.pending.delete(key);
+      cleanup();
+      reject(createMcpAbortError());
+    };
+    signal?.addEventListener?.('abort', abort, { once: true });
     session.pending.set(key, {
       resolve: value => {
         globalThis.clearTimeout(timeout);
+        cleanup();
         resolve(value);
       },
       reject: error => {
         globalThis.clearTimeout(timeout);
+        cleanup();
         reject(error);
       }
     });
@@ -977,19 +1057,22 @@ function rejectAllSsePending(session, error) {
   session.pending.clear();
 }
 
-async function sendStdioRelayRequest(client, method, params = {}) {
+async function sendStdioRelayRequest(client, method, params = {}, options = {}) {
   const request = createJsonRpcRequest(method, params);
   if (typeof window !== 'undefined' && window.__FRITIA_MCP_RELAY__?.request) {
+    throwIfMcpAborted(options.signal);
     const response = await window.__FRITIA_MCP_RELAY__.request({
       client: client.config,
       request
     });
+    throwIfMcpAborted(options.signal);
     return parseMcpJsonRpcResponse(getNativeRelayResponse(response), request.id);
   }
   const relayUrl = client.config.relayUrl || DEFAULT_RELAY_URL;
   const response = await fetch(relayUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: options.signal,
     body: JSON.stringify({
       server: {
         command: client.config.command,
@@ -1002,6 +1085,21 @@ async function sendStdioRelayRequest(client, method, params = {}) {
     })
   });
   return parseMcpJsonRpcResponse(getNativeRelayResponse(await response.json()), request.id);
+}
+
+function throwIfMcpAborted(signal) {
+  if (!signal?.aborted) return;
+  throw createMcpAbortError();
+}
+
+function createMcpAbortError() {
+  const error = new Error('用户已停止工具调用。');
+  error.name = 'AbortError';
+  return error;
+}
+
+function isMcpAbortError(error) {
+  return error?.name === 'AbortError' || error?.message === '用户已停止工具调用。';
 }
 
 function buildMcpHeaders(client, sessionId = '') {
@@ -1167,9 +1265,10 @@ async function assertWebMcpPermission(name, args) {
 }
 
 function normalizeMcpConfig(raw = {}) {
-  const clients = Array.isArray(raw.clients) && raw.clients.length
+  const rawClients = Array.isArray(raw.clients) && raw.clients.length
     ? raw.clients.map(normalizeMcpClient).filter(Boolean)
     : DEFAULT_MCP_CONFIG.clients.map(normalizeMcpClient);
+  const clients = ensureBuiltinFilesystemClient(rawClients);
   return {
     version: 1,
     selectedClientIdsByConversation: normalizeSelectedMap(raw.selectedClientIdsByConversation),
@@ -1213,9 +1312,125 @@ function normalizeMcpClient(raw = {}) {
       : transport === MCP_TRANSPORTS.STDIO
       ? formatMcpServerConfigJson({ ...fallback, ...runtimeConfig, transport }, transport, name)
       : ''),
+    builtin: String(raw.builtin || ''),
+    hiddenFromPicker: raw.hiddenFromPicker === true,
     createdAt: Number(raw.createdAt) || Date.now(),
     updatedAt: Number(raw.updatedAt) || Number(raw.createdAt) || Date.now()
   };
+}
+
+async function assertMcpFileWritePermission(client, toolName, args) {
+  const config = getMcpConfig();
+  if (!config.permissions.requireFileWriteApproval) return;
+  const operations = detectFileMutationOperations(toolName, args);
+  if (!operations.length || typeof window === 'undefined') return;
+  const details = operations.slice(0, 30).map(item => `- ${item.action}: ${item.path || '未明确路径'}`).join('\n');
+  const overflow = operations.length > 30 ? `\n- 还有 ${operations.length - 30} 项未展开` : '';
+  const ok = window.confirm([
+    `允许 ${client.name} 的工具 ${toolName} 执行文件写入或删除操作？`,
+    '',
+    details + overflow,
+    '',
+    `参数：${JSON.stringify(args, null, 2).slice(0, 800)}`
+  ].join('\n'));
+  if (!ok) throw new Error('用户拒绝文件写入或删除操作。');
+}
+
+function detectFileMutationOperations(toolName, args) {
+  const paths = collectPotentialFilePaths(args);
+  const action = detectMutationAction(toolName, args, paths);
+  if (!action) return [];
+  if (!paths.length) return [{ action, path: '' }];
+  return paths.map(path => ({ action, path }));
+}
+
+function detectMutationAction(toolName, args, paths = []) {
+  const source = `${toolName || ''} ${collectObjectKeys(args).join(' ')}`.toLowerCase().replace(/[_-]+/g, ' ');
+  if (/\b(delete|remove|unlink|rmdir|trash|rm)\b/.test(source)) return '删除';
+  if (/\b(move|rename|mv)\b/.test(source)) return '移动或重命名';
+  if (/\b(copy|cp|duplicate)\b/.test(source)) return '复制';
+  if (/\b(write|create|save|append|edit|update|patch|modify|mkdir|touch|upload|replace)\b/.test(source)) return '写入或修改';
+  if (paths.length && /\b(screenshot|capture|export|download)\b/.test(source)) return '写入或修改';
+  if (paths.length && containsMutationPayload(args)) return '写入或修改';
+  return '';
+}
+
+function collectObjectKeys(value, keys = []) {
+  if (!value || typeof value !== 'object') return keys;
+  if (Array.isArray(value)) {
+    value.forEach(item => collectObjectKeys(item, keys));
+    return keys;
+  }
+  Object.entries(value).forEach(([key, child]) => {
+    keys.push(key);
+    collectObjectKeys(child, keys);
+  });
+  return keys;
+}
+
+function containsMutationPayload(value) {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(containsMutationPayload);
+  return Object.entries(value).some(([key, child]) => {
+    const normalizedKey = key.toLowerCase();
+    if (['content', 'data', 'text', 'bytes', 'patch', 'edits', 'overwrite', 'recursive'].includes(normalizedKey)) return true;
+    return containsMutationPayload(child);
+  });
+}
+
+function collectPotentialFilePaths(value, paths = new Set(), key = '') {
+  if (!value || typeof value !== 'object') return [...paths];
+  if (Array.isArray(value)) {
+    value.forEach(item => {
+      if (typeof item === 'string' && looksLikeFilePathKey(key)) paths.add(item);
+      collectPotentialFilePaths(item, paths, key);
+    });
+    return [...paths];
+  }
+  Object.entries(value).forEach(([key, child]) => {
+    if (typeof child === 'string' && looksLikeFilePathKey(key)) {
+      paths.add(child);
+    } else if (Array.isArray(child) && looksLikeFilePathKey(key)) {
+      child.filter(item => typeof item === 'string').forEach(item => paths.add(item));
+    }
+    collectPotentialFilePaths(child, paths, key);
+  });
+  return [...paths];
+}
+
+function looksLikeFilePathKey(key) {
+  return /(^|_|\b)(path|file|filepath|filename|target|destination|dest|source|from|to|dir|directory|folder|output|outputs|input|inputs|paths|files)(\b|_|$)/i.test(String(key || ''));
+}
+
+function ensureBuiltinFilesystemClient(clients = []) {
+  const environment = getRuntimeEnvironment();
+  const pureFrontend = isBrowserFrontendRuntime(environment);
+  const existing = clients.find(client => client.id === BUILTIN_FILESYSTEM_MCP_ID);
+  const builtin = normalizeMcpClient({
+    ...BUILTIN_FILESYSTEM_CLIENT,
+    ...(existing || {}),
+    id: BUILTIN_FILESYSTEM_MCP_ID,
+    name: 'Filesystem',
+    enabled: pureFrontend ? false : existing?.enabled !== false,
+    transport: MCP_TRANSPORTS.STDIO,
+    permission: 'allow',
+    config: { ...DEFAULT_STDIO_CONFIG },
+    configJson: BUILTIN_FILESYSTEM_CONFIG_JSON,
+    builtin: 'filesystem',
+    hiddenFromPicker: true
+  });
+  const rest = clients.filter(client => client.id !== BUILTIN_FILESYSTEM_MCP_ID);
+  return [...rest, builtin];
+}
+
+function withImplicitFilesystemClientIds(clientIds = []) {
+  const selected = [...new Set((Array.isArray(clientIds) ? clientIds : []).map(String).filter(Boolean))];
+  if (!selected.length) return selected;
+  const builtin = getMcpConfig().clients.find(client => client.id === BUILTIN_FILESYSTEM_MCP_ID);
+  if (builtin?.enabled && !selected.includes(BUILTIN_FILESYSTEM_MCP_ID)) {
+    selected.push(BUILTIN_FILESYSTEM_MCP_ID);
+  }
+  return selected;
 }
 
 function normalizeClientConfig(config = {}, transport) {

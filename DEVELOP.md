@@ -4,29 +4,34 @@
 
 - 新增 `src/js/mcp_tools.js`：集中管理 `localStorage.fritia_mcp_tool_config`、MCP 客户端配置、权限、系统日志、Streamable HTTP MCP 初始化/`tools/list`/`tools/call`、Stdio Relay 调用，以及 WebMCP 服务端 `window.FritiaWebMCP`。
 - 新增 `src/js/tool_chat_engine.js`：工具模式私聊独立流程。该流程不复用 `completePrivateMessageReply()`，而是自行构建角色 prompt、RAG、长期记忆和历史上下文，调用支持 tool calls 的 OpenAI-compatible `chat/completions` 流式接口，并把工具调用状态写入 `message.meta.toolTrace`。
-- `tool_chat_engine.js` 只把最终回复写入长期记忆；`toolTrace` 中的“思考中”和“MCP 调用”详情只保存到聊天历史，不进入后续 LLM 上下文，工具模式消息附件也不会进入后续 LLM 上下文。
-- `tool_chat_engine.js` 工具模式为多步 agent loop：每轮模型响应仍携带完整 MCP tools，工具结果回填后继续请求模型判断下一步；只有无工具调用且不是“继续处理/要我继续/下一步操作”等中间话术时才结束。循环上限为 50 步；达到上限或异常中断时会把压缩后的 agent messages 写入 `toolTrace.resumeState`，用户发送“继续”可续跑。
+- `tool_chat_engine.js` 把工具模式最终回复写入长期记忆，但通过 `skipGraphEdges` / `excludeFromGraph` 避免创建知识图谱节点；`toolTrace` 中的“思考中”和“MCP 调用”详情只保存到聊天历史，不进入长期记忆或后续 LLM 上下文，工具模式消息附件也不会进入后续 LLM 上下文。
+- `tool_chat_engine.js` 工具模式为多步 agent loop：每轮模型响应仍携带完整 MCP tools，工具结果回填后继续请求模型判断下一步；只有无工具调用且不是“继续处理/要我继续/下一步操作”等中间话术时才结束。循环上限为 50 步；达到上限、用户点击停止或异常中断时会把压缩后的 agent messages 写入 `toolTrace.resumeState`，用户发送“继续”可续跑。
 - 新增 `backend/mcp_relay.mjs`：无框架 Node.js stdio MCP Relay，默认监听 `127.0.0.1:17373`，接收前端 JSON-RPC 请求后启动/复用本地 stdio MCP Server。该目录会随 `tools/build_static.mjs` 复制到 `dist/backend`，供 Tauri/Electron/Capacitor/WebView 打包流程复用。
 - `index.html` 新增 `#tool-call-panel` 工具调用悬浮窗口、`#mcp-picker-popover` 聊天头工具选择下拉，以及左侧 `data-panel-open="tool-call-panel"` 入口。聊天头原视频按钮改为 `#external-tools-toggle-btn`。
-- `src/js/ui.js` 新增工具配置窗口绑定、MCP 客户端列表/JSON 编辑器/权限/日志渲染、聊天头多选下拉、工具开关状态同步和工具模式发送分流。
+- `src/js/ui.js` 新增工具配置窗口绑定、MCP 客户端列表/JSON 编辑器/权限/日志渲染、聊天头多选下拉、工具开关状态同步和工具模式发送分流；纯网页运行时隐藏 Stdio MCP 配置页签，MCP 客户端启用开关切换后立即保存，权限页全部使用自绘开关且每行一个选项。
 - `src/styles/app.css` 新增工具配置窗口桌面/移动两套布局、MCP 多选下拉、工具调用状态栏和自绘滚动条样式，继续使用本项目蓝紫 Soft UI 设计变量。
-- `sw.js` 缓存版本升级到 `fritia-next-chat-v12`，核心缓存清单加入 `mcp_tools.js`、`tool_chat_engine.js` 和 `wrench.svg`；本次同时用于刷新 MCP transport、配置保存逻辑、工具对话多步循环和工具附件输出。
+- `sw.js` 缓存版本升级到 `fritia-next-chat-v15`，核心缓存清单加入 `mcp_tools.js`、`tool_chat_engine.js`、`wrench.svg`、停止按钮 `x.svg` 和工具窗口新下载的 `tool-server.svg`、`tool-skills.svg`、`tool-streamable-http.svg`、`tool-stdio.svg`。
 - `package.json` 的 `check` 脚本加入新增模块和 `backend/mcp_relay.mjs`；`tools/static_server.mjs` 增加 `.mjs` MIME；`tools/build_static.mjs` 复制 `backend/`。
 - 网络沙箱阻止从 Lucide GitHub 下载 `wrench.svg`，因此本次先按项目现有 Lucide SVG 风格写入同名本地图标，后续可用官方下载资源覆盖。
 - `parseMcpServerConfigJson()` 以标准 `mcpServers` 配置为主，按 `url`、`command`、`transport`、`type` 解析 Streamable HTTP、legacy SSE 或 stdio；UI 不再把标准 JSON 改写成扁平内部模板。Streamable HTTP 新建、删除兜底和空白保存时 `#mcp-client-json` 保持空白，空白或错误 JSON 会在运行时报错，不再自动套默认 URL 模板。
 - Streamable HTTP MCP 在桌面打包端优先使用 `window.__FRITIA_MCP_HTTP_RELAY__`，原生 relay 按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应，并兼容 `sessionId` / `session_id` 两种返回字段，避免 initialize 后 `tools/list` 丢失 `Mcp-Session-Id`。远程 URL 运行时会对 `localhost` / `127.0.0.1` 做 loopback fallback，以适配带 Host 检查的本地 MCP 服务。
 - `backend/mcp_relay.mjs` 和 Windows Tauri stdio relay 均会在首次非 initialize 请求前自动完成 MCP `initialize` / `notifications/initialized` 握手；Windows 下对 `.cmd` / `.bat` / 无扩展命令使用通用 `cmd.exe /d /s /c` 包装，兼容 `npx @playwright/mcp@latest` 这类 stdio MCP 配置。
 - `src/js/mcp_tools.js` 新增 legacy SSE transport 流程：GET 打开 SSE 事件流、读取 endpoint 事件、POST JSON-RPC 消息，并从 SSE message 事件按 JSON-RPC `id` 匹配响应。
+- `src/js/mcp_tools.js` 的工具列表读取、Streamable HTTP、legacy SSE 和开发用 stdio relay fetch 路径支持可选 `AbortSignal`；工具模式停止按钮触发后会中止正在进行的 HTTP/SSE/fetch 请求，并在 native relay 返回后阻断后续 MCP 步骤。
+- `src/js/mcp_tools.js` 预置隐藏的 `Filesystem` stdio MCP 客户端：打包运行时默认启用，纯网页运行时始终禁用；它不会进入聊天头 MCP 多选下拉，但当会话选择了至少一个可见 MCP 客户端时，会通过 `withImplicitFilesystemClientIds()` 隐式加入工具列表收集。
 - 工具模式 prompt 保持通用 MCP 流程：根据工具名称、描述和参数 schema 判断是否调用工具，不写死任何具体 MCP Server 或工具名。
 - 工具模式 prompt 明确要求：任务未完成时继续发起 tool calls，不得在自然语言中间承诺后停止，也不得让用户重复确认本可继续用工具完成的步骤。
 - `src/js/ui.js` 的 `createToolTraceNode()` 将连续 `toolTrace.calls` 合并为单个“MCP 调用”折叠框，折叠时显示最新工具名，展开后再逐条查看参数、结果和附件摘要。
-- 工具模式最终消息可携带任意附件：`tool_chat_engine.js` 从模型 content parts、MCP result content、Relay `changedFiles`、结果文本和工具参数中的文件引用抽取 image/audio/resource/file；图片直接渲染，音频复用语音条，其他附件通过 `saveAttachmentToUserDevice()` 保存到用户选择的位置。
+- `src/js/ui.js` 在工具流程运行时记录 `activeToolRun`，当前 typing 工具回复旁显示圆形停止按钮；点击后触发 `AbortController.abort()`，隐藏按钮并等待工具引擎把 trace 标记为可续跑中断。
+- 工具模式最终消息可携带任意附件：`tool_chat_engine.js` 从模型 content parts、MCP result content、`resource_link`、`structuredContent`、Relay `changedFiles`、结果文本和工具参数中的远程文件 URL / 本地文件引用抽取 image/audio/video/resource/file；图片直接渲染，音频复用语音条，视频使用原生 video 控件，其他附件通过 `saveAttachmentToUserDevice()` 保存到用户选择的位置。`.log`、常见临时文件和没有可保存数据的空占位会在 `normalizeGeneratedAttachments()` 阶段过滤。
 - `backend/mcp_relay.mjs` 在 stdio `tools/call` 前后对配置 `cwd` 做有限文件快照，并额外读取请求参数中明确出现的文件路径/文件名；返回 `{ response, changedFiles }`，前端通过 `getNativeRelayResponse()` 保留 MCP JSON-RPC 结果并把文件变更映射为聊天附件。
 - `src/js/mcp_tools.js` 将 `MCP_LOG_EVENT` 从 `MCP_CONFIG_EVENT` 中拆出，MCP 调用日志写入只刷新日志面板，不再触发工具配置、会话 chrome 和 WebMCP manifest 的整套刷新。
 - `src/js/ui.js` 为工具回复新增 `updateStoreFromToolReply()`：工具运行中只更新消息列表和移动端返回状态，最终 sent/error 时再刷新会话列表、MCP 选择器和聊天头，避免每次 MCP 调用导致主页面头像和人物图标重载。
-- 工具附件渲染新增本地文件桥兼容：打包端可暴露 `window.__FRITIA_NATIVE_FILE__.readFile()`，`createMessageAttachmentNode()` 会用它加载本地图片/音频路径，文件卡片点击保存时也会优先读取该桥返回的数据。
+- 工具附件渲染新增本地文件桥和远程 URL 兼容：`storage.normalizeAttachment()` 保留工具附件的 `url` / `path`，打包端可通过 `window.__FRITIA_NATIVE_FILE__.readFile()` 读取本地路径；远程 URL 直接用于预览，保存时才尝试 fetch 成真实数据，失败时保留直接下载链接。
 - `assertMcpPermission()` 改为以全局权限设置驱动实际授权流程；客户端级 `off` 仍禁止调用，但客户端默认 `ask` 不再覆盖“默认调用级别：允许已启用 MCP + 关闭手动授权”。
-- Windows v0.3.2 Tauri 壳层启用 `devtools` feature，注入脚本监听 `F12` 调用 `open_devtools`；stdio MCP 子进程 stderr 会被采集为最近日志摘要，并在启动、初始化或读写失败时附加到错误中。v0.3.2 额外提供通用 `read_local_file` 命令和 stdio `tools/call` 文件快照，把本地 MCP 工具创建/修改的输出文件作为附件回传网页层。
+- `assertMcpFileWritePermission()` 会在 `permissions.requireFileWriteApproval` 开启时，对通用 MCP 工具名和参数键做文件写入/删除/移动/复制意图检测，并把同一次调用涉及的目标路径合并成一次授权提示。
+- `src/js/chat_engine.js` 和 `src/js/roundtable.js` 在普通私聊/群聊 LLM 上下文构建前读取 `permissions.isolateToolContext`；开启后过滤 `message.meta.toolMode === true` 的历史。工具模式自身的 `buildToolMessages()` 不做该过滤。
+- Windows v0.3.4 Tauri 壳层启用 `devtools` feature，注入脚本监听 `F12` 调用 `open_devtools`；stdio MCP 子进程 stderr 会被采集为最近日志摘要，并在启动、初始化或读写失败时附加到错误中。v0.3.4 额外提供通用 `read_local_file` 命令和 stdio `tools/call` 文件快照，把本地 MCP 工具创建/修改的输出文件作为附件回传网页层。
 
 ## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
 

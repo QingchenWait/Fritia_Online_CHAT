@@ -775,6 +775,38 @@ img {
   margin: 0 0 8px;
 }
 
+.tool-stop-button {
+  width: 38px;
+  height: 38px;
+  margin: 0 0 8px auto;
+  border: 1px solid rgba(217, 58, 58, 0.18);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 10px 24px rgba(217, 58, 58, 0.12);
+  cursor: pointer;
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.tool-stop-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(217, 58, 58, 0.34);
+  background: rgba(255, 246, 246, 0.96);
+  box-shadow: 0 14px 26px rgba(217, 58, 58, 0.16);
+}
+
+.tool-stop-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+  transform: none;
+}
+
+.tool-stop-button img {
+  width: 18px;
+  height: 18px;
+}
+
 .tool-trace-card {
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -953,6 +985,15 @@ img {
   max-width: min(320px, 70vw);
   border-radius: var(--radius);
   margin-top: 6px;
+}
+
+.message-content video.message-video {
+  max-width: min(360px, 72vw);
+  max-height: min(420px, 52dvh);
+  border-radius: var(--radius);
+  margin-top: 6px;
+  background: #111827;
+  display: block;
 }
 
 .message-content img.message-image-sticker {
@@ -4900,6 +4941,7 @@ select:focus {
 
 .tool-transport-tabs button {
   min-height: 48px;
+  min-width: max-content;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -4909,6 +4951,7 @@ select:focus {
   gap: 8px;
   padding: 0 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .tool-transport-tabs button img {
@@ -4953,11 +4996,14 @@ select:focus {
   min-height: 56px;
   border-bottom: 1px solid var(--line);
   padding: 0 12px;
+  flex-wrap: nowrap;
 }
 
 .tool-list-head .btn,
 .tool-log-toolbar .btn {
   min-height: 36px;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .tool-list-head img,
@@ -5072,7 +5118,13 @@ select:focus {
 .tool-editor-actions {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 8px;
+}
+
+.tool-editor-actions .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .danger-icon-btn img {
@@ -5092,6 +5144,75 @@ select:focus {
   border-radius: var(--radius);
   background: var(--surface-soft);
   padding: 12px;
+}
+
+.tool-toggle-row {
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.tool-toggle-row > span:first-child {
+  min-width: 0;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.tool-toggle-control {
+  width: 50px;
+  height: 28px;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.tool-toggle-control input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.tool-toggle-control > span {
+  width: 50px;
+  height: 28px;
+  border-radius: 999px;
+  background: #dce3f1;
+  padding: 3px;
+  box-shadow: inset 0 0 0 1px rgba(120, 140, 180, 0.16);
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.tool-toggle-control > span::before {
+  content: "";
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(40, 60, 120, 0.18);
+  display: block;
+  transition: transform 160ms ease;
+}
+
+.tool-toggle-control input:checked + span {
+  background: var(--brand-gradient);
+  box-shadow: 0 8px 18px rgba(79, 99, 255, 0.22);
+}
+
+.tool-toggle-control input:checked + span::before {
+  transform: translateX(22px);
+}
+
+.tool-toggle-control input:disabled + span {
+  opacity: 0.56;
+  cursor: not-allowed;
 }
 
 .tool-json-field textarea {
@@ -5160,7 +5281,7 @@ select:focus {
 }
 
 .permission-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .permission-grid .form-actions {

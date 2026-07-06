@@ -6,12 +6,15 @@
 - 纯网页部署时，聊天头右上角原“视频通话占位”按钮会作为外部工具选择入口，只显示可用的 Streamable HTTP MCP 客户端；打包到 Tauri/Electron/Capacitor/WebView 后可同时显示本地 Stdio MCP。
 - 私聊启用外部工具后，会切换到独立的 `tool_chat_engine.js` 流式工具对话流程，消息中展示可折叠“思考中”和合并后的“MCP 调用”状态栏；状态详情保存到聊天历史，但不会写入长期记忆或后续 LLM 上下文。
 - 工具模式现在使用多步 agent loop：工具结果返回后会继续允许模型发起后续 MCP 调用，直到任务完成、工具不可用、权限被拒绝、明确失败或达到 50 步保护上限；“我继续处理 / 要我继续吗 / 下一步我会操作”这类中间话术不会直接结束 MCP 流程。达到上限或网络异常后，发送“继续”可从中断点续跑。
-- 工具模式回复支持文本以外的输出：图片直接展示，音频显示为可播放语音条，其他类型作为可保存附件展示。MCP 工具返回的附件、Relay 捕获到的本轮新建/修改文件，以及结果文本或参数中出现的文件路径都会合并到 bot 最后一条回复里，不会只把文件静默留在工作目录。
+- 工具模式回复支持文本以外的输出：图片直接展示，音频显示为可播放语音条，视频显示为可播放视频，其他类型作为可保存附件展示。MCP 工具返回的 `image` / `audio` / `resource` / `resource_link` / `structuredContent`、Relay 捕获到的本轮新建/修改文件，以及结果文本或参数中出现的远程文件 URL / 本地文件路径都会合并到 bot 最后一条回复里；没有可读取数据、可下载 URL 或打包端本地文件桥支持的空占位不会进入最终附件列表。
+- 工具调用运行中，当前工具回复旁会显示圆形“停止工具调用”按钮。点击后会中止本轮 LLM / Streamable HTTP / SSE / 开发 relay fetch，并阻止后续 MCP 步骤继续执行；native stdio relay 不支持硬取消时，会在返回后立即停止本轮流程。
 - WebMCP 服务端通过 `window.FritiaWebMCP` 和页面内 `#fritia-webmcp-manifest` 暴露角色列表、角色上下文和按角色对话能力，让支持的浏览器 agent 继承本 APP 的人物人格、知识库、长期记忆和默认 LLM 配置。
 - 新增 `backend/mcp_relay.mjs`，作为打包客户端可复用的轻量 stdio MCP Relay。启动后默认监听 `127.0.0.1:17373`，前端 Stdio MCP 配置通过 relay 调用本地 MCP Server。
 - MCP 客户端 JSON 使用标准 `mcpServers` 配置文本，运行时按 `url` / `command` / `transport` / `type` 识别 Streamable HTTP、SSE 或 stdio；Streamable HTTP 新建、删除兜底和空白保存时不会预置模板，也不会把用户输入改写成内部扁平格式。对 `localhost` / `127.0.0.1` 会做运行时 loopback fallback，不改写存档。
-- Windows v0.3.2 Tauri 打包端对 Streamable HTTP MCP 使用原生 HTTP relay，按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应；stdio relay 会自动完成 MCP `initialize` / `notifications/initialized` 握手，并在 Windows 上兼容 `npx`、`npm` 等无扩展命令。
-- Windows v0.3.2 Tauri 打包端支持按 `F12` 呼出 WebView2 DevTools，并提供通用本地文件读取桥，让 stdio MCP 工具创建/修改的图片、音频和普通文件可以回传到聊天附件。
+- Windows v0.3.4 Tauri 打包端对 Streamable HTTP MCP 使用原生 HTTP relay，按 JSON-RPC `id` 读取 `application/json` 或 `text/event-stream` 响应；stdio relay 会自动完成 MCP `initialize` / `notifications/initialized` 握手，并在 Windows 上兼容 `npx`、`npm` 等无扩展命令。
+- Windows v0.3.4 Tauri 打包端支持按 `F12` 呼出 WebView2 DevTools，并提供通用本地文件读取桥，让 stdio MCP 工具创建/修改的图片、音频、视频和普通文件可以回传到聊天附件。
+- 打包端预置隐藏的 `Filesystem` stdio MCP 客户端，服务器配置为 `npx -y @modelcontextprotocol/server-filesystem .`。它不会出现在聊天头 MCP 多选下拉中，但当用户至少选择一个可见 MCP 客户端进入工具模式时会一并激活；网页端只保留该预置配置并始终禁用。
+- 权限设置新增“调用工具记录不注入日常对话上下文”和“每次文件写入时都需要授权”。前者会让工具模式历史只在工具模式上下文中使用；后者会在 MCP 工具写入、移动、复制、删除文件前合并列出目标文件并请求授权。
 
 ## 2026-07-05 Runtime Environment Detection And WebDAV CORS Check
 
@@ -145,18 +148,18 @@ http://127.0.0.1:3000/
 
 - “MCP 客户端”：新增或编辑服务器，填写标准 `mcpServers` 服务器配置 JSON。网页端可使用 Streamable HTTP / SSE；打包端可同时使用 Streamable HTTP / SSE 和 stdio。Streamable HTTP 的“服务器配置 JSON”默认保持空白，用户需要自行粘贴真实配置。
 - “MCP 服务端”：启用后页面会暴露 `window.FritiaWebMCP`，外部浏览器 agent 可读取 manifest 或调用角色工具。
-- “权限设置”：可设置默认调用级别、是否每次手动授权、是否允许远程 HTTP MCP 和本地 Stdio MCP。
+- “权限设置”：可设置默认调用级别、是否每次手动授权、是否允许远程 HTTP MCP 和本地 Stdio MCP、工具记录是否隔离于日常上下文，以及文件写入/删除是否每次额外授权。保存权限设置后工具调用窗口会关闭。
 - “系统日志”：记录调用来源、工具名、参数、结果、时间和状态。
 
 推荐直接粘贴标准 MCP 客户端配置。保存后，配置框会保存你填写的标准 JSON 文本，不会改写成 APP 内部格式；如果 JSON 为空、格式错误或缺少 `url` / `command`，运行时会报错而不是自动套用模板。
 
-启用工具后，私聊会进入独立的工具对话流程。模型可以在同一轮回复中连续执行多个 MCP 工具步骤；如果模型先输出了“我继续帮你处理”“下一步我会点击”等中间文本，APP 会继续推进工具调用，而不是把这句文本当成最终回复。连续 MCP 调用会合并显示在同一个折叠框里，展开后可逐条查看参数和结果。工具运行中的日志和消息增量只刷新相关区域，不会反复刷新联系人头像和聊天主框架。只有最终回复会写入长期记忆，工具 trace 只保存到该条聊天记录中。
+启用工具后，私聊会进入独立的工具对话流程。模型可以在同一轮回复中连续执行多个 MCP 工具步骤；如果模型先输出了“我继续帮你处理”“下一步我会点击”等中间文本，APP 会继续推进工具调用，而不是把这句文本当成最终回复。连续 MCP 调用会合并显示在同一个折叠框里，展开后可逐条查看参数和结果。工具运行中的日志和消息增量只刷新相关区域，不会反复刷新联系人头像和聊天主框架。运行中可点击当前回复旁的圆形停止按钮中止本轮工具流程。最终回复会写入长期记忆，但不会生成知识图谱节点；工具 trace 只保存到该条聊天记录中。
 
-如果 MCP 工具返回图片、音频、resource 或 file-like content，APP 会把它们作为 bot 最终回复附件展示。打包端 stdio Relay 和开发用 `backend/mcp_relay.mjs` 会在 `tools/call` 前后记录配置 `cwd` 内的新建/修改文件，并把可读取文件随响应回传；图片会内嵌显示，音频会显示语音条，其他文件显示可点击保存的附件卡片。如果工具没有返回二进制附件，APP 至少会把结果文本或工具参数里出现的文件路径显示成文件卡片，便于用户定位本轮生成物。
+如果 MCP 工具返回图片、音频、视频、resource、resource_link、structuredContent 或 file-like content，APP 会把可查看或可保存的内容作为 bot 最终回复附件展示。打包端 stdio Relay 和开发用 `backend/mcp_relay.mjs` 会在 `tools/call` 前后记录配置 `cwd` 内的新建/修改文件，并把可读取文件随响应回传；远程 `http(s)` 文件 URL 会直接用于预览，用户点击保存时会优先拉取真实数据写入选择目录，若跨域限制导致无法读取则保留直接下载链接。`.log`、常见临时文件和确实没有可保存数据的空占位不会进入附件列表。
 
 权限设置中的“默认调用级别”和“工具调用前需要手动授权”会直接决定实际授权流程：设置为“允许已启用 MCP”且关闭手动授权时，不会每次弹出确认框。
 
-工具流程最多连续执行 50 步。若因为网络、模型输出或达到上限中断，消息 trace 会保存续跑状态；用户发送“继续”即可让工具模式从上次中断点继续处理。
+工具流程最多连续执行 50 步。若因为网络、模型输出、用户点击停止或达到上限中断，消息 trace 会保存续跑状态；用户发送“继续”即可让工具模式从上次中断点继续处理。
 
 ```json
 {
@@ -193,6 +196,19 @@ Legacy SSE transport 可显式声明 `transport`：
       "args": ["-y", "your-mcp-server-package"],
       "env": {},
       "cwd": ""
+    }
+  }
+}
+```
+
+打包端内置隐藏的 Filesystem 客户端使用以下配置，网页端仅保留该预置内容且保持禁用：
+
+```json
+{
+  "mcpServers": {
+    "server-name": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
     }
   }
 }

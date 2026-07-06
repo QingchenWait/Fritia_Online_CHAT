@@ -7,7 +7,7 @@ import { basename, extname, isAbsolute, resolve } from 'node:path';
 const host = process.env.FRITIA_MCP_RELAY_HOST || '127.0.0.1';
 const port = Number(process.env.FRITIA_MCP_RELAY_PORT || 17373);
 const MCP_PROTOCOL_VERSION = '2025-06-18';
-const RELAY_CLIENT_VERSION = '0.3.2';
+const RELAY_CLIENT_VERSION = '0.3.4';
 const FILE_SCAN_LIMIT = 2000;
 const FILE_EMBED_LIMIT_BYTES = 10 * 1024 * 1024;
 const processes = new Map();

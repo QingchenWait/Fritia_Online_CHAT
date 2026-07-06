@@ -366,6 +366,7 @@ function normalizeMemory(raw) {
         lastReinforcedAt: Number(raw.lastReinforcedAt) || 0,
         accessCount: Math.max(0, Math.round(Number(raw.accessCount) || 0)),
         reinforcementCount: Math.max(0, Math.round(Number(raw.reinforcementCount) || 0)),
+        excludeFromGraph: raw.excludeFromGraph === true,
         gameMinutes: Number(raw.gameMinutes) || 0,
         gameDateTime: clampString(raw.gameDateTime, 40),
         importance: clampNumber(raw.importance, 0, 10, 3),
@@ -656,7 +657,8 @@ function mergeMemory(a, b) {
         tags: [...new Set([...(a.tags || []), ...(b.tags || [])])].slice(0, 12),
         sourceMessageIds: [...new Set([...(a.sourceMessageIds || []), ...(b.sourceMessageIds || [])])].slice(0, 30),
         importance: Math.max(a.importance || 0, b.importance || 0),
-        confidence: Math.max(a.confidence || 0, b.confidence || 0)
+        confidence: Math.max(a.confidence || 0, b.confidence || 0),
+        excludeFromGraph: a.excludeFromGraph === true && b.excludeFromGraph === true
     };
 }
 
@@ -977,13 +979,17 @@ export function recordLongTermMemoryTurn(options = {}) {
     const memoryMap = new Map(store.memories.map(item => [item.id, item]));
     const edgeMap = new Map(store.edges.map(item => [item.id, item]));
     const advanced = getLongTermMemoryAdvancedSettings();
+    const skipGraphEdges = options.skipGraphEdges === true;
     let added = 0;
     let edgeAdded = 0;
     let reinforced = 0;
 
     for (const candidate of memoryCandidates) {
         if (store.deletedIds.includes(candidate.id)) continue;
-        const { edges: candidateEdges = [], ...memoryRecord } = candidate;
+        const { edges: candidateEdges = [], ...rawMemoryRecord } = candidate;
+        const memoryRecord = skipGraphEdges
+            ? { ...rawMemoryRecord, excludeFromGraph: true }
+            : rawMemoryRecord;
         const duplicate = advanced.duplicateReinforcementEnabled
             ? findSimilarMemory(memoryRecord, [...memoryMap.values()], advanced)
             : null;
@@ -996,6 +1002,7 @@ export function recordLongTermMemoryTurn(options = {}) {
             memoryMap.set(memoryRecord.id, existing ? mergeMemory(existing, memoryRecord) : memoryRecord);
             if (!existing) added += 1;
         }
+        if (skipGraphEdges) continue;
         for (const edge of candidateEdges) {
             if (store.deletedIds.includes(edge.id)) continue;
             const existingEdge = edgeMap.get(edge.id);
@@ -1892,6 +1899,7 @@ function deriveTopicEdgesFromMemories(memories = [], deletedSet = new Set()) {
     const scopes = new Map();
     for (const memory of memories) {
         if (!memory || deletedSet.has(memory.id)) continue;
+        if (memory.excludeFromGraph === true) continue;
         if (normalizeSpeakerRole(memory.speakerRole) === 'mixed') continue;
         const text = stripMemoryPrefix(memory.text || '');
         const topics = extractMemoryKeywords(text, {
@@ -2145,6 +2153,7 @@ function rebuildEdgesFromMemories(memories = [], deletedSet = new Set()) {
     const edgeMap = new Map();
     for (const memory of memories) {
         if (!memory || deletedSet.has(memory.id)) continue;
+        if (memory.excludeFromGraph === true) continue;
         if (normalizeSpeakerRole(memory.speakerRole) === 'mixed') continue;
         const context = {
             scope: memory.scope,

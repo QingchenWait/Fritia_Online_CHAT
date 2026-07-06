@@ -24,7 +24,8 @@ export async function completeToolPrivateMessageReply({
   text,
   userMessage = null,
   selectedClientIds = [],
-  onStore
+  onStore,
+  signal = null
 }) {
   if (!store || !conversation || !character) return null;
   const typingId = createId('tool_typing');
@@ -60,6 +61,7 @@ export async function completeToolPrivateMessageReply({
   let toolCallCount = Number(resumeState?.toolCallCount) || 0;
 
   try {
+    throwIfToolAborted(signal);
     const settings = getSettings();
     if (!settings.apiKey) {
       trace = finishTrace(trace, '未配置模型，已切回本地占位回复。');
@@ -70,7 +72,8 @@ export async function completeToolPrivateMessageReply({
 
     trace = updateThought(trace, '正在读取可用 MCP 工具。', 'running');
     commit({ text: '', status: 'typing' });
-    const toolSet = await collectMcpToolDefinitions(selectedClientIds);
+    const toolSet = await collectMcpToolDefinitions(selectedClientIds, { signal });
+    throwIfToolAborted(signal);
     const availableTools = toolSet.tools || [];
     const toolSummary = availableTools.length
       ? `可用工具：${availableTools.map(tool => tool.function.name).join('、')}`
@@ -106,6 +109,7 @@ export async function completeToolPrivateMessageReply({
     const toolOutputAttachments = [];
 
     while (stepCount < MAX_TOOL_AGENT_STEPS) {
+      throwIfToolAborted(signal);
       stepCount += 1;
       let stepText = '';
       trace = updateThought(
@@ -128,12 +132,14 @@ export async function completeToolPrivateMessageReply({
         messages: agentMessages,
         tools: availableTools,
         toolChoice: availableTools.length ? 'auto' : 'none',
+        signal,
         onDelta: delta => {
           stepText += delta;
           visibleText = stepText;
           commit({ text: visibleText, status: 'typing' });
         }
       });
+      throwIfToolAborted(signal);
       stepText = stepText || completion.content || '';
       if (stepText) visibleText = stepText;
       const completionAttachments = await normalizeGeneratedAttachments(completion.attachments || []);
@@ -169,8 +175,10 @@ export async function completeToolPrivateMessageReply({
           });
           commit({ text: visibleText, status: 'typing' });
           try {
+            throwIfToolAborted(signal);
             if (!entry) throw new Error(`未找到工具映射：${call.name}`);
-            const result = await callMcpToolByRegistryEntry(entry, call.arguments || {});
+            const result = await callMcpToolByRegistryEntry(entry, call.arguments || {}, { signal });
+            throwIfToolAborted(signal);
             const resultText = formatMcpContentText(result);
             const resultAttachments = await extractMcpResultAttachments(result, entry?.toolName || call.name, call.arguments || {});
             if (resultAttachments.length) toolOutputAttachments.push(...resultAttachments);
@@ -190,6 +198,7 @@ export async function completeToolPrivateMessageReply({
               ].filter(Boolean).join('\n\n')
             });
           } catch (error) {
+            if (isToolAbortError(error)) throw error;
             const message = error?.message || 'MCP 工具调用失败';
             trace = updateToolCall(trace, traceCallId, {
               status: 'error',
@@ -277,7 +286,8 @@ export async function completeToolPrivateMessageReply({
         characterName: character.name,
         userText: text,
         assistantText: reply,
-        sourceMessageIds: [userMessage?.id, typingId].filter(Boolean)
+        sourceMessageIds: [userMessage?.id, typingId].filter(Boolean),
+        skipGraphEdges: true
       });
     }
     return reply;
@@ -292,8 +302,12 @@ export async function completeToolPrivateMessageReply({
       });
     }
     trace = markTraceInterrupted(trace);
-    trace = finishTrace(appendThought(trace, error?.message || '工具对话失败', 'error'), '本轮工具对话异常中断，可发送“继续”从中断点续跑。');
-    const fallback = `工具调用流程失败：${error?.message || '未知错误'}`;
+    const stoppedByUser = isToolAbortError(error);
+    trace = finishTrace(
+      appendThought(trace, stoppedByUser ? '用户已停止工具调用。' : (error?.message || '工具对话失败'), 'error'),
+      stoppedByUser ? '本轮工具对话已停止，可发送“继续”从中断点续跑。' : '本轮工具对话异常中断，可发送“继续”从中断点续跑。'
+    );
+    const fallback = stoppedByUser ? '工具调用已停止。' : `工具调用流程失败：${error?.message || '未知错误'}`;
     commit({ text: fallback, status: 'error', createdAt: now() });
     return fallback;
   }
@@ -359,7 +373,7 @@ async function buildToolMessages({ store, conversation, character, userText, use
   ];
 }
 
-async function requestToolAwareCompletion({ settings, messages, tools = [], toolChoice = 'auto', onDelta }) {
+async function requestToolAwareCompletion({ settings, messages, tools = [], toolChoice = 'auto', onDelta, signal = null }) {
   const provider = getDefaultChatProvider(settings);
   if (!provider?.apiKey || !provider?.baseUrl || !provider?.model) {
     throw new Error('模型连接配置不完整，请检查默认模型设置。');
@@ -377,7 +391,8 @@ async function requestToolAwareCompletion({ settings, messages, tools = [], tool
       'Content-Type': 'application/json',
       Authorization: `Bearer ${provider.apiKey}`
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal
   });
   if (!response.ok) {
     const errorBody = await response.text().catch(() => '');
@@ -388,16 +403,17 @@ async function requestToolAwareCompletion({ settings, messages, tools = [], tool
     const json = await response.json();
     return extractJsonCompletion(json);
   }
-  return readStreamingCompletion(response, onDelta);
+  return readStreamingCompletion(response, onDelta, signal);
 }
 
-async function readStreamingCompletion(response, onDelta) {
+async function readStreamingCompletion(response, onDelta, signal = null) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   let content = '';
   const toolCalls = [];
   while (true) {
+    throwIfToolAborted(signal);
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
@@ -559,6 +575,8 @@ async function extractMcpResultAttachments(result, toolName = 'tool', args = {})
     if (attachment) raw.push(attachment);
   }
   raw.push(...extractChangedFileAttachments(result, toolName));
+  raw.push(...extractStructuredContentAttachments(result?.structuredContent || result?.structured_content, toolName));
+  raw.push(...extractStructuredContentAttachments(result?._meta || result?.metadata, toolName));
   raw.push(...extractFileReferenceAttachments(formatMcpContentText(result), args, toolName));
   return mergeToolAttachments(await normalizeGeneratedAttachments(raw));
 }
@@ -573,7 +591,7 @@ function attachmentFromMcpContent(item = {}, toolName = 'tool') {
       name: item.name || `${toolName}-image`,
       mime,
       dataUrl: item.data ? base64ToDataUrl(item.data, mime) : '',
-      url: isLocalFileReference(item.url) ? '' : item.url || '',
+      url: isDownloadableAttachmentUrl(item.url) ? item.url : '',
       path: normalizeLocalFileReference(item.path || item.filePath || item.file_path || item.url || '')
     };
   }
@@ -584,12 +602,23 @@ function attachmentFromMcpContent(item = {}, toolName = 'tool') {
       name: item.name || `${toolName}-audio`,
       mime,
       dataUrl: item.data ? base64ToDataUrl(item.data, mime) : '',
-      url: isLocalFileReference(item.url) ? '' : item.url || '',
+      url: isDownloadableAttachmentUrl(item.url) ? item.url : '',
       path: normalizeLocalFileReference(item.path || item.filePath || item.file_path || item.url || ''),
       duration: Number(item.duration) || 0
     };
   }
-  if (type === 'resource') {
+  if (type === 'video') {
+    const mime = item.mimeType || item.mime_type || item.mime || 'video/mp4';
+    return {
+      type: 'video',
+      name: item.name || `${toolName}-video`,
+      mime,
+      dataUrl: item.data ? base64ToDataUrl(item.data, mime) : '',
+      url: isDownloadableAttachmentUrl(item.url) ? item.url : '',
+      path: normalizeLocalFileReference(item.path || item.filePath || item.file_path || item.url || '')
+    };
+  }
+  if (type === 'resource' || type === 'resource_link') {
     const resource = item.resource || {};
     const mime = resource.mimeType || resource.mime_type || item.mimeType || item.mime_type || 'application/octet-stream';
     const uri = resource.uri || item.uri || '';
@@ -602,7 +631,7 @@ function attachmentFromMcpContent(item = {}, toolName = 'tool') {
       name,
       mime,
       dataUrl: data ? base64ToDataUrl(data, mime) : (text ? textToDataUrl(text, mime || 'text/plain') : ''),
-      url: !data && !text && !path ? uri : '',
+      url: !data && !text && !path && isDownloadableAttachmentUrl(uri) ? uri : '',
       path
     };
   }
@@ -616,11 +645,48 @@ function attachmentFromMcpContent(item = {}, toolName = 'tool') {
       name,
       mime,
       dataUrl: item.dataUrl || item.data_url || (data ? base64ToDataUrl(data, mime) : ''),
-      url: !path ? item.url || item.uri || '' : '',
+      url: !path && isDownloadableAttachmentUrl(item.url || item.uri) ? item.url || item.uri || '' : '',
       path
     };
   }
   return null;
+}
+
+function extractStructuredContentAttachments(value, toolName = 'tool', refs = []) {
+  if (!value) return refs;
+  if (Array.isArray(value)) {
+    value.forEach(item => extractStructuredContentAttachments(item, toolName, refs));
+    return refs;
+  }
+  if (typeof value === 'string') {
+    refs.push(...extractFileReferenceAttachments(value, {}, toolName));
+    return refs;
+  }
+  if (typeof value !== 'object') return refs;
+  const attachment = attachmentFromMcpContent(value, toolName) || attachmentFromStructuredObject(value, toolName);
+  if (attachment) refs.push(attachment);
+  Object.values(value).forEach(child => extractStructuredContentAttachments(child, toolName, refs));
+  return refs;
+}
+
+function attachmentFromStructuredObject(value = {}, toolName = 'tool') {
+  const hasPayload = value.data || value.blob || value.base64 || value.dataBase64 || value.data_base64 || value.dataUrl || value.data_url;
+  const hasReference = value.url || value.uri || value.path || value.filePath || value.file_path || value.localPath || value.local_path;
+  if (!hasPayload && !hasReference) return null;
+  const rawPath = value.path || value.filePath || value.file_path || value.localPath || value.local_path || '';
+  const rawUrl = value.url || value.uri || '';
+  const path = normalizeLocalFileReference(rawPath || rawUrl);
+  const name = value.name || value.fileName || value.filename || fileNameFromUri(path || rawUrl) || `${toolName}-attachment`;
+  const mime = value.mime || value.mimeType || value.mime_type || inferMimeFromName(name || path || rawUrl) || 'application/octet-stream';
+  const data = value.dataBase64 || value.data_base64 || value.base64 || value.data || value.blob || '';
+  return {
+    type: ['image', 'audio', 'video', 'file'].includes(value.type) ? value.type : attachmentTypeFromMime(mime),
+    name,
+    mime,
+    dataUrl: value.dataUrl || value.data_url || (data ? base64ToDataUrl(data, mime) : ''),
+    url: !path && isDownloadableAttachmentUrl(rawUrl) ? rawUrl : '',
+    path
+  };
 }
 
 function extractChangedFileAttachments(result, toolName = 'tool') {
@@ -640,9 +706,8 @@ function normalizeChangedFileAttachment(file = {}, toolName = 'tool') {
   if (!file || typeof file !== 'object') return null;
   const rawPath = file.path || file.filePath || file.file_path || file.localPath || file.local_path || file.uri || file.url || '';
   const path = normalizeLocalFileReference(rawPath);
-  const remoteUrl = !path ? String(file.url || file.uri || '').trim() : '';
-  const name = file.name || fileNameFromUri(path || remoteUrl) || `${toolName}-file`;
-  const mime = file.mime || file.mimeType || file.mime_type || inferMimeFromName(name || path || remoteUrl) || 'application/octet-stream';
+  const name = file.name || fileNameFromUri(path) || `${toolName}-file`;
+  const mime = file.mime || file.mimeType || file.mime_type || inferMimeFromName(name || path) || 'application/octet-stream';
   const data = file.dataBase64 || file.data_base64 || file.base64 || file.data || file.blob || '';
   const dataUrl = file.dataUrl || file.data_url || (data ? base64ToDataUrl(data, mime) : '');
   const text = typeof file.text === 'string' ? file.text : '';
@@ -654,7 +719,6 @@ function normalizeChangedFileAttachment(file = {}, toolName = 'tool') {
     size: Number(file.size) || 0,
     duration: Number(file.duration) || 0,
     dataUrl: dataUrl || (text ? textToDataUrl(text, mime || 'text/plain') : ''),
-    url: remoteUrl,
     path,
     source: file.source || 'mcp-changed-file'
   };
@@ -667,11 +731,13 @@ function extractFileReferenceAttachments(resultText = '', args = {}, toolName = 
   return dedupeRawAttachments(refs).map(reference => {
     const name = fileNameFromUri(reference) || `${toolName}-file`;
     const mime = inferMimeFromName(name || reference) || 'application/octet-stream';
+    const remote = isRemoteFileReference(reference);
     return {
       type: attachmentTypeFromMime(mime),
       name,
       mime,
-      path: normalizeLocalFileReference(reference) || reference,
+      url: remote ? reference : '',
+      path: remote ? '' : normalizeLocalFileReference(reference) || reference,
       source: 'mcp-file-reference'
     };
   });
@@ -679,6 +745,13 @@ function extractFileReferenceAttachments(resultText = '', args = {}, toolName = 
 
 function collectFileReferencesFromText(text = '', refs = []) {
   const source = String(text || '');
+  const remotePattern = /https?:\/\/[^\s"'<>]+/gi;
+  let remoteMatch;
+  while ((remoteMatch = remotePattern.exec(source))) {
+    const value = String(remoteMatch[0] || '').trim().replace(/^[\s"'(]+|[\s"')，。；,;]+$/g, '');
+    if (looksLikeFileReference(value)) refs.push(value);
+  }
+  const localSource = source.replace(remotePattern, ' ');
   const patterns = [
     /file:\/\/\/?[^\s"'<>]+/gi,
     /[A-Za-z]:[\\/][^\s"'<>|]+/g,
@@ -687,7 +760,7 @@ function collectFileReferencesFromText(text = '', refs = []) {
   ];
   for (const pattern of patterns) {
     let match;
-    while ((match = pattern.exec(source))) {
+    while ((match = pattern.exec(localSource))) {
       const value = String(match[1] || match[0] || '').trim().replace(/^[\s"'(]+|[\s"')，。；,;]+$/g, '');
       if (looksLikeFileReference(value)) refs.push(value);
     }
@@ -729,6 +802,7 @@ async function normalizeGeneratedAttachments(attachments = []) {
   for (const raw of attachments) {
     const attachment = normalizeToolAttachment(raw);
     if (!attachment) continue;
+    if (shouldHideToolAttachment(attachment)) continue;
     if (attachment.dataUrl && isDataUrl(attachment.dataUrl)) {
       try {
         const media = await saveDataUrlAsMedia(attachment.dataUrl, {
@@ -756,14 +830,16 @@ async function normalizeGeneratedAttachments(attachments = []) {
 function normalizeToolAttachment(raw = {}) {
   if (!raw || typeof raw !== 'object') return null;
   const rawPath = String(raw.path || raw.filePath || raw.file_path || raw.localPath || raw.local_path || '').trim();
-  const path = normalizeLocalFileReference(rawPath) || (rawPath && !/^https?:\/\//i.test(rawPath) ? rawPath : '');
-  const url = path ? '' : raw.url || raw.uri || '';
-  const name = raw.name || fileNameFromUri(path || url) || defaultAttachmentName(raw.type, raw.mime || raw.mimeType || raw.mime_type || '');
+  const rawUrl = String(raw.url || raw.uri || '').trim();
+  const path = normalizeLocalFileReference(rawPath || rawUrl) || (rawPath && !isDownloadableAttachmentUrl(rawPath) ? rawPath : '');
+  const url = path ? '' : (isDownloadableAttachmentUrl(rawUrl || rawPath) ? rawUrl || rawPath : '');
+  const name = raw.name || raw.fileName || raw.filename || fileNameFromUri(path || url) || defaultAttachmentName(raw.type, raw.mime || raw.mimeType || raw.mime_type || '');
   const mime = raw.mime || raw.mimeType || raw.mime_type || mimeFromDataUrl(raw.dataUrl || raw.data_url || '') || inferMimeFromName(name || path || url) || '';
-  const type = ['image', 'audio', 'file'].includes(raw.type) ? raw.type : attachmentTypeFromMime(mime);
+  const type = ['image', 'audio', 'video', 'file'].includes(raw.type) ? raw.type : attachmentTypeFromMime(mime);
   const data = raw.dataBase64 || raw.data_base64 || raw.base64 || raw.data || raw.blob || '';
   const dataUrl = raw.dataUrl || raw.data_url || (data ? base64ToDataUrl(data, mime) : '');
-  if (!dataUrl && !url && !raw.dataRef && !path) return null;
+  const dataRef = raw.dataRef || '';
+  if (!dataUrl && !url && !dataRef && !path) return null;
   return {
     id: raw.id || createId('att'),
     type,
@@ -771,12 +847,46 @@ function normalizeToolAttachment(raw = {}) {
     mime,
     size: Number(raw.size) || estimateDataUrlSize(dataUrl),
     duration: Number(raw.duration) || 0,
-    dataRef: raw.dataRef || '',
+    dataRef,
     dataUrl,
     url,
     path,
     source: raw.source || ''
   };
+}
+
+function shouldHideToolAttachment(attachment = {}) {
+  if (isLogToolAttachment(attachment)) return true;
+  if (isTemporaryToolAttachment(attachment)) return true;
+  if (isEmptyToolAttachmentPlaceholder(attachment)) return true;
+  return false;
+}
+
+function isLogToolAttachment(attachment = {}) {
+  return attachmentReferenceText(attachment).split(/\s+/).some(item => /\.log(?:$|[?#])/i.test(item));
+}
+
+function isTemporaryToolAttachment(attachment = {}) {
+  const source = attachmentReferenceText(attachment).toLowerCase().replace(/\//g, '\\');
+  if (/(^|[\\\s])(?:tmp|temp)[^\\\s]*\.(?:tmp|temp|part|lock|pid|cache)(?:$|\s)/i.test(source)) return true;
+  if (/\.(?:tmp|temp|part|crdownload|lock|pid|cache)(?:$|[?#\s])/i.test(source)) return true;
+  return /\\appdata\\local\\temp\\|\\windows\\temp\\|(^|\s)\\tmp\\|(^|\s)\/tmp\//i.test(attachmentReferenceText(attachment));
+}
+
+function isEmptyToolAttachmentPlaceholder(attachment = {}) {
+  if (hasUsableAttachmentPayload(attachment)) return false;
+  return true;
+}
+
+function hasUsableAttachmentPayload(attachment = {}) {
+  if (attachment.dataRef || attachment.dataUrl) return true;
+  if (isDownloadableAttachmentUrl(attachment.url || attachment.uri || '')) return true;
+  if (attachment.path && canReadLocalToolAttachment()) return true;
+  return false;
+}
+
+function attachmentReferenceText(attachment = {}) {
+  return [attachment.name, attachment.path, attachment.url, attachment.mime].filter(Boolean).join(' ');
 }
 
 function prepareToolAttachmentForPersistence(attachment = {}) {
@@ -791,7 +901,8 @@ function summarizeAttachmentForTrace(attachment = {}) {
     name: attachment.name || attachment.mime || '附件',
     mime: attachment.mime || '',
     size: Number(attachment.size) || 0,
-    path: attachment.path || ''
+    path: attachment.path || '',
+    url: attachment.url || ''
   };
 }
 
@@ -869,6 +980,7 @@ function attachmentTypeFromMime(mime = '') {
   const lower = String(mime || '').toLowerCase();
   if (lower.startsWith('image/')) return 'image';
   if (lower.startsWith('audio/')) return 'audio';
+  if (lower.startsWith('video/')) return 'video';
   return 'file';
 }
 
@@ -903,8 +1015,28 @@ function isLocalFileReference(value = '') {
 
 function looksLikeFileReference(value = '') {
   const source = String(value || '').trim();
-  if (!source || /^https?:\/\//i.test(source)) return false;
+  if (!source) return false;
+  if (/^https?:\/\//i.test(source)) return isRemoteFileReference(source);
   return isLocalFileReference(source) || /\.[A-Za-z0-9]{1,12}(?:$|[?#])/.test(source);
+}
+
+function isRemoteFileReference(value = '') {
+  const source = String(value || '').trim();
+  if (!/^https?:\/\//i.test(source)) return false;
+  try {
+    return /\.[A-Za-z0-9]{1,12}$/.test(new URL(source).pathname || '');
+  } catch {
+    return /\.[A-Za-z0-9]{1,12}(?:$|[?#])/.test(source);
+  }
+}
+
+function isDownloadableAttachmentUrl(value = '') {
+  const source = String(value || '').trim();
+  return /^https?:\/\//i.test(source) || /^blob:/i.test(source) || /^data:/i.test(source);
+}
+
+function canReadLocalToolAttachment() {
+  return typeof window !== 'undefined' && Boolean(window.__FRITIA_NATIVE_FILE__?.readFile);
 }
 
 function inferMimeFromName(name = '') {
@@ -921,6 +1053,10 @@ function inferMimeFromName(name = '') {
   if (lower.endsWith('.m4a')) return 'audio/mp4';
   if (lower.endsWith('.flac')) return 'audio/flac';
   if (lower.endsWith('.aac')) return 'audio/aac';
+  if (lower.endsWith('.mp4')) return 'video/mp4';
+  if (lower.endsWith('.webm')) return 'video/webm';
+  if (lower.endsWith('.mov')) return 'video/quicktime';
+  if (lower.endsWith('.mkv')) return 'video/x-matroska';
   if (lower.endsWith('.json')) return 'application/json';
   if (lower.endsWith('.pdf')) return 'application/pdf';
   if (lower.endsWith('.txt')) return 'text/plain';
@@ -939,6 +1075,7 @@ function mimeFromDataUrl(dataUrl = '') {
 function defaultAttachmentName(type, mime = '') {
   if (type === 'image') return 'mcp-image';
   if (type === 'audio') return 'mcp-audio';
+  if (type === 'video') return 'mcp-video';
   if (String(mime).includes('json')) return 'mcp-result.json';
   if (String(mime).startsWith('text/')) return 'mcp-result.txt';
   return 'mcp-attachment';
@@ -1038,6 +1175,17 @@ function compactResumeContent(content) {
 
 function cloneResumeMessages(messages = []) {
   return JSON.parse(JSON.stringify(messages));
+}
+
+function throwIfToolAborted(signal) {
+  if (!signal?.aborted) return;
+  const error = new Error('用户已停止工具调用。');
+  error.name = 'AbortError';
+  throw error;
+}
+
+function isToolAbortError(error) {
+  return error?.name === 'AbortError' || error?.message === '用户已停止工具调用。';
 }
 
 function markTraceInterrupted(trace) {

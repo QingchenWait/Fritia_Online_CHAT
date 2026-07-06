@@ -11,6 +11,7 @@ import { getTtsErrorLog, synthesizeMimoVoiceClone } from './tts_engine.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
+const MCP_CONFIG_STORAGE_KEY = 'fritia_mcp_tool_config';
 
 export async function sendPrivateMessage({
   store,
@@ -154,6 +155,7 @@ export async function requestCharacterReply({ store, conversation, character, us
   }
   const history = getConversationMessages(store, conversation.id)
     .filter(item => item.status !== 'typing')
+    .filter(shouldKeepMessageForDailyToolContext)
     .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, settings));
   const advanced = getAdvancedSettings();
   const intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
@@ -188,6 +190,21 @@ export async function requestCharacterReply({ store, conversation, character, us
     text: sanitizeReply(responseText, character.name),
     deepseekIntimateMode: Boolean(intimateMessage)
   };
+}
+
+function shouldKeepMessageForDailyToolContext(message) {
+  if (!shouldIsolateToolContextFromDailyChat()) return true;
+  return message?.meta?.toolMode !== true;
+}
+
+function shouldIsolateToolContextFromDailyChat() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const config = JSON.parse(window.localStorage.getItem(MCP_CONFIG_STORAGE_KEY) || '{}');
+    return config?.permissions?.isolateToolContext === true;
+  } catch {
+    return false;
+  }
 }
 
 async function buildMessages({ character, history, userText, userMessage, ragMessage, memoryMessage, intimateMessage, historyLimit, mode, event }) {

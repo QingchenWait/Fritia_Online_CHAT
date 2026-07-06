@@ -237,17 +237,21 @@ export function normalizeMessage(raw = {}) {
 }
 
 export function normalizeAttachment(raw = {}) {
-  const type = ['image', 'audio', 'file'].includes(raw.type) ? raw.type : 'file';
+  const type = ['image', 'audio', 'video', 'file'].includes(raw.type) ? raw.type : 'file';
   const dataRef = clampText(raw.dataRef || raw.mediaRef, 180);
   const dataUrl = dataRef ? '' : clampText(raw.dataUrl, 8000000);
   const name = clampText(raw.name, 180);
-  if (!dataRef && !dataUrl && !name) return null;
+  const url = clampText(raw.url || raw.uri, 4000);
+  const path = clampText(raw.path || raw.filePath || raw.file_path, 4000);
+  if (!dataRef && !dataUrl && !name && !url && !path) return null;
   return {
     id: clampText(raw.id, 80) || createId('att'),
     type,
     name,
     dataUrl,
     dataRef,
+    url,
+    path,
     mime: clampText(raw.mime, 120),
     size: Math.max(0, Number(raw.size) || 0),
     source: clampText(raw.source, 40),

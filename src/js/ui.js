@@ -81,6 +81,7 @@ import {
   syncWebDavNow,
   testWebDavConnection
 } from './archive_sync.js';
+import { getRuntimeEnvironment, isBrowserFrontendRuntime } from './runtime_env.js';
 
 const MAX_KB_PREVIEW_CHUNKS = 80;
 const MAX_KB_PREVIEW_CHARS = 360;
@@ -130,6 +131,7 @@ const state = {
   mcpTransport: MCP_TRANSPORTS.STREAMABLE_HTTP,
   selectedMcpClientId: '',
   mcpPickerOpen: false,
+  activeToolRun: null,
   stickerPopoverOpen: false,
   voiceNotice: null,
   characterImport: {
@@ -409,6 +411,14 @@ function closeMcpPicker() {
   renderMcpPicker();
 }
 
+function isPureFrontendToolRuntime() {
+  return isBrowserFrontendRuntime(getRuntimeEnvironment());
+}
+
+function mcpTransportIconName(transport) {
+  return transport === MCP_TRANSPORTS.STDIO ? 'tool-stdio' : 'tool-streamable-http';
+}
+
 function renderMcpPicker() {
   const popover = document.getElementById('mcp-picker-popover');
   const button = document.getElementById('external-tools-toggle-btn');
@@ -438,7 +448,7 @@ function renderMcpPicker() {
   popover.innerHTML = clients.map(client => `
     <label class="mcp-picker-item">
       <input type="checkbox" value="${escapeHtml(client.id)}" ${selectedIds.has(client.id) ? 'checked' : ''}>
-      <span class="mcp-picker-icon"><img src="src/_logo/icons/${client.transport === MCP_TRANSPORTS.STDIO ? 'mic' : 'wrench'}.svg" alt=""></span>
+      <span class="mcp-picker-icon"><img src="src/_logo/icons/${mcpTransportIconName(client.transport)}.svg" alt=""></span>
       <span><strong>${escapeHtml(client.name)}</strong><small>${escapeHtml(clientSubtitle(client))}</small></span>
     </label>
   `).join('');
@@ -569,6 +579,7 @@ function notifyPersistenceFailure(error) {
 function commitOutgoingMessage(text, attachments = []) {
   const conversation = getActiveConversation();
   if (!conversation) return null;
+  const toolMode = conversation.type === 'private' && getSelectedMcpClientIds(conversation.id).length > 0;
   const message = {
     id: createId('msg'),
     role: 'user',
@@ -576,7 +587,8 @@ function commitOutgoingMessage(text, attachments = []) {
     speakerName: '分析员',
     text,
     attachments: attachments.map(prepareAttachmentForPersistence),
-    createdAt: now()
+    createdAt: now(),
+    ...(toolMode ? { meta: { toolMode: true } } : {})
   };
   const store = appendMessage(state.store, conversation.id, message);
   updateStore(store);
@@ -613,6 +625,14 @@ function continueConversationAfterOutgoing(committed) {
   if (!character) return;
   const selectedMcpClientIds = getSelectedMcpClientIds(conversation.id);
   if (selectedMcpClientIds.length) {
+    const controller = new AbortController();
+    state.activeToolRun = {
+      conversationId: conversation.id,
+      messageId: '',
+      controller,
+      stopping: false
+    };
+    renderMessages();
     completeToolPrivateMessageReply({
       store,
       conversation,
@@ -620,9 +640,15 @@ function continueConversationAfterOutgoing(committed) {
       text: message.text,
       userMessage: message,
       selectedClientIds: selectedMcpClientIds,
-      onStore: updateStoreFromToolReply
+      onStore: updateStoreFromToolReply,
+      signal: controller.signal
     }).catch(error => {
       console.warn('[ui] tool private reply failed', error);
+    }).finally(() => {
+      if (state.activeToolRun?.controller === controller) {
+        state.activeToolRun = null;
+        renderMessages();
+      }
     });
     return;
   }
@@ -1236,6 +1262,7 @@ function bindToolCallPanel() {
   });
   document.querySelectorAll('[data-mcp-transport]').forEach(button => {
     button.addEventListener('click', () => {
+      if (isPureFrontendToolRuntime() && button.dataset.mcpTransport === MCP_TRANSPORTS.STDIO) return;
       state.mcpTransport = button.dataset.mcpTransport === MCP_TRANSPORTS.STDIO
         ? MCP_TRANSPORTS.STDIO
         : MCP_TRANSPORTS.STREAMABLE_HTTP;
@@ -1249,8 +1276,11 @@ function bindToolCallPanel() {
     upsertMcpClient(client);
   });
   document.getElementById('mcp-client-save')?.addEventListener('click', saveSelectedMcpClientFromForm);
+  document.getElementById('mcp-client-enabled')?.addEventListener('change', toggleSelectedMcpClientEnabled);
   document.getElementById('mcp-client-delete')?.addEventListener('click', () => {
     if (!state.selectedMcpClientId) return;
+    const current = getMcpConfig().clients.find(client => client.id === state.selectedMcpClientId);
+    if (current?.builtin) return;
     deleteMcpClient(state.selectedMcpClientId);
     state.selectedMcpClientId = '';
     renderToolCallPanel();
@@ -1280,7 +1310,15 @@ function showToolSection(section = 'client') {
 function renderToolCallPanel() {
   const panel = document.getElementById('tool-call-panel');
   if (!panel) return;
+  const hideStdio = isPureFrontendToolRuntime();
+  if (hideStdio && state.mcpTransport === MCP_TRANSPORTS.STDIO) {
+    state.mcpTransport = MCP_TRANSPORTS.STREAMABLE_HTTP;
+    state.selectedMcpClientId = '';
+  }
   document.querySelectorAll('[data-mcp-transport]').forEach(button => {
+    const isStdio = button.dataset.mcpTransport === MCP_TRANSPORTS.STDIO;
+    button.classList.toggle('hidden', hideStdio && isStdio);
+    button.disabled = hideStdio && isStdio;
     button.classList.toggle('is-active', button.dataset.mcpTransport === state.mcpTransport);
   });
   renderMcpClientEditor();
@@ -1292,6 +1330,9 @@ function renderToolCallPanel() {
 
 function renderMcpClientEditor() {
   const config = getMcpConfig();
+  if (isPureFrontendToolRuntime() && state.mcpTransport === MCP_TRANSPORTS.STDIO) {
+    state.mcpTransport = MCP_TRANSPORTS.STREAMABLE_HTTP;
+  }
   const clients = config.clients.filter(client => (
     state.mcpTransport === MCP_TRANSPORTS.STDIO
       ? client.transport === MCP_TRANSPORTS.STDIO
@@ -1308,7 +1349,7 @@ function renderMcpClientEditor() {
     button.type = 'button';
     button.className = `tool-client-item${client.id === state.selectedMcpClientId ? ' is-active' : ''}`;
     button.innerHTML = `
-      <img src="src/_logo/icons/${client.transport === MCP_TRANSPORTS.STDIO ? 'mic' : 'wrench'}.svg" alt="">
+      <img src="src/_logo/icons/${mcpTransportIconName(client.transport)}.svg" alt="">
       <span><strong>${escapeHtml(client.name)}</strong><small>${escapeHtml(clientSubtitle(client))}</small></span>
       <em>${client.enabled ? 'ON' : 'OFF'}</em>
     `;
@@ -1327,10 +1368,17 @@ function renderMcpClientEditor() {
 
 function syncMcpClientForm(client) {
   const disabled = !client;
+  const builtin = Boolean(client?.builtin);
   ['mcp-client-name', 'mcp-client-enabled', 'mcp-client-json', 'mcp-client-save', 'mcp-client-delete'].forEach(id => {
     const element = document.getElementById(id);
     if (element) element.disabled = disabled;
   });
+  ['mcp-client-name', 'mcp-client-json', 'mcp-client-save'].forEach(id => {
+    const element = document.getElementById(id);
+    if (element && builtin) element.disabled = true;
+  });
+  const deleteButton = document.getElementById('mcp-client-delete');
+  if (deleteButton) deleteButton.disabled = disabled || builtin;
   setValue('mcp-client-name', client?.name || '');
   setChecked('mcp-client-enabled', client?.enabled);
   const json = client
@@ -1341,7 +1389,21 @@ function syncMcpClientForm(client) {
   setValue('mcp-client-json', json);
   setText('mcp-client-title', client?.name || '未选择服务');
   setText('mcp-client-subtitle', client ? clientSubtitle(client) : '点击新增创建 MCP 客户端');
-  setText('mcp-client-json-status', client ? '填写 JSON 后点击保存。' : '没有可编辑的 MCP 服务。');
+  setText('mcp-client-json-status', client
+    ? (builtin ? '内置 Filesystem MCP 客户端会随工具模式自动激活。' : '填写 JSON 后点击保存。')
+    : '没有可编辑的 MCP 服务。');
+  const icon = document.getElementById('mcp-client-editor-icon');
+  if (icon) icon.src = `src/_logo/icons/${mcpTransportIconName(client?.transport)}.svg`;
+}
+
+function toggleSelectedMcpClientEnabled(event) {
+  const config = getMcpConfig();
+  const current = config.clients.find(client => client.id === state.selectedMcpClientId);
+  if (!current) return;
+  const enabled = event.target.checked === true;
+  upsertMcpClient({ ...current, enabled });
+  renderMcpPicker();
+  renderMcpClientEditor();
 }
 
 function updateMcpClientDraftHeader() {
@@ -1445,7 +1507,7 @@ function renderWebMcpSkills() {
   if (!container) return;
   container.innerHTML = getWebMcpTools().map(tool => `
     <article class="tool-skill-item">
-      <img src="src/_logo/icons/bot.svg" alt="">
+      <img src="src/_logo/icons/tool-skills.svg" alt="">
       <div>
         <strong>${escapeHtml(tool.name)}</strong>
         <p>${escapeHtml(tool.description)}</p>
@@ -1462,6 +1524,8 @@ function renderMcpPermissionPanel() {
   setChecked('mcp-permission-stdio', permissions.allowLocalStdio);
   setChecked('mcp-permission-share-character', permissions.shareCharacterProfile);
   setChecked('mcp-permission-share-memory', permissions.shareLongTermMemory);
+  setChecked('mcp-permission-isolate-tool-context', permissions.isolateToolContext);
+  setChecked('mcp-permission-file-write', permissions.requireFileWriteApproval);
 }
 
 function saveMcpPermissionsFromForm() {
@@ -1472,9 +1536,12 @@ function saveMcpPermissionsFromForm() {
       allowRemoteHttp: document.getElementById('mcp-permission-remote')?.checked === true,
       allowLocalStdio: document.getElementById('mcp-permission-stdio')?.checked === true,
       shareCharacterProfile: document.getElementById('mcp-permission-share-character')?.checked === true,
-      shareLongTermMemory: document.getElementById('mcp-permission-share-memory')?.checked === true
+      shareLongTermMemory: document.getElementById('mcp-permission-share-memory')?.checked === true,
+      isolateToolContext: document.getElementById('mcp-permission-isolate-tool-context')?.checked === true,
+      requireFileWriteApproval: document.getElementById('mcp-permission-file-write')?.checked === true
     }
   });
+  closePanel('tool-call-panel');
 }
 
 function renderMcpLogPanel() {
@@ -2107,10 +2174,46 @@ function createMessageNode(message) {
   if (message.meta?.toolTrace) {
     bubble.appendChild(createToolTraceNode(message.meta.toolTrace));
   }
+  if (isActiveToolMessage(message)) {
+    bubble.appendChild(createToolStopButton());
+  }
   bubble.append(content, meta);
   if (message.role === 'user') row.append(bubble, avatar);
   else row.append(avatar, bubble);
   return row;
+}
+
+function isActiveToolMessage(message = {}) {
+  const run = state.activeToolRun;
+  if (!run || message.status !== 'typing' || message.meta?.toolMode !== true) return false;
+  if (run.messageId) return message.id === run.messageId;
+  return getActiveConversation()?.id === run.conversationId;
+}
+
+function createToolStopButton() {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'tool-stop-button';
+  button.title = state.activeToolRun?.stopping ? '正在停止工具调用' : '停止工具调用';
+  button.setAttribute('aria-label', button.title);
+  button.disabled = Boolean(state.activeToolRun?.stopping);
+  const icon = document.createElement('img');
+  icon.src = 'src/_logo/icons/x.svg';
+  icon.alt = '';
+  button.appendChild(icon);
+  button.addEventListener('click', event => {
+    event.stopPropagation();
+    stopActiveToolRun();
+  });
+  return button;
+}
+
+function stopActiveToolRun() {
+  const run = state.activeToolRun;
+  if (!run?.controller || run.controller.signal.aborted) return;
+  run.stopping = true;
+  run.controller.abort();
+  renderMessages();
 }
 
 function createMessageAttachmentNode(message, attachment, index = 0) {
@@ -2125,6 +2228,9 @@ function createMessageAttachmentNode(message, attachment, index = 0) {
   }
   if (attachment.type === 'audio' && (attachment.dataRef || attachment.dataUrl || attachment.url || attachment.path)) {
     return createVoiceBubble(message, attachment, `${message.id}:attachment:${index}`);
+  }
+  if (attachment.type === 'video' && (attachment.dataRef || attachment.dataUrl || attachment.url || attachment.path)) {
+    return createVideoAttachmentNode(attachment);
   }
   const button = document.createElement('button');
   button.type = 'button';
@@ -2171,6 +2277,28 @@ function setAttachmentImageSource(image, attachment = {}, fallback = 'src/_logo/
     return;
   }
   image.src = attachment.url || fallback;
+}
+
+function createVideoAttachmentNode(attachment = {}) {
+  const video = document.createElement('video');
+  video.className = 'message-video';
+  video.controls = true;
+  video.preload = 'metadata';
+  const stableSource = attachment.dataRef || attachment.dataUrl || attachment.url || attachment.path || '';
+  video.dataset.mediaSource = stableSource;
+  if (attachment.dataRef || attachment.dataUrl || attachment.path) {
+    resolveAttachmentDataUrl(attachment)
+      .then(dataUrl => {
+        if (video.dataset.mediaSource === stableSource && dataUrl) video.src = dataUrl;
+      })
+      .catch(error => {
+        console.warn('[ui] failed to load attachment video', error);
+        if (video.dataset.mediaSource === stableSource && attachment.url) video.src = attachment.url;
+      });
+  } else {
+    video.src = attachment.url || '';
+  }
+  return video;
 }
 
 function createToolTraceNode(trace = {}) {
@@ -2301,7 +2429,12 @@ function createVoiceBubble(message, attachmentOverride = null, playbackId = '') 
 }
 
 async function saveAttachmentToUserDevice(attachment = {}) {
-  const dataUrl = await resolveAttachmentDataUrl(attachment);
+  let dataUrl = '';
+  try {
+    dataUrl = await resolveAttachmentDataUrl(attachment, { fetchRemote: true });
+  } catch (error) {
+    console.warn('[ui] attachment data resolve failed, falling back to direct link', error);
+  }
   const fileName = safeDownloadName(attachment.name || `mcp-attachment${fileExtensionForMime(attachment.mime)}`);
   if (dataUrl) {
     const blob = dataUrlToBlob(dataUrl);
@@ -2328,7 +2461,7 @@ async function saveAttachmentToUserDevice(attachment = {}) {
   triggerBrowserDownload(url, fileName);
 }
 
-async function resolveAttachmentDataUrl(attachment = {}) {
+async function resolveAttachmentDataUrl(attachment = {}, options = {}) {
   if (attachment.dataRef) return getMediaDataUrl(attachment.dataRef);
   if (attachment.dataUrl) return attachment.dataUrl;
   if (attachment.path && window.__FRITIA_NATIVE_FILE__?.readFile) {
@@ -2342,7 +2475,34 @@ async function resolveAttachmentDataUrl(attachment = {}) {
     const dataBase64 = file?.dataBase64 || file?.data_base64 || file?.base64 || '';
     if (dataBase64) return base64ToDataUrl(dataBase64, file?.mime || attachment.mime || 'application/octet-stream');
   }
+  const url = String(attachment.url || attachment.uri || '').trim();
+  if (options.fetchRemote && /^(https?:|blob:|data:)/i.test(url)) return fetchAttachmentUrlAsDataUrl(url, attachment.mime || '');
   return '';
+}
+
+async function fetchAttachmentUrlAsDataUrl(url, fallbackMime = '') {
+  if (String(url || '').startsWith('data:')) return url;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`附件下载失败 (${response.status})`);
+  const blob = await response.blob();
+  if (!blob.size) return '';
+  return blobToDataUrl(blob, fallbackMime);
+}
+
+function blobToDataUrl(blob, fallbackMime = '') {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      if (!fallbackMime || !result.startsWith('data:application/octet-stream')) {
+        resolve(result);
+        return;
+      }
+      resolve(result.replace(/^data:application\/octet-stream/, `data:${fallbackMime}`));
+    };
+    reader.onerror = () => reject(reader.error || new Error('附件读取失败。'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function base64ToDataUrl(data, mime = 'application/octet-stream') {
@@ -2385,6 +2545,9 @@ function fileExtensionForMime(mime = '') {
   if (lower.includes('mpeg') || lower.includes('mp3')) return '.mp3';
   if (lower.includes('wav')) return '.wav';
   if (lower.includes('ogg')) return '.ogg';
+  if (lower.includes('mp4')) return '.mp4';
+  if (lower.includes('webm')) return '.webm';
+  if (lower.includes('quicktime')) return '.mov';
   if (lower.includes('json')) return '.json';
   if (lower.includes('pdf')) return '.pdf';
   if (lower.includes('text')) return '.txt';
@@ -2400,8 +2563,9 @@ async function toggleVoicePlayback(messageId, attachment) {
   stopVoicePlayback();
   try {
     const dataUrl = await resolveAttachmentDataUrl(attachment);
-    if (!dataUrl) throw new Error('语音文件不存在或已损坏。');
-    const audio = new Audio(dataUrl);
+    const audioSource = dataUrl || attachment.url || attachment.uri || '';
+    if (!audioSource) throw new Error('语音文件不存在或已损坏。');
+    const audio = new Audio(audioSource);
     const fallbackDuration = Math.max(1, Math.ceil(Number(attachment.duration) || 0));
     state.voicePlayback = {
       messageId,
@@ -3946,6 +4110,12 @@ function updateStore(store) {
 
 function updateStoreFromToolReply(store, meta = {}) {
   state.store = store || loadAppStore();
+  if (meta.source === 'tool' && state.activeToolRun) {
+    if (meta.messageId) state.activeToolRun.messageId = meta.messageId;
+    if ((meta.status === 'sent' || meta.status === 'error') && (!meta.messageId || state.activeToolRun.messageId === meta.messageId)) {
+      state.activeToolRun = null;
+    }
+  }
   renderMessages();
   syncMobileBackAvailability();
   if (meta.status === 'sent' || meta.status === 'error') {
