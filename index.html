@@ -40,7 +40,7 @@
           <img src="src/_char/Profile_Adjutant.png" alt="分析员" class="profile-chip__avatar">
           <div>
             <strong>分析员</strong>
-            <small>海姆达尔 AI 通信终端</small>
+            <small>海姆达尔 AI Agent 通信终端</small>
           </div>
         </div>
         <div class="main-menu-wrap" id="main-menu-wrap">
@@ -96,7 +96,7 @@
         <img id="chat-avatar" src="src/_logo/emoji/robot_3d.png" alt="" class="chat-head__avatar">
         <div class="chat-head__titles">
           <h1 id="chat-title">选择一个角色开始聊天</h1>
-          <p id="chat-subtitle">导入角色后会像好友一样出现在列表里</p>
+          <p id="chat-subtitle">导入角色后，会永久保存在角色列表中</p>
         </div>
         <div class="chat-head__actions">
           <button class="icon-btn roundtable-error-btn hidden" id="roundtable-error-btn" type="button" title="圆桌密语异常" aria-label="查看圆桌密语异常">
@@ -237,7 +237,7 @@
         <div id="group-info-member-grid" class="group-info-member-grid"></div>
         <div id="group-info-member-editor" class="group-info-member-editor hidden">
           <div class="group-info-editor-toolbar">
-            <input id="group-info-member-search" type="search" placeholder="搜索好友">
+            <input id="group-info-member-search" type="search" placeholder="搜索角色">
             <div class="group-info-editor-actions">
               <button id="group-info-cancel-members" class="group-info-action-btn" type="button" title="取消" aria-label="取消">
                 <img src="src/_logo/icons/x.svg" alt="">
@@ -350,7 +350,7 @@
                     <img src="src/_logo/icons/volume-2.svg" alt="">
                   </span>
                   <div>
-                    <h3>TTS参考语音</h3>
+                    <h3>TTS 参考语音</h3>
                     <p>建议 5s-30s 的清晰人声</p>
                   </div>
                 </div>
@@ -485,7 +485,7 @@
                     <img src="src/_logo/icons/volume-2.svg" alt="">
                   </span>
                   <div>
-                    <h3>TTS参考语音</h3>
+                    <h3>TTS 参考语音</h3>
                     <p>建议 5s-30s 的清晰人声</p>
                   </div>
                 </div>
@@ -578,7 +578,7 @@
           <input id="group-member-search" type="search" placeholder="搜索">
         </div>
         <div class="group-list-head">
-          <strong>好友列表</strong>
+          <strong>角色列表</strong>
           <span id="group-member-total">0</span>
         </div>
         <div id="group-member-list" class="member-picker"></div>
@@ -936,7 +936,7 @@
           </div>
 
           <div class="settings-view" data-settings-view="knowledge">
-            <div class="panel-title"><h3>知识库</h3><p>继承旧项目 IndexedDB + BM25/CJK 分块组织方式。</p></div>
+            <div class="panel-title"><h3>知识库</h3><p>导入外部文本知识库，进一步扩展世界观与人物设定。</p></div>
             <div class="knowledge-workbench">
               <aside class="kb-sidebar" aria-label="知识库列表">
                 <div class="kb-create-row">
@@ -996,7 +996,7 @@
           </div>
 
           <div class="settings-view" data-settings-view="memory">
-            <div class="panel-title"><h3>长期记忆</h3><p>继承旧项目文本记忆、关系边与记忆节点入口。</p></div>
+            <div class="panel-title"><h3>长期记忆</h3><p>长期记忆内容与记忆节点图谱的配置</p></div>
             <label class="switch-row">
               <input id="memory-enabled" type="checkbox">
               <span>启用长期记忆采集与检索</span>
@@ -1010,7 +1010,7 @@
           </div>
 
           <div class="settings-view" data-settings-view="advanced">
-            <div class="panel-title"><h3>高级设置</h3><p>面向移动端占用和群聊调度的运行参数。</p></div>
+            <div class="panel-title"><h3>高级设置</h3><p>调整进阶运行参数，仅建议在充分了解风险时修改。</p></div>
             <section class="advanced-config-card">
               <div class="advanced-config-head">
                 <img src="src/_logo/icons/database.svg" alt="">
@@ -1120,7 +1120,7 @@
           <div class="settings-view" data-settings-view="about">
             <div class="about-panel">
               <img src="src/_logo/emoji/robot_3d.png" alt="">
-              <h3>Fritia Online CHAT | 海姆达尔 AI 聊天终端</h3>
+              <h3>Fritia CHAT | 海姆达尔 AI 聊天终端</h3>
               <p>Copyright © 2026 青尘工作室。本软件使用 GPLv3 许可证，开源免费。</p>
               <p>企划 | 制作：青尘工作室 <br /> 贴图：尘白禁区、浮游Lev、ShinoKo <br /> 文案：CyanDust_青尘、the-one-唯一 <br /> 知识库：海姆情报室 (BWiki)、萌娘百科 <br /> 美术资源：Lucide、Microsoft Fluent UI Emoji </p>
             </div>

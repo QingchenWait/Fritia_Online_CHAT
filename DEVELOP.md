@@ -1,12 +1,18 @@
 # DEVELOP
 
+## 2026-07-08 Windows v0.4.3 Package
+
+- `package.json` 版本更新到 `0.4.3`；`sw.js` 缓存版本更新到 `fritia-next-chat-v24`，确保用户手动文案修改和本轮 UI 修正不会被旧缓存覆盖。
+- Windows x64 打包基线使用外部 `chat_v0.4.2\win_x64` 的 Tauri + WebView2 壳层，继续保留 `desktop_fetch_proxy.js`、`desktop_mcp_relay.js`、`modelscope_fetch`、`open_external_url`、Streamable HTTP MCP relay 和 stdio MCP relay。
+- 外部打包目录为 `D:\Models\vibe_coding\fritia_online_next_desktop\chat_v0.4.3\win_x64`；不在本项目内新增 Windows 打包文件。
+
 ## 2026-07-08 MCP Client UI Reset
 
 - `src/styles/app.css` 重新设计“工具调用 / MCP 客户端”页，不再沿用上一版互相嵌套的伸缩和滚动策略。桌面端 `.tool-shell` 固定为受视口约束的工作窗口，`.tool-client-workbench` 使用列表栏 + 编辑栏双列，服务列表和编辑器分别在自己的区域内滚动。
 - 竖屏端 `@media (max-width: 760px)` 下，MCP 客户端页改为单列卡片流：服务列表卡片和编辑器卡片上下排列，整页负责纵向滚动，列表不再固定高度，避免服务项、服务器名称、启用开关和 JSON 区域重叠。
 - 增加 `761px-980px` 横屏窄窗口兜底，MCP 客户端工作台自动改为上下两段，避免中等宽度下双栏硬挤。
 - 追加 UI 修正：横屏窄窗口上下分段时取消详情区内部滚动，由整个 client 页滚动；`#mcp-client-json` 高度压缩到约 8 行，超出内容在代码框内滚动；竖屏 `.tool-client-list` 限制到约 3 个服务项高度并启用内部滚动。
-- 本轮只修改样式和文档，不重新打包，`package.json` 版本保持 `0.4.1`。
+- 该 UI 重做已随 `v0.4.3` Windows x64 包同步。
 
 ## 2026-07-08 Tool Client Layout / Markdown / v0.4.1
 
@@ -170,7 +176,7 @@
 本次建立了仿 QQ / Telegram 的角色扮演 AI 聊天软件首版：
 
 - 新增静态 Web/PWA 应用入口 `index.html`。
-- 新增桌面横屏三栏 UI：左侧导航、会话/好友列表、聊天窗口、右侧详情。
+- 新增桌面横屏三栏 UI：左侧导航、会话/角色列表、聊天窗口、右侧详情。
 - 新增移动端竖屏 UI：会话列表与聊天窗口滑入式切换。
 - 新增 `manifest.webmanifest` 和 `sw.js`，预留 PWA / WebView 封装。
 - 新增 `src/styles/app.css`，独立于旧项目配色，不继承 Fritia Online NEXT 的视觉主题。
@@ -311,7 +317,7 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - 参考 `D:\Models\vibe_coding\fritia_online_v3 (dev)` 中 `knowledge-workbench` 与 `memory-node-panel` 结构，重排本项目“知识库”和“记忆节点”弹窗。
 - 桌面端私聊不再默认占用最右侧详情列；点击聊天头右上角角色卡按钮后才展开。
 - 群聊右上角会话信息按钮保留群聊成员含义，并打开成员与圆桌规则侧边悬浮面板。
-- 组建群聊弹窗改为单列好友列表，支持搜索、复选多选、已选头像预览和底部“创建群聊(n)”按钮。
+- 组建群聊弹窗改为单列角色列表，支持搜索、复选多选、已选头像预览和底部“创建群聊(n)”按钮。
 - 群聊会话头像固定为 `src/_char/Profile_GroupChat.png`，旧会话展示也通过 UI 回退统一到该头像。
 
 ## 2026-07-01 群聊功能修复
@@ -332,7 +338,7 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 
 ## 2026-07-01 致命问题修复
 
-- 修复首次进入页面不显示会话和好友的问题：`initUi()` 会在 `ensurePresetCharacters()` 写入预置角色和私聊后重新读取最新 `fritia_next_chat_store`，避免使用模块导入时缓存的空 store。
+- 修复首次进入页面不显示会话和角色的问题：`initUi()` 会在 `ensurePresetCharacters()` 写入预置角色和私聊后重新读取最新 `fritia_next_chat_store`，避免使用模块导入时缓存的空 store。
 - 修复知识库统计存在但文件列表/分块列表为空的问题：`fritia_knowledge_base_db` 升级到 version 2，`openDb()` 会为既有 object store 补齐 `kbId` / `fileId` 索引。
 - 修复文件列表渲染时调用未定义 `formatBytes()` 的异常；该异常会在真实文件记录存在时中断 `renderKnowledgeFileList()`，导致文件列表和分块预览保持空白。
 - `sw.js` 缓存名升级为 `fritia-next-chat-v2`，并将 HTML / JS / CSS / JSON 改为 network-first，避免 service worker 持续返回旧前端代码。

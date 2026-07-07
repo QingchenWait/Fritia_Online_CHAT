@@ -1,5 +1,12 @@
 # STRUCTURE
 
+## 2026-07-08 Windows v0.4.3 Package Mapping
+
+- `package.json`：版本 `0.4.3`。
+- `sw.js`：缓存版本 `fritia-next-chat-v24`。
+- 外部打包映射：`D:\Models\vibe_coding\fritia_online_next_desktop\chat_v0.4.3\win_x64`，从 `chat_v0.4.2\win_x64` 复制 Tauri/WebView2 壳层后同步当前项目源码和手动文案修改。
+- 桌面入口仍需加载 `desktop_fetch_proxy.js?v=0.4.3`、`desktop_mcp_relay.js?v=0.4.3`、`main.js?v=0.4.3` 和 `app.css?v=0.4.3`，并禁用桌面端 Service Worker，避免 CORS/MCP relay 回退到浏览器路径。
+
 ## 2026-07-08 MCP Client UI Reset Mapping
 
 - `src/styles/app.css`：`.tool-shell`、`.tool-layout`、`.tool-content` 和 `.tool-view[data-tool-view="client"]` 重新约束工具窗口高度、内部网格和滚动边界，避免 MCP 客户端页产生页面级横向溢出。
@@ -372,9 +379,9 @@ fritia_online_next_chat/
 
 - `#group-editor-panel`：创建群聊弹窗，也可作为兼容入口编辑已有群聊成员。
 - `#group-selected-strip`：已选成员头像预览条。
-- `#group-member-search`：好友搜索输入。
-- `#group-member-total`：好友总数显示。
-- `#group-member-list`：单列好友多选列表。
+- `#group-member-search`：角色搜索输入。
+- `#group-member-total`：角色总数显示。
+- `#group-member-list`：单列角色多选列表。
 - `#create-group-btn`：创建群聊按钮，按钮文案显示当前选择数量。
 - `#group-info-backdrop`：群聊信息侧边面板背景遮罩。
 - `#group-info-panel`：群聊成员与规则侧边悬浮面板。
@@ -382,8 +389,8 @@ fritia_online_next_chat/
 - `#group-info-name-row`：群聊名称配置行，点击后修改当前群聊标题。
 - `#group-info-name-label`：群聊名称配置行右侧当前标题显示。
 - `#group-info-member-editor`：当前群聊成员增减编辑区。
-- `#group-info-member-search`：侧边面板内好友搜索输入。
-- `#group-info-member-list`：侧边面板内所有好友单列多选列表。
+- `#group-info-member-search`：侧边面板内角色搜索输入。
+- `#group-info-member-list`：侧边面板内所有角色单列多选列表。
 - `#group-info-save-members`：保存当前群聊成员变更。
 - `#group-setting-auto-talk`：允许角色自动接话。
 - `#group-setting-idle-talk`：允许空闲时主动搭话。
@@ -682,7 +689,7 @@ fritia_online_next_chat/
 - `renderDetail()`：渲染聊天头和桌面右侧详情。
 - `handleChatInfoToggle()`：私聊时切换角色卡片，群聊时打开成员与规则侧边面板。
 - `closeDetailPane()`：关闭右侧角色卡片并同步移动端返回状态；角色卡片内快速操作会调用该函数收起原窗口。
-- `renderGroupMemberPicker()`：渲染单列好友多选列表。
+- `renderGroupMemberPicker()`：渲染单列角色多选列表。
 - `openGroupInfoPanel()` / `closeGroupInfoPanel()`：打开/关闭群聊侧边悬浮面板。
 - `renderGroupInfoPanel()`：刷新群聊成员宫格、群聊名称、圆桌规则开关和最大人数。
 - `renameActiveGroupConversation()`：修改当前群聊 `conversation.title`，通过 `updateGroupConversation()` 持久化并刷新 UI。

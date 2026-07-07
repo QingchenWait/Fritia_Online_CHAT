@@ -3091,7 +3091,7 @@ function renderMessages() {
   if (!container) return;
   const conversation = getActiveConversation();
   if (!conversation) {
-    container.innerHTML = `<div class="empty-state"><img src="src/_logo/emoji/sparkles_3d.png" alt=""><h2>NEXT Chat</h2><p>选择好友或群聊开始。</p></div>`;
+    container.innerHTML = `<div class="empty-state"><img src="src/_logo/emoji/sparkles_3d.png" alt=""><h2>NEXT Chat</h2><p>选择角色或群聊开始。</p></div>`;
     return;
   }
   const messages = getConversationMessages(state.store, conversation.id);
@@ -3989,7 +3989,7 @@ function renderGroupMemberPicker() {
     container.appendChild(item);
   }
   if (!characters.length) {
-    container.innerHTML = '<div class="member-empty">没有匹配的好友。</div>';
+    container.innerHTML = '<div class="member-empty">没有匹配的角色。</div>';
   }
   renderGroupSelectionSummary();
 }
@@ -4115,7 +4115,7 @@ function renderGroupInfoMemberEditor() {
     list.appendChild(item);
   }
   if (!characters.length) {
-    list.innerHTML = '<div class="member-empty">没有匹配的好友。</div>';
+    list.innerHTML = '<div class="member-empty">没有匹配的角色。</div>';
   }
   if (save) {
     const count = selected.size;
@@ -5418,7 +5418,7 @@ function renderGroupSelectionSummary() {
         strip.appendChild(image);
       });
     } else {
-      strip.innerHTML = '<span>选择至少 2 位好友</span>';
+      strip.innerHTML = '<span>选择至少 2 位角色</span>';
     }
   }
   if (create) {
