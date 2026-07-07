@@ -1,5 +1,19 @@
 # STRUCTURE
 
+## 2026-07-07 Plugin Store / ModelScope MCP Mapping
+
+- 新增 `src/js/plugin_store.js`：导出 `MODELSCOPE_LOGIN_URL`、`MODELSCOPE_MCP_PAGE_URL`、`checkModelScopeLogin()`、`fetchHostedModelScopeMcps()`、`fetchModelScopeMcpDetail()`、`deployModelScopeMcp()`、`buildModelScopeMcpConfig()`、`normalizeModelScopeMcp()` 和 `normalizeModelScopeMcpDetail()`。
+- `src/js/plugin_store.js` 使用 `https://www.modelscope.cn/api/v1/dolphin/mcpServers` 读取 hosted MCP 列表，使用 `https://www.modelscope.cn/api/v1/mcpServers/{Path}/{Name}` 读取详情，并尝试 `/deploy`、`/asyncDeploy` 获取 Streamable HTTP 远程 MCP URL。
+- 新增主菜单 DOM：`#main-menu-wrap`、`#main-menu`、`#main-menu-plugin-store`、`#main-menu-official-site`；菜单按钮继续复用 `#mobile-menu-btn`。
+- 新增插件源登录 DOM：`#plugin-source-login-panel`、`#modelscope-login-frame`、`#modelscope-login-status`、`#modelscope-login-open`、`#modelscope-login-check`。
+- 新增插件详情 DOM：`#plugin-detail-panel`、`#plugin-detail-content`、`#plugin-detail-install-status`、`#plugin-detail-add`。
+- 新增插件商店 DOM：`#plugin-store-panel`、`[data-plugin-store-section]`、`[data-plugin-store-view]`、`#plugin-store-search`、`#plugin-source-trigger`、`#plugin-source-menu`、`#plugin-source-modelscope`、`#modelscope-source-dot`、`#plugin-store-refresh`、`#plugin-store-status`、`#plugin-store-grid`、`#plugin-store-prev`、`#plugin-store-pages`、`#plugin-store-next`。
+- `src/js/ui.js` 新增状态：`mainMenuOpen`、`pluginStoreSection`、`pluginSourceMenuOpen` 和 `pluginStore`；新增函数：`bindMainMenu()`、`renderMainMenu()`、`closeMainMenu()`、`bindPluginStore()`、`showPluginStoreSection()`、`renderPluginStorePanel()`、`renderPluginSourceMenu()`、`closePluginSourceMenu()`、`openModelScopeLoginPanel()`、`checkModelScopeLoginStatus()`、`loadPluginStorePage()`、`renderPluginStoreGrid()`、`renderPluginStorePagination()`、`openPluginDetail()`、`renderPluginDetail()`、`installSelectedPluginDetail()`、`readPluginServiceConfig()`、`copyTextToClipboard()`。
+- `src/js/ui.js` 的 `openPanel()` 会在打开 `#plugin-store-panel` 时检测魔搭登录态并按需加载 MCP 列表；`closeTransientBackSurface()` 支持 Android/移动返回优先关闭主菜单和插件源菜单。
+- `src/styles/app.css` 新增 CSS 分区：`.main-menu-*`、`.plugin-store-*`、`.plugin-source-*`、`.plugin-card`、`.plugin-login-*`、`.plugin-detail-*`、`.plugin-config-*`，并追加 `max-width: 1180px` / `max-width: 760px` 响应式规则。
+- `sw.js`：缓存版本 `fritia-next-chat-v19`，核心缓存新增 `src/js/plugin_store.js`、`menu.svg`、`chevron-down.svg`、`circle-alert.svg`、`monitor-up.svg`、`network.svg`、`plus.svg`、`search.svg` 和 `users.svg`。
+- `package.json`：`check` 脚本加入 `node --check src/js/plugin_store.js`。
+
 ## 2026-07-06 Tool Calling / WebMCP / MCP Relay Mapping
 
 - 新增 `src/js/mcp_tools.js`：导出 `MCP_CONFIG_EVENT`、`MCP_LOG_EVENT`、`getMcpConfig()`、`saveMcpConfig()`、`createDefaultMcpClient()`、`upsertMcpClient()`、`deleteMcpClient()`、`parseMcpServerConfigJson()`、`formatMcpServerConfigJson()`、`getAvailableMcpClients()`、`getSelectedMcpClientIds()`、`setSelectedMcpClientIds()`、`isMcpEnabledForConversation()`、`collectMcpToolDefinitions()`、`listMcpTools()`、`callMcpToolByRegistryEntry()`、`initWebMcpServer()`、`getWebMcpTools()`、`buildWebMcpManifest()`、`addMcpLog()`、`clearMcpLogs()` 和 `formatMcpContentText()`。

@@ -1,5 +1,15 @@
 # DEVELOP
 
+## 2026-07-07 Plugin Store / ModelScope MCP
+
+- `index.html` 新增主菜单浮层 `#main-menu`，菜单项为“插件商店”和“访问官网”；“访问官网”使用浏览器新窗口打开 `https://fritia.online`。
+- `index.html` 新增 `#plugin-store-panel`、`#plugin-detail-panel` 和 `#plugin-source-login-panel`：插件商店包含“角色插件”和“MCP 插件”两个分组，角色插件暂留空，MCP 插件页提供搜索、来源下拉、刷新、卡片网格和分页；详情窗口提供介绍、固定 `remote` 类型和继承魔搭参数 schema 的服务配置项。
+- 新增 `src/js/plugin_store.js`：封装魔搭社区 hosted MCP 列表接口、详情接口、部署/连接接口、登录态检测、MCP 数据归一化、参数 schema 归一化和标准 `mcpServers` JSON 生成。纯静态浏览器运行时若遇到 CORS、登录态或 WAF 限制，会抛出可展示错误。
+- `src/js/ui.js` 新增 `mainMenuOpen`、`pluginStoreSection`、`pluginSourceMenuOpen` 和 `pluginStore` 状态，新增主菜单绑定、插件商店分组切换、魔搭登录检测、列表刷新、详情加载、服务配置读取和“一键添加到 Streamable HTTP MCP 客户端”流程。
+- “添加到 MCP 服务”会调用魔搭部署接口获取远程 URL，复制标准 `mcpServers` JSON，并通过 `parseMcpServerConfigJson()` / `upsertMcpClient()` 新建启用状态的 Streamable HTTP MCP 客户端，服务器名称使用 MCP 工具展示名。
+- `src/styles/app.css` 新增主菜单和插件商店 Soft UI 样式：桌面端左侧分组 + 三列卡片网格，中等宽度两列卡片，移动端顶部分类 + 两列紧凑卡片；所有按钮继续使用 `src/_logo/icons` 下的 Lucide 风格图标。
+- `sw.js` 缓存版本升级到 `fritia-next-chat-v19`，核心缓存加入 `plugin_store.js` 和插件商店新增图标；`package.json` 的 `check` 脚本加入 `src/js/plugin_store.js`。
+
 ## 2026-07-06 Tool Calling / WebMCP / MCP Relay
 
 - 新增 `src/js/mcp_tools.js`：集中管理 `localStorage.fritia_mcp_tool_config`、MCP 客户端配置、权限、系统日志、Streamable HTTP MCP 初始化/`tools/list`/`tools/call`、Stdio Relay 调用，以及 WebMCP 服务端 `window.FritiaWebMCP`。

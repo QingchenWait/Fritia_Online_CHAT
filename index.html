@@ -43,9 +43,21 @@
             <small>海姆达尔 AI 通信终端</small>
           </div>
         </div>
-        <button class="icon-btn" id="mobile-menu-btn" type="button" title="菜单">
-          <img src="src/_logo/icons/menu.svg" alt="">
-        </button>
+        <div class="main-menu-wrap" id="main-menu-wrap">
+          <button class="icon-btn main-menu-trigger" id="mobile-menu-btn" type="button" title="菜单" aria-haspopup="menu" aria-expanded="false" aria-controls="main-menu">
+            <img src="src/_logo/icons/menu.svg" alt="">
+          </button>
+          <div class="main-menu hidden" id="main-menu" role="menu" aria-label="主菜单">
+            <button class="main-menu-item" id="main-menu-plugin-store" type="button" role="menuitem">
+              <img src="src/_logo/icons/tool-skills.svg" alt="">
+              <span>插件商店</span>
+            </button>
+            <button class="main-menu-item" id="main-menu-official-site" type="button" role="menuitem">
+              <img src="src/_logo/icons/monitor-up.svg" alt="">
+              <span>访问官网</span>
+            </button>
+          </div>
+        </div>
       </header>
       <div class="search-row">
         <img src="src/_logo/icons/search.svg" alt="">
@@ -1149,6 +1161,126 @@
           <div class="settings-view" data-sticker-view="auto-tags">
             <div class="panel-title"><h3>自动标签</h3><p>后续会在这里添加表情包自动标签能力。</p></div>
             <div class="sticker-empty-panel">暂未开放。</div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="plugin-source-login-panel" class="modal hidden plugin-login-modal" role="dialog" aria-modal="true" aria-labelledby="plugin-source-login-title">
+    <div class="modal-shell plugin-login-shell">
+      <header class="modal-head">
+        <div>
+          <small>MODELSCOPE</small>
+          <h2 id="plugin-source-login-title">魔搭社区</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="plugin-source-login-panel" aria-label="关闭魔搭登录">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <div class="plugin-login-body">
+        <iframe id="modelscope-login-frame" title="魔搭社区登录" src="about:blank" loading="lazy"></iframe>
+        <div class="plugin-login-actions">
+          <span id="modelscope-login-status" class="plugin-store-status">等待登录检测</span>
+          <button id="modelscope-login-open" class="btn btn-soft" type="button">
+            <img src="src/_logo/icons/monitor-up.svg" alt="">
+            <span>打开登录页</span>
+          </button>
+          <button id="modelscope-login-check" class="btn btn-primary" type="button">
+            <img src="src/_logo/icons/refresh-cw.svg" alt="">
+            <span>完成登录检测</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="plugin-detail-panel" class="modal hidden plugin-detail-modal" role="dialog" aria-modal="true" aria-labelledby="plugin-detail-title">
+    <div class="modal-shell modal-shell-wide plugin-detail-shell">
+      <header class="modal-head">
+        <div>
+          <small>PLUGIN DETAIL</small>
+          <h2 id="plugin-detail-title">MCP 插件详情</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="plugin-detail-panel" aria-label="关闭插件详情">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <section id="plugin-detail-content" class="plugin-detail-content" aria-live="polite"></section>
+      <footer class="plugin-detail-footer">
+        <span id="plugin-detail-install-status" class="plugin-store-status"></span>
+        <button id="plugin-detail-add" class="btn btn-primary" type="button">
+          <img src="src/_logo/icons/plus.svg" alt="">
+          <span>添加到 MCP 服务</span>
+        </button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="plugin-store-panel" class="modal hidden plugin-store-modal" role="dialog" aria-modal="true" aria-labelledby="plugin-store-title">
+    <div class="modal-shell modal-shell-wide plugin-store-shell">
+      <header class="modal-head">
+        <div>
+          <small>PLUGINS</small>
+          <h2 id="plugin-store-title">插件商店</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="plugin-store-panel" aria-label="关闭插件商店">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <div class="plugin-store-layout">
+        <nav class="plugin-store-nav" aria-label="插件商店分组">
+          <button type="button" data-plugin-store-section="roles">
+            <img src="src/_logo/icons/users.svg" alt="">
+            <span>角色插件</span>
+          </button>
+          <button class="is-active" type="button" data-plugin-store-section="mcp">
+            <img src="src/_logo/icons/ai-agent.svg" alt="">
+            <span>MCP 插件</span>
+          </button>
+        </nav>
+        <section class="plugin-store-content">
+          <div class="plugin-store-view" data-plugin-store-view="roles">
+            <div class="plugin-store-empty">
+              <img src="src/_logo/icons/users.svg" alt="">
+              <strong>角色插件暂未开放</strong>
+            </div>
+          </div>
+          <div class="plugin-store-view is-active" data-plugin-store-view="mcp">
+            <div class="plugin-store-toolbar">
+              <label class="plugin-store-search">
+                <img src="src/_logo/icons/search.svg" alt="">
+                <input id="plugin-store-search" type="search" placeholder="搜索 MCP 插件...">
+              </label>
+              <div class="plugin-source-wrap" id="plugin-source-wrap">
+                <button id="plugin-source-trigger" class="btn btn-soft plugin-source-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="plugin-source-menu">
+                  <img src="src/_logo/icons/plus.svg" alt="">
+                  <span>添加插件源</span>
+                  <img src="src/_logo/icons/chevron-down.svg" alt="">
+                </button>
+                <div id="plugin-source-menu" class="plugin-source-menu hidden" role="menu" aria-label="添加插件源">
+                  <button id="plugin-source-modelscope" class="plugin-source-item" type="button" role="menuitem">
+                    <span id="modelscope-source-dot" class="plugin-source-dot"></span>
+                    <img src="src/_logo/icons/network.svg" alt="">
+                    <span>魔搭社区</span>
+                  </button>
+                </div>
+              </div>
+              <button id="plugin-store-refresh" class="icon-btn plugin-store-refresh" type="button" title="刷新 MCP 插件" aria-label="刷新 MCP 插件">
+                <img src="src/_logo/icons/refresh-cw.svg" alt="">
+              </button>
+            </div>
+            <div id="plugin-store-status" class="plugin-store-status">正在准备插件商店。</div>
+            <div id="plugin-store-grid" class="plugin-store-grid" aria-live="polite"></div>
+            <div class="plugin-store-pagination">
+              <button id="plugin-store-prev" class="icon-btn" type="button" aria-label="上一页">
+                <span aria-hidden="true">‹</span>
+              </button>
+              <div id="plugin-store-pages" class="plugin-store-pages"></div>
+              <button id="plugin-store-next" class="icon-btn" type="button" aria-label="下一页">
+                <span aria-hidden="true">›</span>
+              </button>
+            </div>
           </div>
         </section>
       </div>

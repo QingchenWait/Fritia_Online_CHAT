@@ -65,6 +65,16 @@ import {
   setSelectedMcpClientIds,
   upsertMcpClient
 } from './mcp_tools.js';
+import {
+  MODELSCOPE_LOGIN_URL,
+  MODELSCOPE_MCP_PAGE_URL,
+  buildModelScopeMcpConfig,
+  checkModelScopeLogin,
+  deployModelScopeMcp,
+  fetchHostedModelScopeMcps,
+  fetchModelScopeMcpDetail,
+  normalizeModelScopeMcp
+} from './plugin_store.js';
 import { getRoundtableError, runRoundtableTurn } from './roundtable.js';
 import { getMediaDataUrl, isMediaRef, saveFileAsMedia } from './media_store.js';
 import {
@@ -101,6 +111,7 @@ let layoutResizeFrame = 0;
 let mobileEdgeSwipe = null;
 let voiceNoticeTimer = 0;
 let voicePlaybackTimer = 0;
+let pluginStoreSearchTimer = 0;
 
 const state = {
   store: loadAppStore(),
@@ -119,6 +130,7 @@ const state = {
   roundtableErrorPopoverOpen: false,
   voiceErrorPopoverOpen: false,
   voiceError: null,
+  mainMenuOpen: false,
   quickCreateMenuOpen: false,
   archiveConfigOpen: false,
   archiveProgress: {
@@ -134,6 +146,25 @@ const state = {
   mcpHelpLoaded: false,
   mcpHelpHtml: '',
   activeToolRun: null,
+  pluginStoreSection: 'mcp',
+  pluginSourceMenuOpen: false,
+  pluginStore: {
+    search: '',
+    page: 1,
+    pageSize: 12,
+    total: 0,
+    items: [],
+    loading: false,
+    error: '',
+    loginChecking: false,
+    modelScopeConnected: false,
+    modelScopeMessage: '',
+    detail: null,
+    detailLoading: false,
+    detailError: '',
+    installing: false,
+    installStatus: ''
+  },
   stickerPopoverOpen: false,
   voiceNotice: null,
   characterImport: {
@@ -305,6 +336,7 @@ function bindGlobalEvents() {
   document.getElementById('mobile-back-btn')?.addEventListener('click', () => {
     closeMobileChatPage();
   });
+  bindMainMenu();
   bindQuickCreateMenu();
   document.addEventListener('click', event => {
     if (!state.roundtableErrorPopoverOpen) return;
@@ -341,7 +373,9 @@ function bindGlobalEvents() {
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
+      closeMainMenu();
       closeQuickCreateMenu();
+      closePluginSourceMenu();
       closeCustomSelects();
       closeMcpPicker();
     }
@@ -358,6 +392,48 @@ function bindGlobalEvents() {
   bindMemoryPanel();
   bindArchivePanel();
   bindToolCallPanel();
+  bindPluginStore();
+}
+
+function bindMainMenu() {
+  document.getElementById('mobile-menu-btn')?.addEventListener('click', event => {
+    event.stopPropagation();
+    state.mainMenuOpen = !state.mainMenuOpen;
+    renderMainMenu();
+  });
+  document.getElementById('main-menu-plugin-store')?.addEventListener('click', event => {
+    event.stopPropagation();
+    closeMainMenu();
+    openPanel('plugin-store-panel');
+  });
+  document.getElementById('main-menu-official-site')?.addEventListener('click', event => {
+    event.stopPropagation();
+    closeMainMenu();
+    window.open('https://fritia.online', '_blank', 'noopener');
+  });
+  document.addEventListener('click', event => {
+    if (!state.mainMenuOpen) return;
+    const menu = document.getElementById('main-menu');
+    const button = document.getElementById('mobile-menu-btn');
+    if (menu?.contains(event.target) || button?.contains(event.target)) return;
+    closeMainMenu();
+  });
+  renderMainMenu();
+}
+
+function renderMainMenu() {
+  const menu = document.getElementById('main-menu');
+  const button = document.getElementById('mobile-menu-btn');
+  const wrap = document.getElementById('main-menu-wrap');
+  menu?.classList.toggle('hidden', !state.mainMenuOpen);
+  wrap?.classList.toggle('is-open', state.mainMenuOpen);
+  button?.setAttribute('aria-expanded', String(state.mainMenuOpen));
+}
+
+function closeMainMenu() {
+  if (!state.mainMenuOpen) return;
+  state.mainMenuOpen = false;
+  renderMainMenu();
 }
 
 function bindQuickCreateMenu() {
@@ -1490,6 +1566,441 @@ function createBlankMcpClientConfig(transport) {
   };
 }
 
+function bindPluginStore() {
+  document.querySelectorAll('[data-plugin-store-section]').forEach(button => {
+    button.addEventListener('click', () => showPluginStoreSection(button.dataset.pluginStoreSection));
+  });
+  document.getElementById('plugin-store-search')?.addEventListener('input', event => {
+    state.pluginStore.search = event.target.value.trim();
+    if (pluginStoreSearchTimer) clearTimeout(pluginStoreSearchTimer);
+    pluginStoreSearchTimer = setTimeout(() => {
+      state.pluginStore.page = 1;
+      loadPluginStorePage();
+    }, 320);
+  });
+  document.getElementById('plugin-store-refresh')?.addEventListener('click', () => loadPluginStorePage());
+  document.getElementById('plugin-store-prev')?.addEventListener('click', () => {
+    if (state.pluginStore.page <= 1) return;
+    state.pluginStore.page -= 1;
+    loadPluginStorePage();
+  });
+  document.getElementById('plugin-store-next')?.addEventListener('click', () => {
+    const maxPage = Math.max(1, Math.ceil(state.pluginStore.total / state.pluginStore.pageSize));
+    if (state.pluginStore.page >= maxPage) return;
+    state.pluginStore.page += 1;
+    loadPluginStorePage();
+  });
+  document.getElementById('plugin-source-trigger')?.addEventListener('click', event => {
+    event.stopPropagation();
+    state.pluginSourceMenuOpen = !state.pluginSourceMenuOpen;
+    renderPluginSourceMenu();
+  });
+  document.getElementById('plugin-source-modelscope')?.addEventListener('click', event => {
+    event.stopPropagation();
+    closePluginSourceMenu();
+    openModelScopeLoginPanel();
+  });
+  document.getElementById('modelscope-login-open')?.addEventListener('click', () => {
+    window.open(MODELSCOPE_LOGIN_URL, '_blank', 'noopener');
+  });
+  document.getElementById('modelscope-login-check')?.addEventListener('click', () => checkModelScopeLoginStatus({ refreshList: true }));
+  document.getElementById('plugin-detail-add')?.addEventListener('click', installSelectedPluginDetail);
+  document.addEventListener('click', event => {
+    if (!state.pluginSourceMenuOpen) return;
+    const menu = document.getElementById('plugin-source-menu');
+    const button = document.getElementById('plugin-source-trigger');
+    if (menu?.contains(event.target) || button?.contains(event.target)) return;
+    closePluginSourceMenu();
+  });
+  renderPluginStorePanel();
+}
+
+function showPluginStoreSection(section = 'mcp') {
+  state.pluginStoreSection = section === 'roles' ? 'roles' : 'mcp';
+  renderPluginStorePanel();
+  if (state.pluginStoreSection === 'mcp' && !state.pluginStore.items.length && !state.pluginStore.loading) {
+    loadPluginStorePage();
+  }
+}
+
+function renderPluginStorePanel() {
+  document.querySelectorAll('[data-plugin-store-section]').forEach(button => {
+    button.classList.toggle('is-active', button.dataset.pluginStoreSection === state.pluginStoreSection);
+  });
+  document.querySelectorAll('[data-plugin-store-view]').forEach(view => {
+    view.classList.toggle('is-active', view.dataset.pluginStoreView === state.pluginStoreSection);
+  });
+  const search = document.getElementById('plugin-store-search');
+  if (search && document.activeElement !== search) search.value = state.pluginStore.search;
+  renderPluginSourceMenu();
+  renderPluginStoreGrid();
+  renderPluginStorePagination();
+}
+
+function renderPluginSourceMenu() {
+  const menu = document.getElementById('plugin-source-menu');
+  const trigger = document.getElementById('plugin-source-trigger');
+  const wrap = document.getElementById('plugin-source-wrap');
+  const dot = document.getElementById('modelscope-source-dot');
+  menu?.classList.toggle('hidden', !state.pluginSourceMenuOpen);
+  trigger?.setAttribute('aria-expanded', String(state.pluginSourceMenuOpen));
+  wrap?.classList.toggle('is-open', state.pluginSourceMenuOpen);
+  dot?.classList.toggle('is-connected', state.pluginStore.modelScopeConnected);
+  const loginStatus = document.getElementById('modelscope-login-status');
+  if (loginStatus) {
+    loginStatus.textContent = state.pluginStore.loginChecking
+      ? '正在检测魔搭登录状态...'
+      : (state.pluginStore.modelScopeConnected ? '魔搭社区已连接' : (state.pluginStore.modelScopeMessage || '等待登录检测'));
+  }
+}
+
+function closePluginSourceMenu() {
+  if (!state.pluginSourceMenuOpen) return;
+  state.pluginSourceMenuOpen = false;
+  renderPluginSourceMenu();
+}
+
+function openModelScopeLoginPanel() {
+  const frame = document.getElementById('modelscope-login-frame');
+  if (frame && frame.getAttribute('src') !== MODELSCOPE_LOGIN_URL) {
+    frame.setAttribute('src', MODELSCOPE_LOGIN_URL);
+  }
+  openPanel('plugin-source-login-panel');
+  checkModelScopeLoginStatus();
+}
+
+async function checkModelScopeLoginStatus(options = {}) {
+  state.pluginStore.loginChecking = true;
+  state.pluginStore.modelScopeMessage = '';
+  renderPluginSourceMenu();
+  renderPluginStoreGrid();
+  try {
+    const result = await checkModelScopeLogin();
+    state.pluginStore.modelScopeConnected = result.connected;
+    state.pluginStore.modelScopeMessage = result.connected ? '魔搭社区已连接' : (result.message || '尚未检测到魔搭登录态');
+    if (result.connected && options.refreshList) {
+      closePanel('plugin-source-login-panel');
+      await loadPluginStorePage();
+    }
+  } catch (error) {
+    state.pluginStore.modelScopeConnected = false;
+    state.pluginStore.modelScopeMessage = error?.message || '登录状态检测失败。';
+  } finally {
+    state.pluginStore.loginChecking = false;
+    renderPluginSourceMenu();
+    renderPluginStoreGrid();
+  }
+}
+
+async function loadPluginStorePage() {
+  const requestId = Date.now();
+  state.pluginStore.requestId = requestId;
+  state.pluginStore.loading = true;
+  state.pluginStore.error = '';
+  renderPluginStoreGrid();
+  try {
+    const result = await fetchHostedModelScopeMcps({
+      page: state.pluginStore.page,
+      pageSize: state.pluginStore.pageSize,
+      query: state.pluginStore.search
+    });
+    if (state.pluginStore.requestId !== requestId) return;
+    state.pluginStore.items = result.items;
+    state.pluginStore.total = result.total;
+  } catch (error) {
+    if (state.pluginStore.requestId !== requestId) return;
+    state.pluginStore.items = [];
+    state.pluginStore.total = 0;
+    state.pluginStore.error = error?.message || 'MCP 插件加载失败。';
+  } finally {
+    if (state.pluginStore.requestId === requestId) {
+      state.pluginStore.loading = false;
+      renderPluginStorePanel();
+    }
+  }
+}
+
+function renderPluginStoreGrid() {
+  const status = document.getElementById('plugin-store-status');
+  const grid = document.getElementById('plugin-store-grid');
+  if (!grid) return;
+  if (state.pluginStore.loading) {
+    setText('plugin-store-status', '正在刷新魔搭社区 hosted MCP。');
+    grid.innerHTML = Array.from({ length: 6 }, () => '<article class="plugin-card is-skeleton"></article>').join('');
+    return;
+  }
+  if (state.pluginStore.error) {
+    setText('plugin-store-status', state.pluginStore.error);
+    grid.innerHTML = `
+      <div class="plugin-store-empty plugin-store-error">
+        <img src="src/_logo/icons/circle-alert.svg" alt="">
+        <strong>无法读取魔搭 MCP 列表</strong>
+        <button class="btn btn-soft" type="button" data-modelscope-open-official>
+          <img src="src/_logo/icons/monitor-up.svg" alt="">
+          <span>打开魔搭 MCP</span>
+        </button>
+      </div>
+    `;
+    grid.querySelector('[data-modelscope-open-official]')?.addEventListener('click', () => {
+      window.open(MODELSCOPE_MCP_PAGE_URL, '_blank', 'noopener');
+    });
+    return;
+  }
+  const total = state.pluginStore.total || state.pluginStore.items.length;
+  setText('plugin-store-status', total ? `共 ${total} 个 hosted MCP，可搜索或翻页查看。` : '暂无 hosted MCP 插件。');
+  if (!state.pluginStore.items.length) {
+    grid.innerHTML = '<div class="plugin-store-empty"><img src="src/_logo/icons/search.svg" alt=""><strong>没有找到 MCP 插件</strong></div>';
+    return;
+  }
+  grid.innerHTML = state.pluginStore.items.map(item => createPluginCardHtml(item)).join('');
+  grid.querySelectorAll('[data-plugin-mcp-id]').forEach(card => {
+    card.addEventListener('click', () => openPluginDetailById(card.dataset.pluginMcpId));
+    card.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      openPluginDetailById(card.dataset.pluginMcpId);
+    });
+  });
+  grid.querySelectorAll('[data-plugin-install-id]').forEach(button => {
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      openPluginDetailById(button.dataset.pluginInstallId);
+    });
+  });
+  if (status && state.pluginStore.loginChecking) status.textContent = '正在检测魔搭登录状态...';
+}
+
+function createPluginCardHtml(item) {
+  const tags = (item.tags?.length ? item.tags : ['Hosted', 'Remote']).slice(0, 2);
+  return `
+    <article class="plugin-card" data-plugin-mcp-id="${escapeHtml(item.id)}" tabindex="0" role="button">
+      <header>
+        <img src="${escapeHtml(item.icon)}" alt="">
+        <button class="plugin-card-more" type="button" aria-label="更多">
+          <span aria-hidden="true">⋮</span>
+        </button>
+      </header>
+      <strong>${escapeHtml(item.displayName)}</strong>
+      <p>${escapeHtml(compactText(item.description || '魔搭社区 Hosted MCP 服务', 46))}</p>
+      <small>${escapeHtml(item.owner || 'modelscope')}</small>
+      <footer>
+        <span>${tags.map(tag => `<em>${escapeHtml(tag)}</em>`).join('')}</span>
+        <button class="btn btn-primary plugin-install-btn" type="button" data-plugin-install-id="${escapeHtml(item.id)}">安装</button>
+      </footer>
+    </article>
+  `;
+}
+
+function renderPluginStorePagination() {
+  const prev = document.getElementById('plugin-store-prev');
+  const next = document.getElementById('plugin-store-next');
+  const pages = document.getElementById('plugin-store-pages');
+  const maxPage = Math.max(1, Math.ceil(state.pluginStore.total / state.pluginStore.pageSize));
+  if (prev) prev.disabled = state.pluginStore.loading || state.pluginStore.page <= 1;
+  if (next) next.disabled = state.pluginStore.loading || state.pluginStore.page >= maxPage;
+  if (!pages) return;
+  const pageItems = buildPluginPageItems(state.pluginStore.page, maxPage);
+  pages.innerHTML = pageItems.map(item => {
+    if (item === '...') return '<span>...</span>';
+    return `<button class="${item === state.pluginStore.page ? 'is-active' : ''}" type="button" data-plugin-page="${item}">${item}</button>`;
+  }).join('');
+  pages.querySelectorAll('[data-plugin-page]').forEach(button => {
+    button.addEventListener('click', () => {
+      const page = Number(button.dataset.pluginPage) || 1;
+      if (page === state.pluginStore.page) return;
+      state.pluginStore.page = page;
+      loadPluginStorePage();
+    });
+  });
+}
+
+function buildPluginPageItems(current, maxPage) {
+  if (maxPage <= 7) return Array.from({ length: maxPage }, (_, index) => index + 1);
+  const items = [1];
+  if (current > 4) items.push('...');
+  const start = Math.max(2, current - 1);
+  const end = Math.min(maxPage - 1, current + 1);
+  for (let page = start; page <= end; page += 1) items.push(page);
+  if (current < maxPage - 3) items.push('...');
+  items.push(maxPage);
+  return items;
+}
+
+function openPluginDetailById(id) {
+  const item = state.pluginStore.items.find(server => server.id === id);
+  if (!item) return;
+  openPluginDetail(item);
+}
+
+async function openPluginDetail(server) {
+  state.pluginStore.detail = normalizeModelScopeMcp(server);
+  state.pluginStore.detailLoading = true;
+  state.pluginStore.detailError = '';
+  state.pluginStore.installStatus = '';
+  openPanel('plugin-detail-panel');
+  renderPluginDetail();
+  try {
+    state.pluginStore.detail = await fetchModelScopeMcpDetail(server);
+  } catch (error) {
+    state.pluginStore.detailError = error?.message || '插件详情加载失败。';
+  } finally {
+    state.pluginStore.detailLoading = false;
+    renderPluginDetail();
+  }
+}
+
+function renderPluginDetail() {
+  const container = document.getElementById('plugin-detail-content');
+  const addButton = document.getElementById('plugin-detail-add');
+  if (!container) return;
+  const detail = state.pluginStore.detail;
+  setText('plugin-detail-install-status', state.pluginStore.installStatus);
+  if (addButton) addButton.disabled = state.pluginStore.installing || !detail;
+  if (!detail) {
+    container.innerHTML = '<div class="plugin-store-empty">未选择插件。</div>';
+    return;
+  }
+  const fields = Array.isArray(detail.serviceFields) ? detail.serviceFields : [];
+  const loading = state.pluginStore.detailLoading ? '<span class="status-pill">正在加载详情</span>' : '';
+  const error = state.pluginStore.detailError ? `<div class="plugin-detail-error">${escapeHtml(state.pluginStore.detailError)}</div>` : '';
+  container.innerHTML = `
+    <section class="plugin-detail-summary">
+      <img src="${escapeHtml(detail.icon)}" alt="">
+      <div>
+        <h3>${escapeHtml(detail.displayName)}</h3>
+        <p>${escapeHtml(detail.description || '魔搭社区 Hosted MCP 服务')}</p>
+        <div class="plugin-detail-meta">
+          <span>remote</span>
+          <span>Streamable HTTP</span>
+          ${detail.verified ? '<span>已验证</span>' : ''}
+          ${loading}
+        </div>
+      </div>
+      <button class="btn btn-soft" type="button" data-plugin-detail-official>
+        <img src="src/_logo/icons/monitor-up.svg" alt="">
+        <span>官方详情</span>
+      </button>
+    </section>
+    ${error}
+    <section class="plugin-detail-block">
+      <h4>介绍</h4>
+      <p>${escapeHtml(compactText(detail.readme || detail.description || '暂无介绍。', 720))}</p>
+    </section>
+    <section class="plugin-detail-block">
+      <h4>服务配置</h4>
+      <div class="plugin-config-mode"><span>类型</span><strong>remote</strong></div>
+      <div class="plugin-config-fields">
+        ${fields.length ? fields.map(createPluginConfigFieldHtml).join('') : '<div class="plugin-config-empty">该 MCP 无额外服务配置项。</div>'}
+      </div>
+    </section>
+  `;
+  container.querySelector('[data-plugin-detail-official]')?.addEventListener('click', () => {
+    window.open(detail.detailUrl, '_blank', 'noopener');
+  });
+}
+
+function createPluginConfigFieldHtml(field) {
+  const required = field.required ? '<em>必填</em>' : '';
+  if (field.type === 'boolean') {
+    return `
+      <label class="plugin-config-row is-checkbox">
+        <span><strong>${escapeHtml(field.label)}</strong>${required}<small>${escapeHtml(field.description || field.key)}</small></span>
+        <input type="checkbox" data-modelscope-config-key="${escapeHtml(field.key)}" ${field.defaultValue ? 'checked' : ''}>
+      </label>
+    `;
+  }
+  if (field.enum?.length) {
+    return `
+      <label class="plugin-config-row">
+        <span><strong>${escapeHtml(field.label)}</strong>${required}<small>${escapeHtml(field.description || field.key)}</small></span>
+        <select data-modelscope-config-key="${escapeHtml(field.key)}">
+          ${field.enum.map(value => `<option value="${escapeHtml(value)}" ${value === field.defaultValue ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+        </select>
+      </label>
+    `;
+  }
+  return `
+    <label class="plugin-config-row">
+      <span><strong>${escapeHtml(field.label)}</strong>${required}<small>${escapeHtml(field.description || field.key)}</small></span>
+      <input type="${field.type === 'number' ? 'number' : 'text'}" data-modelscope-config-key="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.placeholder)}" value="${escapeHtml(field.defaultValue)}">
+    </label>
+  `;
+}
+
+async function installSelectedPluginDetail() {
+  const detail = state.pluginStore.detail;
+  if (!detail || state.pluginStore.installing) return;
+  state.pluginStore.installing = true;
+  state.pluginStore.installStatus = '正在连接魔搭社区...';
+  renderPluginDetail();
+  try {
+    const values = readPluginServiceConfig();
+    let deployResult;
+    try {
+      deployResult = await deployModelScopeMcp(detail, values);
+    } catch (error) {
+      if (!detail.deployedUrl) throw error;
+      deployResult = { url: detail.deployedUrl, transportType: detail.deployedUrlTransportType || 'streamable_http' };
+    }
+    const configJson = buildModelScopeMcpConfig(detail, deployResult);
+    await copyTextToClipboard(configJson);
+    const parsedConfig = parseMcpServerConfigJson(configJson, MCP_TRANSPORTS.STREAMABLE_HTTP);
+    const timestamp = Date.now();
+    const clientId = createId('modelscope');
+    upsertMcpClient({
+      id: clientId,
+      name: detail.displayName,
+      enabled: true,
+      transport: MCP_TRANSPORTS.STREAMABLE_HTTP,
+      permission: 'ask',
+      config: parsedConfig,
+      configJson,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+    state.mcpTransport = MCP_TRANSPORTS.STREAMABLE_HTTP;
+    state.selectedMcpClientId = clientId;
+    state.pluginStore.installStatus = '已复制 JSON，并添加到 Streamable HTTP MCP 服务列表。';
+    renderMcpPicker();
+    renderToolCallPanel();
+  } catch (error) {
+    state.pluginStore.installStatus = error?.message || '添加 MCP 服务失败。';
+  } finally {
+    state.pluginStore.installing = false;
+    renderPluginDetail();
+  }
+}
+
+function readPluginServiceConfig() {
+  const values = {};
+  document.querySelectorAll('[data-modelscope-config-key]').forEach(input => {
+    const key = input.dataset.modelscopeConfigKey;
+    if (!key) return;
+    if (input.type === 'checkbox') {
+      values[key] = input.checked;
+      return;
+    }
+    if (input.value !== '') values[key] = input.type === 'number' ? Number(input.value) : input.value;
+  });
+  return values;
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  textarea.remove();
+}
+
 function renderWebMcpServerPanel() {
   const config = getMcpConfig();
   const server = config.webMcpServer || {};
@@ -2141,6 +2652,14 @@ function handleAndroidBackAction() {
 }
 
 function closeTransientBackSurface() {
+  if (state.mainMenuOpen) {
+    closeMainMenu();
+    return true;
+  }
+  if (state.pluginSourceMenuOpen) {
+    closePluginSourceMenu();
+    return true;
+  }
   if (state.quickCreateMenuOpen) {
     closeQuickCreateMenu();
     return true;
@@ -4265,6 +4784,8 @@ function updateContextStatus() {
 }
 
 function openPanel(id, options = {}) {
+  closeMainMenu();
+  closePluginSourceMenu();
   closeQuickCreateMenu();
   closeMcpPicker();
   if (id === 'character-edit-panel') {
@@ -4284,6 +4805,14 @@ function openPanel(id, options = {}) {
   }
   if (id === 'archive-panel') renderArchivePanel();
   if (id === 'tool-call-panel') renderToolCallPanel();
+  if (id === 'plugin-store-panel') {
+    renderPluginStorePanel();
+    checkModelScopeLoginStatus();
+    if (state.pluginStoreSection === 'mcp' && !state.pluginStore.items.length && !state.pluginStore.loading) {
+      loadPluginStorePage();
+    }
+  }
+  if (id === 'plugin-detail-panel') renderPluginDetail();
   syncMobileBackAvailability();
 }
 
@@ -4299,6 +4828,9 @@ function closePanel(id) {
   }
   if (id === 'archive-panel') {
     state.archiveConfigOpen = false;
+  }
+  if (id === 'plugin-store-panel' || id === 'plugin-detail-panel' || id === 'plugin-source-login-panel') {
+    closePluginSourceMenu();
   }
   document.getElementById(id)?.classList.add('hidden');
   syncMobileBackAvailability();
