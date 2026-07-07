@@ -1600,7 +1600,8 @@ function bindPluginStore() {
     closePluginSourceMenu();
     openModelScopeLoginPanel();
   });
-  document.getElementById('modelscope-login-open')?.addEventListener('click', () => {
+  document.getElementById('modelscope-login-open')?.addEventListener('click', async () => {
+    if (await openModelScopeDesktopWindow()) return;
     window.open(MODELSCOPE_LOGIN_URL, '_blank', 'noopener');
   });
   document.getElementById('modelscope-login-check')?.addEventListener('click', () => checkModelScopeLoginStatus({ refreshList: true }));
@@ -1660,13 +1661,35 @@ function closePluginSourceMenu() {
   renderPluginSourceMenu();
 }
 
-function openModelScopeLoginPanel() {
+async function openModelScopeLoginPanel() {
+  if (await openModelScopeDesktopWindow()) {
+    state.pluginStore.modelScopeMessage = '已打开魔搭社区窗口，登录完成后刷新列表。';
+    renderPluginSourceMenu();
+    checkModelScopeLoginStatus();
+    return;
+  }
   const frame = document.getElementById('modelscope-login-frame');
   if (frame && frame.getAttribute('src') !== MODELSCOPE_LOGIN_URL) {
     frame.setAttribute('src', MODELSCOPE_LOGIN_URL);
   }
   openPanel('plugin-source-login-panel');
   checkModelScopeLoginStatus();
+}
+
+function getTauriInvoke() {
+  return window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke || null;
+}
+
+async function openModelScopeDesktopWindow() {
+  const invoke = getTauriInvoke();
+  if (!invoke) return false;
+  try {
+    await invoke('open_modelscope_window');
+    return true;
+  } catch (error) {
+    console.warn('[plugin-store] failed to open ModelScope desktop window', error);
+    return false;
+  }
 }
 
 async function checkModelScopeLoginStatus(options = {}) {
@@ -1776,12 +1799,12 @@ function createPluginCardHtml(item) {
     <article class="plugin-card" data-plugin-mcp-id="${escapeHtml(item.id)}" tabindex="0" role="button">
       <header>
         <img src="${escapeHtml(item.icon)}" alt="">
+        <strong>${escapeHtml(item.displayName)}</strong>
         <button class="plugin-card-more" type="button" aria-label="更多">
           <span aria-hidden="true">⋮</span>
         </button>
       </header>
-      <strong>${escapeHtml(item.displayName)}</strong>
-      <p>${escapeHtml(compactText(item.description || '魔搭社区 Hosted MCP 服务', 46))}</p>
+      <p>${escapeHtml(compactText(item.description || '魔搭社区 Hosted MCP 服务', 96))}</p>
       <small>${escapeHtml(item.owner || 'modelscope')}</small>
       <footer>
         <span>${tags.map(tag => `<em>${escapeHtml(tag)}</em>`).join('')}</span>
@@ -1901,20 +1924,23 @@ function renderPluginDetail() {
 
 function createPluginConfigFieldHtml(field) {
   const required = field.required ? '<em>必填</em>' : '';
+  const scope = field.scope || 'env';
+  const configAttrs = `data-modelscope-config-key="${escapeHtml(field.key)}" data-modelscope-config-scope="${escapeHtml(scope)}"`;
   if (field.type === 'boolean') {
     return `
       <label class="plugin-config-row is-checkbox">
         <span><strong>${escapeHtml(field.label)}</strong>${required}<small>${escapeHtml(field.description || field.key)}</small></span>
-        <input type="checkbox" data-modelscope-config-key="${escapeHtml(field.key)}" ${field.defaultValue ? 'checked' : ''}>
+        <input type="checkbox" ${configAttrs} ${field.defaultValue ? 'checked' : ''}>
       </label>
     `;
   }
-  if (field.enum?.length) {
+  const options = normalizePluginConfigOptions(field);
+  if (options.length) {
     return `
       <label class="plugin-config-row">
         <span><strong>${escapeHtml(field.label)}</strong>${required}<small>${escapeHtml(field.description || field.key)}</small></span>
-        <select data-modelscope-config-key="${escapeHtml(field.key)}">
-          ${field.enum.map(value => `<option value="${escapeHtml(value)}" ${value === field.defaultValue ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+        <select ${configAttrs}>
+          ${options.map(option => `<option value="${escapeHtml(option.value)}" ${option.value === String(field.defaultValue ?? '') ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
         </select>
       </label>
     `;
@@ -1922,9 +1948,22 @@ function createPluginConfigFieldHtml(field) {
   return `
     <label class="plugin-config-row">
       <span><strong>${escapeHtml(field.label)}</strong>${required}<small>${escapeHtml(field.description || field.key)}</small></span>
-      <input type="${field.type === 'number' ? 'number' : 'text'}" data-modelscope-config-key="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.placeholder)}" value="${escapeHtml(field.defaultValue)}">
+      <input type="${field.type === 'number' ? 'number' : 'text'}" ${configAttrs} placeholder="${escapeHtml(field.placeholder)}" value="${escapeHtml(field.defaultValue ?? '')}">
     </label>
   `;
+}
+
+function normalizePluginConfigOptions(field) {
+  const source = Array.isArray(field.options) && field.options.length ? field.options : (Array.isArray(field.enum) ? field.enum : []);
+  return source.map(option => {
+    if (option && typeof option === 'object') {
+      return {
+        value: String(option.value ?? option.label ?? ''),
+        label: String(option.label ?? option.value ?? '')
+      };
+    }
+    return { value: String(option), label: String(option) };
+  }).filter(option => option.value);
 }
 
 async function installSelectedPluginDetail() {
@@ -1937,12 +1976,12 @@ async function installSelectedPluginDetail() {
     const values = readPluginServiceConfig();
     let deployResult;
     try {
-      deployResult = await deployModelScopeMcp(detail, values);
+      deployResult = await deployModelScopeMcp(detail, values.environmentVariables, values.options);
     } catch (error) {
       if (!detail.deployedUrl) throw error;
-      deployResult = { url: detail.deployedUrl, transportType: detail.deployedUrlTransportType || 'streamable_http' };
+      deployResult = { url: detail.deployedUrl, transportType: values.options.transportType || detail.deployedUrlTransportType || 'streamable_http' };
     }
-    const configJson = buildModelScopeMcpConfig(detail, deployResult);
+    const configJson = buildModelScopeMcpConfig(detail, deployResult, values.options);
     await copyTextToClipboard(configJson);
     const parsedConfig = parseMcpServerConfigJson(configJson, MCP_TRANSPORTS.STREAMABLE_HTTP);
     const timestamp = Date.now();
@@ -1972,17 +2011,45 @@ async function installSelectedPluginDetail() {
 }
 
 function readPluginServiceConfig() {
-  const values = {};
+  const values = {
+    environmentVariables: {},
+    options: {}
+  };
   document.querySelectorAll('[data-modelscope-config-key]').forEach(input => {
     const key = input.dataset.modelscopeConfigKey;
     if (!key) return;
+    const scope = input.dataset.modelscopeConfigScope || 'env';
+    let value;
     if (input.type === 'checkbox') {
-      values[key] = input.checked;
+      value = input.checked;
+    } else {
+      if (input.value === '') return;
+      value = input.type === 'number' ? Number(input.value) : input.value;
+    }
+    if (scope === 'deploy') {
+      writePluginDeployOption(values.options, key, value);
       return;
     }
-    if (input.value !== '') values[key] = input.type === 'number' ? Number(input.value) : input.value;
+    values.environmentVariables[key] = value;
   });
   return values;
+}
+
+function writePluginDeployOption(options, key, value) {
+  if (key === '__modelscope_transport_type') {
+    options.transportType = String(value || 'streamable_http');
+    return;
+  }
+  if (key === '__modelscope_auth_type') {
+    options.authCheck = ['bearer', 'token', 'true'].includes(String(value || '').toLowerCase());
+    return;
+  }
+  if (key === '__modelscope_expiration') {
+    const minutes = Number(value);
+    options.expirationMinutes = Number.isFinite(minutes) ? minutes : -1;
+    return;
+  }
+  options[key] = value;
 }
 
 async function copyTextToClipboard(text) {

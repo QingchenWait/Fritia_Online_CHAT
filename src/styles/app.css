@@ -5949,14 +5949,14 @@ select:focus {
 
 .plugin-card {
   min-width: 0;
-  min-height: 154px;
+  min-height: 166px;
   border: 1px solid rgba(120, 140, 180, 0.20);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.95);
   box-shadow: 0 12px 30px rgba(40, 60, 120, 0.07);
   display: grid;
-  grid-template-rows: auto auto auto auto 1fr;
-  gap: 7px;
+  grid-template-rows: auto minmax(36px, auto) auto 1fr;
+  gap: 8px;
   padding: 13px;
   transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
@@ -5969,7 +5969,14 @@ select:focus {
   box-shadow: 0 18px 38px rgba(79, 99, 255, 0.13);
 }
 
-.plugin-card header,
+.plugin-card header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
 .plugin-card footer {
   min-width: 0;
   display: flex;
@@ -6026,6 +6033,7 @@ select:focus {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
+  min-height: 34px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -7868,9 +7876,9 @@ select:focus {
   }
 
   .plugin-card {
-    min-height: 128px;
+    min-height: 144px;
     border-radius: 14px;
-    gap: 5px;
+    gap: 6px;
     padding: 10px;
   }
 
@@ -7892,6 +7900,7 @@ select:focus {
 
   .plugin-card p {
     font-size: 11px;
+    min-height: 31px;
     -webkit-line-clamp: 2;
   }
 
