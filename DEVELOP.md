@@ -1,5 +1,20 @@
 # DEVELOP
 
+## 2026-07-08 MCP Client UI Reset
+
+- `src/styles/app.css` 重新设计“工具调用 / MCP 客户端”页，不再沿用上一版互相嵌套的伸缩和滚动策略。桌面端 `.tool-shell` 固定为受视口约束的工作窗口，`.tool-client-workbench` 使用列表栏 + 编辑栏双列，服务列表和编辑器分别在自己的区域内滚动。
+- 竖屏端 `@media (max-width: 760px)` 下，MCP 客户端页改为单列卡片流：服务列表卡片和编辑器卡片上下排列，整页负责纵向滚动，列表不再固定高度，避免服务项、服务器名称、启用开关和 JSON 区域重叠。
+- 增加 `761px-980px` 横屏窄窗口兜底，MCP 客户端工作台自动改为上下两段，避免中等宽度下双栏硬挤。
+- 追加 UI 修正：横屏窄窗口上下分段时取消详情区内部滚动，由整个 client 页滚动；`#mcp-client-json` 高度压缩到约 8 行，超出内容在代码框内滚动；竖屏 `.tool-client-list` 限制到约 3 个服务项高度并启用内部滚动。
+- 本轮只修改样式和文档，不重新打包，`package.json` 版本保持 `0.4.1`。
+
+## 2026-07-08 Tool Client Layout / Markdown / v0.4.1
+
+- `src/styles/app.css` 重新调整 MCP 客户端页网格策略：client view 自身负责纵向滚动，`.tool-client-workbench` 按内容自然撑开；`.tool-client-editor` 不再用 `minmax(0, 1fr)` 压缩 JSON 区域，`#mcp-client-json` 保留最小高度并可自滚动。移动端服务列表和编辑器改为自然上下排列，由整页滚动承载长内容。
+- `src/js/ui.js` 将聊天气泡文本入口切换为现有轻量 Markdown 渲染器，并补齐引用块、自动链接、粗体/斜体/删除线、行内公式和公式块；渲染后会在非链接/非代码区域恢复 `@角色` 提及按钮。
+- `index.html`、`src/js/mcp_tools.js`、`src/js/ui.js` 和 `src/js/tool_chat_engine.js` 新增 `permissions.completeToolResultReply`：权限页新增“让 bot 完整回复工具调用结果”开关，默认开启；工具模式请求 LLM 时只复制请求消息并向最后一条 user message 追加隐藏提示，不写回聊天记录、续跑状态或长期记忆。
+- `sw.js` 缓存版本升级到 `fritia-next-chat-v23`；`package.json` 版本按本轮要求保持 `0.4.1`。
+
 ## 2026-07-08 ModelScope MCP Install / v0.4.1
 
 - `src/js/plugin_store.js` 调整 `deployModelScopeMcp()`：安装 hosted MCP 时先请求 `GET /api/v1/mcpServers/{Path}/{Name}/listByStatus` 取平台 `DeploymentJobId`，再按魔搭详情页“连接”按钮流程提交 `POST /api/v1/mcpServers/{Path}/{Name}/asyncDeploy`，请求体保留 `EnvironmentVariables`、`ExpirationMinutes`、`TransportType`、`AuthCheck`、`InfraSource: "platform"` 和 `DeploymentJobId`。

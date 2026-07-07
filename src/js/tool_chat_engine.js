@@ -8,7 +8,8 @@ import { saveDataUrlAsMedia } from './media_store.js';
 import {
   callMcpToolByRegistryEntry,
   collectMcpToolDefinitions,
-  formatMcpContentText
+  formatMcpContentText,
+  getMcpConfig
 } from './mcp_tools.js';
 
 const PLAYER_NAME = '分析员';
@@ -16,6 +17,7 @@ const MAX_TOOL_AGENT_STEPS = 50;
 const MAX_RESUME_MESSAGES = 36;
 const MAX_RESUME_CONTENT_CHARS = 6000;
 const RESUME_TEXT_RE = /^(继续|继续执行|继续工具调用|接着来|接着执行|从中断处继续|resume|continue)\s*[。.!！?？]*$/i;
+const COMPLETE_TOOL_RESULT_PROMPT = '注意：如果用户的当前对话需要通过调用 MCP 等工具进行回答，那么，忽略系统提示词中关于角色回复字数的限制，在语气符合人物设定的前提下，尽量输出完整内容。';
 
 export async function completeToolPrivateMessageReply({
   store,
@@ -75,6 +77,7 @@ export async function completeToolPrivateMessageReply({
     const toolSet = await collectMcpToolDefinitions(selectedClientIds, { signal });
     throwIfToolAborted(signal);
     const availableTools = toolSet.tools || [];
+    const completeToolResultReply = toolSet.permissions?.completeToolResultReply ?? getMcpConfig().permissions.completeToolResultReply;
     const toolSummary = availableTools.length
       ? `可用工具：${availableTools.map(tool => tool.function.name).join('、')}`
       : '没有读取到可用工具，本轮将直接回复。';
@@ -132,6 +135,7 @@ export async function completeToolPrivateMessageReply({
         messages: agentMessages,
         tools: availableTools,
         toolChoice: availableTools.length ? 'auto' : 'none',
+        completeToolResultReply: completeToolResultReply !== false,
         signal,
         onDelta: delta => {
           stepText += delta;
@@ -382,14 +386,23 @@ async function buildToolMessages({ store, conversation, character, userText, use
   ];
 }
 
-async function requestToolAwareCompletion({ settings, messages, tools = [], toolChoice = 'auto', onDelta, signal = null }) {
+async function requestToolAwareCompletion({
+  settings,
+  messages,
+  tools = [],
+  toolChoice = 'auto',
+  completeToolResultReply = true,
+  onDelta,
+  signal = null
+}) {
   const provider = getDefaultChatProvider(settings);
   if (!provider?.apiKey || !provider?.baseUrl || !provider?.model) {
     throw new Error('模型连接配置不完整，请检查默认模型设置。');
   }
+  const requestMessages = completeToolResultReply ? withCompleteToolResultPrompt(messages) : messages;
   const body = {
     model: provider.model,
-    messages,
+    messages: requestMessages,
     temperature: settings.temperature,
     stream: true,
     ...(tools.length ? { tools, tool_choice: toolChoice } : {})
@@ -413,6 +426,48 @@ async function requestToolAwareCompletion({ settings, messages, tools = [], tool
     return extractJsonCompletion(json);
   }
   return readStreamingCompletion(response, onDelta, signal);
+}
+
+function withCompleteToolResultPrompt(messages = []) {
+  if (!Array.isArray(messages) || !messages.length) return messages;
+  const userIndex = findLastUserMessageIndex(messages);
+  if (userIndex < 0) return messages;
+  return messages.map((message, index) => {
+    if (index !== userIndex) return message;
+    return {
+      ...message,
+      content: appendHiddenPromptToMessageContent(message.content)
+    };
+  });
+}
+
+function findLastUserMessageIndex(messages = []) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') return index;
+  }
+  return -1;
+}
+
+function appendHiddenPromptToMessageContent(content) {
+  if (Array.isArray(content)) {
+    let applied = false;
+    const parts = content.map(part => {
+      if (applied || !part || typeof part !== 'object') return part;
+      if ((part.type === 'text' || part.type === 'input_text') && typeof part.text === 'string') {
+        applied = true;
+        return { ...part, text: appendCompleteToolPromptText(part.text) };
+      }
+      return part;
+    });
+    return applied ? parts : [{ type: 'text', text: COMPLETE_TOOL_RESULT_PROMPT }, ...parts];
+  }
+  return appendCompleteToolPromptText(content);
+}
+
+function appendCompleteToolPromptText(text = '') {
+  const source = String(text || '');
+  if (source.includes(COMPLETE_TOOL_RESULT_PROMPT)) return source;
+  return `${source.trimEnd()}\n\n${COMPLETE_TOOL_RESULT_PROMPT}`.trimStart();
 }
 
 async function readStreamingCompletion(response, onDelta, signal = null) {

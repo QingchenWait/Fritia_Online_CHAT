@@ -1143,6 +1143,66 @@ img {
   overflow-wrap: anywhere;
 }
 
+.message-content .markdown-body {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: normal;
+}
+
+.message-content .markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.message-content .markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.message-content .markdown-body h1 {
+  font-size: 1.26em;
+}
+
+.message-content .markdown-body h2 {
+  font-size: 1.18em;
+}
+
+.message-content .markdown-body h3,
+.message-content .markdown-body h4,
+.message-content .markdown-body h5,
+.message-content .markdown-body h6 {
+  font-size: 1.08em;
+}
+
+.message-content .markdown-body p,
+.message-content .markdown-body ul,
+.message-content .markdown-body ol {
+  margin: 0.42em 0;
+}
+
+.message-content .markdown-body pre,
+.message-content .markdown-table-wrap {
+  max-width: min(520px, calc(100vw - 132px));
+}
+
+.message-row.is-self .message-content .markdown-body a {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.message-row.is-self .message-content .markdown-body code {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.message-row.is-self .message-content .markdown-body blockquote {
+  border-left-color: rgba(255, 255, 255, 0.58);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.message-row.is-self .message-content .markdown-body pre code {
+  color: inherit;
+}
+
 .message-row.is-self .message-content {
   color: #fff;
   background: var(--brand-gradient);
@@ -5040,13 +5100,14 @@ select:focus {
 }
 
 .tool-shell {
-  width: min(1120px, calc(100vw - 48px));
+  width: min(1180px, calc(100vw - 48px));
+  height: min(820px, calc(100dvh - 48px));
 }
 
 .tool-layout {
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: clamp(200px, 18vw, 240px) minmax(0, 1fr);
   flex: 1;
   overflow: hidden;
 }
@@ -5094,6 +5155,7 @@ select:focus {
 }
 
 .tool-content {
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -5101,7 +5163,8 @@ select:focus {
 .tool-view {
   height: 100%;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: clamp(1rem, 2vw, 1.5rem);
   display: none;
 }
@@ -5115,10 +5178,13 @@ select:focus {
 .tool-view[data-tool-view="client"].is-active {
   grid-template-rows: auto auto minmax(0, 1fr);
   align-content: stretch;
+  overflow-y: auto;
 }
 
 .tool-view,
+.tool-nav,
 .tool-client-list,
+.tool-client-editor,
 .tool-log-list,
 .tool-help-content,
 .tool-code-preview,
@@ -5129,7 +5195,9 @@ select:focus {
 }
 
 .tool-view::-webkit-scrollbar,
+.tool-nav::-webkit-scrollbar,
 .tool-client-list::-webkit-scrollbar,
+.tool-client-editor::-webkit-scrollbar,
 .tool-log-list::-webkit-scrollbar,
 .tool-help-content::-webkit-scrollbar,
 .tool-code-preview::-webkit-scrollbar,
@@ -5140,7 +5208,9 @@ select:focus {
 }
 
 .tool-view::-webkit-scrollbar-thumb,
+.tool-nav::-webkit-scrollbar-thumb,
 .tool-client-list::-webkit-scrollbar-thumb,
+.tool-client-editor::-webkit-scrollbar-thumb,
 .tool-log-list::-webkit-scrollbar-thumb,
 .tool-help-content::-webkit-scrollbar-thumb,
 .tool-code-preview::-webkit-scrollbar-thumb,
@@ -5153,7 +5223,9 @@ select:focus {
 }
 
 .tool-view::-webkit-scrollbar-track,
+.tool-nav::-webkit-scrollbar-track,
 .tool-client-list::-webkit-scrollbar-track,
+.tool-client-editor::-webkit-scrollbar-track,
 .tool-log-list::-webkit-scrollbar-track,
 .tool-help-content::-webkit-scrollbar-track,
 .tool-code-preview::-webkit-scrollbar-track,
@@ -5198,10 +5270,12 @@ select:focus {
   min-height: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.92);
   display: grid;
-  grid-template-columns: minmax(230px, 0.78fr) minmax(0, 1.42fr);
+  grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
+  align-items: stretch;
   overflow: hidden;
+  box-shadow: 0 16px 36px rgba(40, 60, 120, 0.08);
 }
 
 .tool-client-list-card {
@@ -5211,6 +5285,7 @@ select:focus {
   background: var(--surface-soft);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .tool-list-head,
@@ -5245,6 +5320,7 @@ select:focus {
 }
 
 .tool-client-list {
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   padding: 10px;
@@ -5310,14 +5386,17 @@ select:focus {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto auto auto;
   align-content: start;
   gap: 14px;
-  overflow: hidden;
+  overflow: auto;
   padding: 16px;
 }
 
 .tool-editor-head {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
 }
@@ -5342,6 +5421,10 @@ select:focus {
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tool-editor-head > div:nth-child(2) {
@@ -5370,6 +5453,7 @@ select:focus {
 }
 
 .tool-field {
+  min-width: 0;
   display: grid;
   gap: 7px;
   color: var(--text);
@@ -5467,13 +5551,56 @@ select:focus {
 }
 
 .tool-client-editor .tool-json-field {
-  min-height: 0;
+  min-height: auto;
 }
 
 .tool-client-editor .tool-json-field textarea {
-  height: 100%;
-  min-height: 0;
+  width: 100%;
+  height: 196px;
+  min-height: 196px;
+  max-height: 196px;
+  box-sizing: border-box;
   resize: none;
+}
+
+@media (min-width: 761px) and (max-width: 980px) {
+  .tool-view[data-tool-view="client"].is-active {
+    grid-template-rows: auto auto auto;
+    align-content: start;
+    overflow-y: auto;
+  }
+
+  .tool-client-workbench {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    gap: 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .tool-client-list-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 12px 28px rgba(40, 60, 120, 0.06);
+  }
+
+  .tool-client-list {
+    max-height: 280px;
+    overflow: auto;
+  }
+
+  .tool-client-editor {
+    grid-template-rows: auto auto auto auto auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 12px 28px rgba(40, 60, 120, 0.06);
+    overflow: visible;
+  }
 }
 
 .tool-card {
@@ -5744,6 +5871,38 @@ select:focus {
   border-radius: 14px;
   border: 1px solid var(--line);
   margin: 10px 0;
+}
+
+.markdown-body blockquote {
+  margin: 0.85em 0;
+  padding: 0.18em 0 0.18em 0.85em;
+  border-left: 3px solid rgba(99, 91, 255, 0.34);
+  color: var(--muted);
+}
+
+.markdown-body blockquote p {
+  margin: 0.35em 0;
+}
+
+.markdown-body .markdown-math,
+.markdown-body .markdown-math-block {
+  border-radius: 9px;
+  background: rgba(99, 91, 255, 0.08);
+  color: #3140d4;
+  font-family: "Cambria Math", "Times New Roman", serif;
+}
+
+.markdown-body .markdown-math {
+  padding: 0.08em 0.32em;
+}
+
+.markdown-body .markdown-math-block {
+  display: block;
+  overflow-x: auto;
+  margin: 0.85em 0;
+  padding: 10px 12px;
+  text-align: center;
+  white-space: pre;
 }
 
 .markdown-table-wrap {
@@ -7799,6 +7958,7 @@ select:focus {
   .tool-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
   }
 
   .tool-nav {
@@ -7806,8 +7966,13 @@ select:focus {
     border-bottom: 1px solid var(--line);
     display: flex;
     overflow-x: auto;
+    scrollbar-width: none;
     gap: 8px;
     padding: 10px;
+  }
+
+  .tool-nav::-webkit-scrollbar {
+    display: none;
   }
 
   .tool-nav button {
@@ -7829,16 +7994,26 @@ select:focus {
   }
 
   .tool-view {
+    height: 100%;
+    overflow: auto;
     padding: 14px 12px calc(18px + env(safe-area-inset-bottom));
   }
 
   .tool-view.is-active[data-tool-view="client"] {
+    display: block;
     overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .tool-transport-tabs {
     overflow-x: auto;
+    scrollbar-width: none;
     gap: 6px;
+    margin-top: 14px;
+  }
+
+  .tool-transport-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .tool-transport-tabs button {
@@ -7848,44 +8023,92 @@ select:focus {
   }
 
   .tool-client-workbench {
+    margin-top: 14px;
     height: auto;
     min-height: 0;
     grid-template-columns: 1fr;
     grid-template-rows: auto auto;
+    gap: 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
     overflow: visible;
   }
 
   .tool-client-list-card {
     grid-column: 1;
     grid-row: 1;
-    min-height: 280px;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+    min-height: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 12px 28px rgba(40, 60, 120, 0.06);
+    overflow: hidden;
   }
 
   .tool-client-list {
-    flex: 0 0 clamp(224px, 42dvh, 320px);
-    height: clamp(224px, 42dvh, 320px);
-    min-height: 224px;
-    max-height: clamp(224px, 42dvh, 320px);
+    display: grid;
+    gap: 8px;
+    flex: none;
+    height: auto;
+    min-height: 0;
+    max-height: 228px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 10px;
+  }
+
+  .tool-client-item {
+    min-height: 64px;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    border-color: rgba(120, 140, 180, 0.16);
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 8px 18px rgba(40, 60, 120, 0.04);
   }
 
   .tool-client-editor {
     grid-column: 1;
     grid-row: 2;
-    padding: 12px;
+    display: grid;
+    grid-template-rows: auto auto auto auto auto;
+    gap: 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 12px 28px rgba(40, 60, 120, 0.06);
+    padding: 14px;
+    overflow: visible;
   }
 
   .tool-editor-head {
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
   }
 
   .tool-editor-head > img {
     display: none;
   }
 
+  .tool-editor-head h4 {
+    font-size: 18px;
+  }
+
+  .tool-editor-head p {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .tool-editor-actions {
     flex: 0 0 auto;
+    justify-self: end;
+  }
+
+  .tool-editor-actions .icon-btn,
+  .tool-editor-actions .btn {
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .tool-editor-actions .btn span {
@@ -7893,7 +8116,12 @@ select:focus {
   }
 
   .tool-json-field textarea {
-    min-height: 210px;
+    width: 100%;
+    min-height: 184px;
+    height: 184px;
+    max-height: 184px;
+    box-sizing: border-box;
+    resize: none;
     font-size: 12px;
   }
 

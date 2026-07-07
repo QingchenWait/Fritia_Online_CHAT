@@ -2225,6 +2225,7 @@ function renderMcpPermissionPanel() {
   setChecked('mcp-permission-share-character', permissions.shareCharacterProfile);
   setChecked('mcp-permission-share-memory', permissions.shareLongTermMemory);
   setChecked('mcp-permission-isolate-tool-context', permissions.isolateToolContext);
+  setChecked('mcp-permission-complete-tool-result', permissions.completeToolResultReply !== false);
   setChecked('mcp-permission-file-write', permissions.requireFileWriteApproval);
 }
 
@@ -2238,6 +2239,7 @@ function saveMcpPermissionsFromForm() {
       shareCharacterProfile: document.getElementById('mcp-permission-share-character')?.checked === true,
       shareLongTermMemory: document.getElementById('mcp-permission-share-memory')?.checked === true,
       isolateToolContext: document.getElementById('mcp-permission-isolate-tool-context')?.checked === true,
+      completeToolResultReply: document.getElementById('mcp-permission-complete-tool-result')?.checked !== false,
       requireFileWriteApproval: document.getElementById('mcp-permission-file-write')?.checked === true
     }
   });
@@ -2311,6 +2313,30 @@ function renderMarkdownDocument(markdown = '') {
       html.push(`<pre${language}><code>${escapeHtml(code.join('\n'))}</code></pre>`);
       continue;
     }
+    const mathFence = line.match(/^\$\$\s*$/);
+    if (mathFence) {
+      const formula = [];
+      index += 1;
+      while (index < lines.length && !/^\$\$\s*$/.test(lines[index])) {
+        formula.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) index += 1;
+      html.push(renderMarkdownMathBlock(formula.join('\n')));
+      continue;
+    }
+    const singleLineMath = line.match(/^\$\$(.+)\$\$\s*$/);
+    if (singleLineMath) {
+      html.push(renderMarkdownMathBlock(singleLineMath[1].trim()));
+      index += 1;
+      continue;
+    }
+    if (/^\s*>\s?/.test(line)) {
+      const { blockquoteHtml, nextIndex } = renderMarkdownBlockquote(lines, index);
+      html.push(blockquoteHtml);
+      index = nextIndex;
+      continue;
+    }
     const heading = line.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
       const level = heading[1].length;
@@ -2353,10 +2379,28 @@ function renderMarkdownDocument(markdown = '') {
 function isMarkdownBlockStart(lines, index) {
   const line = lines[index] || '';
   return /^```/.test(line)
+    || /^\$\$/.test(line)
+    || /^\s*>\s?/.test(line)
     || /^#{1,6}\s+/.test(line)
     || /^\s*[-*+]\s+/.test(line)
     || /^\s*\d+[.)]\s+/.test(line)
     || isMarkdownTableStart(lines, index);
+}
+
+function renderMarkdownBlockquote(lines, startIndex) {
+  const quote = [];
+  let index = startIndex;
+  while (index < lines.length) {
+    const line = lines[index];
+    const quoted = line.match(/^\s*>\s?(.*)$/);
+    if (!quoted) break;
+    quote.push(quoted[1] || '');
+    index += 1;
+  }
+  const inner = renderMarkdownDocument(quote.join('\n'))
+    .replace(/^<article class="markdown-body">/, '')
+    .replace(/<\/article>$/, '');
+  return { blockquoteHtml: `<blockquote>${inner}</blockquote>`, nextIndex: index };
 }
 
 function isMarkdownTableStart(lines, index) {
@@ -2393,13 +2437,23 @@ function renderMarkdownInline(text = '') {
   let source = String(text)
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => remember(renderMarkdownImage(alt, url)))
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => remember(renderMarkdownLink(label, url)))
-    .replace(/`([^`]+)`/g, (_, code) => remember(`<code>${escapeHtml(code)}</code>`));
+    .replace(/`([^`]+)`/g, (_, code) => remember(`<code>${escapeHtml(code)}</code>`))
+    .replace(/\\\((.+?)\\\)/g, (_, formula) => remember(renderMarkdownInlineMath(formula)))
+    .replace(/\$([^$\n]+)\$/g, (_, formula) => remember(renderMarkdownInlineMath(formula)))
+    .replace(/(^|[\s(（])((?:https?:\/\/|www\.)[^\s<]+)/gi, (_, prefix, url) => `${prefix}${remember(renderMarkdownAutoLink(url))}`);
   source = escapeHtml(source);
+  source = source
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+    .replace(/~~([^~]+)~~/g, '<del>$1</del>')
+    .replace(/(^|[^\w])\*([^*\s][^*]*?)\*/g, '$1<em>$2</em>')
+    .replace(/(^|[^\w])_([^_\s][^_]*?)_/g, '$1<em>$2</em>');
   return tokens.reduce((result, html, index) => result.replace(new RegExp(`\\u0000${index}\\u0000`, 'g'), html), source);
 }
 
 function normalizeMarkdownUrl(url = '') {
   const clean = String(url).trim().replace(/^<|>$/g, '').split(/\s+/)[0] || '';
+  if (/^www\./i.test(clean)) return `https://${clean}`;
   if (/^(https?:|data:image\/|\.{0,2}\/|src\/|\/)/i.test(clean)) return clean;
   return '';
 }
@@ -2415,6 +2469,24 @@ function renderMarkdownLink(label, url) {
   const text = escapeHtml(label || url || '');
   if (!href) return text;
   return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+}
+
+function renderMarkdownAutoLink(url = '') {
+  let clean = String(url || '').trim();
+  let suffix = '';
+  while (clean && /[)\]}.。,，!！?？;；:：]$/.test(clean)) {
+    suffix = clean.slice(-1) + suffix;
+    clean = clean.slice(0, -1);
+  }
+  return `${renderMarkdownLink(clean, clean)}${escapeHtml(suffix)}`;
+}
+
+function renderMarkdownInlineMath(formula = '') {
+  return `<span class="markdown-math">${escapeHtml(formula.trim())}</span>`;
+}
+
+function renderMarkdownMathBlock(formula = '') {
+  return `<div class="markdown-math-block">${escapeHtml(String(formula || '').trim())}</div>`;
 }
 
 function clientSubtitle(client) {
@@ -4208,25 +4280,50 @@ function insertMentionText(name, options = {}) {
 }
 
 function renderMessageText(container, text) {
-  container.innerHTML = '';
-  const source = String(text || '');
-  const pattern = /[@＠][^\s@＠，。！？、：:；;]+/g;
+  container.innerHTML = renderMarkdownDocument(text);
+  enhanceMarkdownMentions(container);
+}
+
+function enhanceMarkdownMentions(container) {
+  const pattern = /[@＠][^\s@＠，。！？、：:；;<>()[\]{}]+/g;
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+      if (node.parentElement?.closest('a, code, pre, button, textarea, input, script, style')) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      pattern.lastIndex = 0;
+      return pattern.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    replaceMentionTextNode(node, pattern);
+  }
+}
+
+function replaceMentionTextNode(node, pattern) {
+  const source = node.nodeValue || '';
+  pattern.lastIndex = 0;
   let lastIndex = 0;
+  const fragment = document.createDocumentFragment();
   for (const match of source.matchAll(pattern)) {
     if (match.index > lastIndex) {
-      container.appendChild(document.createTextNode(source.slice(lastIndex, match.index)));
+      fragment.appendChild(document.createTextNode(source.slice(lastIndex, match.index)));
     }
     const mention = document.createElement('button');
     mention.className = 'message-mention';
     mention.type = 'button';
     mention.textContent = match[0];
     mention.addEventListener('click', () => insertMentionText(match[0].slice(1)));
-    container.appendChild(mention);
+    fragment.appendChild(mention);
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < source.length) {
-    container.appendChild(document.createTextNode(source.slice(lastIndex)));
+    fragment.appendChild(document.createTextNode(source.slice(lastIndex)));
   }
+  node.replaceWith(fragment);
 }
 
 async function refreshKnowledgePanel() {

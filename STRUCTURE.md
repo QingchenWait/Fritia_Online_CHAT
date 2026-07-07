@@ -1,5 +1,22 @@
 # STRUCTURE
 
+## 2026-07-08 MCP Client UI Reset Mapping
+
+- `src/styles/app.css`：`.tool-shell`、`.tool-layout`、`.tool-content` 和 `.tool-view[data-tool-view="client"]` 重新约束工具窗口高度、内部网格和滚动边界，避免 MCP 客户端页产生页面级横向溢出。
+- `src/styles/app.css`：`.tool-client-workbench` 桌面端为 `服务列表 / 编辑器` 双列 Soft UI 工作台；`.tool-client-list-card`、`.tool-client-list`、`.tool-client-editor` 各自拥有明确滚动边界；`#mcp-client-json` 通过 `.tool-client-editor .tool-json-field textarea` 获得响应式固定编辑高度。
+- `src/styles/app.css`：`@media (max-width: 760px)` 下，MCP 客户端页改为单列卡片流，服务列表卡片和编辑器卡片上下排列；`@media (min-width: 761px) and (max-width: 980px)` 为横屏窄窗口提供上下分段兜底。
+- `src/styles/app.css`：横屏窄窗口兜底中 `.tool-client-editor` 改为 `overflow: visible`，让 `.tool-view[data-tool-view="client"]` 统一提供页面滚动；`.tool-client-editor .tool-json-field textarea` 限制为约 8 行高度；移动端 `.tool-client-list` 使用 `max-height: 228px` 和内部滚动，最多直接显示 3 个服务项。
+- 本轮没有新增 DOM、JS API 或打包文件。
+
+## 2026-07-08 Tool Client Layout / Markdown Mapping
+
+- `index.html`：权限设置“对话”分组新增 `#mcp-permission-complete-tool-result`，用于控制工具模式是否追加完整回复隐藏提示。
+- `src/js/mcp_tools.js`：`DEFAULT_MCP_CONFIG.permissions` 新增 `completeToolResultReply: true`，`normalizeMcpConfig()` 会为旧配置自动补齐默认开启值。
+- `src/js/ui.js`：`renderMcpPermissionPanel()` / `saveMcpPermissionsFromForm()` 映射 `#mcp-permission-complete-tool-result`；`renderMessageText()` 改为调用 `renderMarkdownDocument()` 后执行 `enhanceMarkdownMentions()`，新增 `renderMarkdownBlockquote()`、`renderMarkdownAutoLink()`、`renderMarkdownInlineMath()` 和 `renderMarkdownMathBlock()`。
+- `src/js/tool_chat_engine.js`：`requestToolAwareCompletion()` 新增 `completeToolResultReply` 参数；`withCompleteToolResultPrompt()`、`appendHiddenPromptToMessageContent()` 和 `appendCompleteToolPromptText()` 只在工具模式 LLM 请求体里向最后一条 user message 追加完整回复提示。
+- `src/styles/app.css`：`.tool-view[data-tool-view="client"].is-active` 改为由整页纵向滚动承载；`.tool-client-workbench`、`.tool-client-editor` 和 `.tool-client-editor .tool-json-field textarea` 保证 JSON 编辑区最小高度。移动端 `@media (max-width: 760px)` 下 `.tool-client-list` 不再固定高度，服务列表与详情上下自然排列。`.message-content .markdown-body`、`.markdown-math*` 和 `blockquote` 样式用于聊天气泡 Markdown 展示。
+- `sw.js`：缓存版本 `fritia-next-chat-v23`。`package.json`：版本保持 `0.4.1`。
+
 ## 2026-07-08 ModelScope MCP Install Mapping
 
 - `src/js/plugin_store.js`：`deployModelScopeMcp()` 的魔搭连接链路更新为 `listByStatus -> asyncDeploy -> deployStatus`。`listByStatus` 读取 `Data.McpDeployServers` 中 `InfraSource === "platform"` 的 `DeploymentJobId`；`asyncDeploy` 请求体携带环境变量、传输类型、鉴权类型、有效期和 `DeploymentJobId`；`deployStatus` 轮询 `Data.McpDeployInfo.Url` 作为 Streamable HTTP MCP URL。

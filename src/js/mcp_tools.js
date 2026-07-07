@@ -99,6 +99,7 @@ const DEFAULT_MCP_CONFIG = Object.freeze({
     shareCharacterProfile: true,
     shareLongTermMemory: true,
     isolateToolContext: false,
+    completeToolResultReply: true,
     requireFileWriteApproval: false
   },
   logs: []
