@@ -104,9 +104,9 @@ export async function completeToolPrivateMessageReply({
       commit({ text: '', status: 'typing' });
     }
     let finalText = '';
-    let visibleText = '';
     let finalAttachments = [];
-    const toolOutputAttachments = [];
+    let otherAttachments = [];
+    const toolOutputAttachmentGroups = [];
 
     while (stepCount < MAX_TOOL_AGENT_STEPS) {
       throwIfToolAborted(signal);
@@ -125,7 +125,7 @@ export async function completeToolPrivateMessageReply({
         selectedClientIds
       });
       agentMessagesForResume = agentMessages;
-      commit({ text: visibleText, status: 'typing' });
+      commit({ text: '', status: 'typing' });
 
       const completion = await requestToolAwareCompletion({
         settings,
@@ -135,13 +135,10 @@ export async function completeToolPrivateMessageReply({
         signal,
         onDelta: delta => {
           stepText += delta;
-          visibleText = stepText;
-          commit({ text: visibleText, status: 'typing' });
         }
       });
       throwIfToolAborted(signal);
       stepText = stepText || completion.content || '';
-      if (stepText) visibleText = stepText;
       const completionAttachments = await normalizeGeneratedAttachments(completion.attachments || []);
 
       const toolCalls = normalizeToolCalls(completion.toolCalls);
@@ -173,7 +170,7 @@ export async function completeToolPrivateMessageReply({
             status: 'running',
             result: ''
           });
-          commit({ text: visibleText, status: 'typing' });
+          commit({ text: '', status: 'typing' });
           try {
             throwIfToolAborted(signal);
             if (!entry) throw new Error(`未找到工具映射：${call.name}`);
@@ -181,7 +178,14 @@ export async function completeToolPrivateMessageReply({
             throwIfToolAborted(signal);
             const resultText = formatMcpContentText(result);
             const resultAttachments = await extractMcpResultAttachments(result, entry?.toolName || call.name, call.arguments || {});
-            if (resultAttachments.length) toolOutputAttachments.push(...resultAttachments);
+            if (resultAttachments.length) {
+              toolOutputAttachmentGroups.push({
+                step: previousStepCount + stepCount,
+                callId: traceCallId,
+                toolName: entry?.toolName || call.name,
+                attachments: resultAttachments
+              });
+            }
             trace = updateToolCall(trace, traceCallId, {
               status: 'success',
               result: resultText,
@@ -210,7 +214,7 @@ export async function completeToolPrivateMessageReply({
               content: `工具调用失败：${message}`
             });
           }
-          commit({ text: visibleText, status: 'typing' });
+          commit({ text: '', status: 'typing' });
         }
 
         agentMessages.push(...toolMessages);
@@ -224,7 +228,7 @@ export async function completeToolPrivateMessageReply({
         });
         agentMessagesForResume = agentMessages;
         trace = updateThought(trace, '工具结果已返回，正在判断是否还需要继续调用工具。', 'running');
-        commit({ text: visibleText, status: 'typing' });
+        commit({ text: '', status: 'typing' });
         continue;
       }
 
@@ -243,23 +247,25 @@ export async function completeToolPrivateMessageReply({
         });
         agentMessagesForResume = agentMessages;
         trace = updateThought(trace, '模型输出了中间话术，正在继续工具流程。', 'running');
-        commit({ text: visibleText, status: 'typing' });
+        commit({ text: '', status: 'typing' });
         continue;
       }
 
       finalText = stepText;
-      finalAttachments = mergeToolAttachments(completionAttachments, toolOutputAttachments);
+      const splitAttachments = splitToolOutputAttachments(toolOutputAttachmentGroups);
+      finalAttachments = mergeToolAttachments(completionAttachments, splitAttachments.final);
+      otherAttachments = splitAttachments.other;
       break;
     }
 
     if (!finalText && !finalAttachments.length) {
-      finalText = visibleText;
+      const splitAttachments = splitToolOutputAttachments(toolOutputAttachmentGroups);
+      finalAttachments = splitAttachments.final.slice(0, 8);
+      otherAttachments = splitAttachments.other;
       if (stepCount >= MAX_TOOL_AGENT_STEPS) {
+        finalText = '工具流程已暂停，可发送“继续”从当前进度续跑。';
         trace = markTraceInterrupted(appendThought(trace, `已达到 ${MAX_TOOL_AGENT_STEPS} 步工具调用上限，本轮已暂停。发送“继续”可以从当前中断点续跑。`, 'error'));
       }
-    }
-    if (!finalAttachments.length && toolOutputAttachments.length) {
-      finalAttachments = mergeToolAttachments(toolOutputAttachments).slice(0, 8);
     }
 
     const reply = sanitizeReply(finalText, character.name, { allowEmpty: finalAttachments.length > 0 });
@@ -276,6 +282,9 @@ export async function completeToolPrivateMessageReply({
     commit({
       text: reply,
       attachments: finalAttachments.map(prepareToolAttachmentForPersistence),
+      meta: otherAttachments.length
+        ? { toolOtherAttachments: otherAttachments.map(prepareToolAttachmentForPersistence) }
+        : {},
       status: 'sent',
       createdAt: now()
     });
@@ -906,19 +915,38 @@ function summarizeAttachmentForTrace(attachment = {}) {
   };
 }
 
+function splitToolOutputAttachments(groups = []) {
+  const nonEmptyGroups = groups.filter(group => Array.isArray(group.attachments) && group.attachments.length);
+  if (!nonEmptyGroups.length) return { final: [], other: [] };
+  const latestStep = nonEmptyGroups[nonEmptyGroups.length - 1].step;
+  const final = mergeToolAttachments(...nonEmptyGroups
+    .filter(group => group.step === latestStep)
+    .map(group => group.attachments));
+  const finalKeys = new Set(final.map(toolAttachmentKey));
+  const other = mergeToolAttachments(...nonEmptyGroups
+    .filter(group => group.step !== latestStep)
+    .map(group => group.attachments))
+    .filter(attachment => !finalKeys.has(toolAttachmentKey(attachment)));
+  return { final, other };
+}
+
 function mergeToolAttachments(...groups) {
   const flattened = groups.flat().filter(Boolean);
   const seen = new Set();
   return flattened.filter(attachment => {
-    const key = attachment.dataRef
-      || attachment.url
-      || attachment.path
-      || (attachment.dataUrl ? attachment.dataUrl.slice(0, 160) : '')
-      || `${attachment.name || ''}:${attachment.mime || ''}:${attachment.size || ''}`;
+    const key = toolAttachmentKey(attachment);
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function toolAttachmentKey(attachment = {}) {
+  return attachment.dataRef
+    || attachment.url
+    || attachment.path
+    || (attachment.dataUrl ? attachment.dataUrl.slice(0, 160) : '')
+    || `${attachment.name || ''}:${attachment.mime || ''}:${attachment.size || ''}`;
 }
 
 function shouldContinueToolLoop(replyText, context = {}) {

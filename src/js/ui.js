@@ -105,6 +105,8 @@ const DESKTOP_LANDSCAPE_QUERY = '(min-width: 761px) and (orientation: landscape)
 const MOBILE_LAYOUT_QUERY = '(max-width: 760px)';
 const MOBILE_EDGE_BACK_START = 48;
 const MOBILE_EDGE_BACK_DISTANCE = 76;
+const MODELSCOPE_LOGIN_POLL_INTERVAL_MS = 2500;
+const MODELSCOPE_LOGIN_POLL_TIMEOUT_MS = 120000;
 
 let roundtableIdleTimer = 0;
 let layoutResizeFrame = 0;
@@ -112,6 +114,8 @@ let mobileEdgeSwipe = null;
 let voiceNoticeTimer = 0;
 let voicePlaybackTimer = 0;
 let pluginStoreSearchTimer = 0;
+let modelScopeLoginPollTimer = 0;
+let modelScopeLoginPollEndsAt = 0;
 
 const state = {
   store: loadAppStore(),
@@ -146,6 +150,10 @@ const state = {
   mcpHelpLoaded: false,
   mcpHelpHtml: '',
   activeToolRun: null,
+  toolOtherFiles: {
+    messageId: '',
+    attachments: []
+  },
   pluginStoreSection: 'mcp',
   pluginSourceMenuOpen: false,
   pluginStore: {
@@ -163,7 +171,9 @@ const state = {
     detailLoading: false,
     detailError: '',
     installing: false,
-    installStatus: ''
+    installStatus: '',
+    officialUrl: '',
+    officialTitle: ''
   },
   stickerPopoverOpen: false,
   voiceNotice: null,
@@ -409,7 +419,7 @@ function bindMainMenu() {
   document.getElementById('main-menu-official-site')?.addEventListener('click', event => {
     event.stopPropagation();
     closeMainMenu();
-    window.open('https://fritia.online', '_blank', 'noopener');
+    openExternalUrl('https://fritia.online/');
   });
   document.addEventListener('click', event => {
     if (!state.mainMenuOpen) return;
@@ -1604,7 +1614,10 @@ function bindPluginStore() {
     if (await openModelScopeDesktopWindow()) return;
     window.open(MODELSCOPE_LOGIN_URL, '_blank', 'noopener');
   });
-  document.getElementById('modelscope-login-check')?.addEventListener('click', () => checkModelScopeLoginStatus({ refreshList: true }));
+  document.getElementById('modelscope-login-check')?.addEventListener('click', () => checkModelScopeLoginStatus({ refreshList: true, closeDesktopLogin: true }));
+  document.getElementById('plugin-official-open-external')?.addEventListener('click', () => {
+    if (state.pluginStore.officialUrl) window.open(state.pluginStore.officialUrl, '_blank', 'noopener');
+  });
   document.getElementById('plugin-detail-add')?.addEventListener('click', installSelectedPluginDetail);
   document.addEventListener('click', event => {
     if (!state.pluginSourceMenuOpen) return;
@@ -1663,9 +1676,10 @@ function closePluginSourceMenu() {
 
 async function openModelScopeLoginPanel() {
   if (await openModelScopeDesktopWindow()) {
-    state.pluginStore.modelScopeMessage = '已打开魔搭社区窗口，登录完成后刷新列表。';
+    state.pluginStore.modelScopeMessage = '已打开魔搭社区窗口，请在窗口中完成登录。';
     renderPluginSourceMenu();
-    checkModelScopeLoginStatus();
+    startModelScopeLoginPoll();
+    checkModelScopeLoginStatus({ refreshList: true, closeDesktopLogin: true, quiet: true });
     return;
   }
   const frame = document.getElementById('modelscope-login-frame');
@@ -1692,26 +1706,99 @@ async function openModelScopeDesktopWindow() {
   }
 }
 
+async function closeModelScopeDesktopWindow() {
+  const invoke = getTauriInvoke();
+  if (!invoke) return false;
+  try {
+    await invoke('close_modelscope_window');
+    return true;
+  } catch (error) {
+    console.warn('[plugin-store] failed to close ModelScope desktop window', error);
+    return false;
+  }
+}
+
+async function openModelScopeOfficialDesktopWindow(url, title) {
+  const invoke = getTauriInvoke();
+  if (!invoke) return false;
+  try {
+    await invoke('open_modelscope_detail_window', { url, title });
+    return true;
+  } catch (error) {
+    console.warn('[plugin-store] failed to open ModelScope official window', error);
+    return false;
+  }
+}
+
+async function openExternalUrl(url) {
+  const invoke = getTauriInvoke();
+  if (invoke) {
+    try {
+      await invoke('open_external_url', { url });
+      return true;
+    } catch (error) {
+      console.warn('[main-menu] failed to open external URL via desktop shell', error);
+    }
+  }
+  window.open(url, '_blank', 'noopener');
+  return false;
+}
+
+function stopModelScopeLoginPoll() {
+  if (modelScopeLoginPollTimer) {
+    window.clearTimeout(modelScopeLoginPollTimer);
+    modelScopeLoginPollTimer = 0;
+  }
+  modelScopeLoginPollEndsAt = 0;
+}
+
+function startModelScopeLoginPoll() {
+  stopModelScopeLoginPoll();
+  modelScopeLoginPollEndsAt = Date.now() + MODELSCOPE_LOGIN_POLL_TIMEOUT_MS;
+  const tick = async () => {
+    modelScopeLoginPollTimer = 0;
+    if (Date.now() > modelScopeLoginPollEndsAt || state.pluginStore.modelScopeConnected) return;
+    await checkModelScopeLoginStatus({ refreshList: true, closeDesktopLogin: true, quiet: true });
+    if (!state.pluginStore.modelScopeConnected && Date.now() <= modelScopeLoginPollEndsAt) {
+      modelScopeLoginPollTimer = window.setTimeout(tick, MODELSCOPE_LOGIN_POLL_INTERVAL_MS);
+    }
+  };
+  modelScopeLoginPollTimer = window.setTimeout(tick, MODELSCOPE_LOGIN_POLL_INTERVAL_MS);
+}
+
 async function checkModelScopeLoginStatus(options = {}) {
-  state.pluginStore.loginChecking = true;
-  state.pluginStore.modelScopeMessage = '';
-  renderPluginSourceMenu();
-  renderPluginStoreGrid();
+  const quiet = Boolean(options.quiet);
+  let shouldRender = !quiet;
+  if (!quiet) {
+    state.pluginStore.loginChecking = true;
+    state.pluginStore.modelScopeMessage = '';
+    renderPluginSourceMenu();
+    renderPluginStoreGrid();
+  }
   try {
     const result = await checkModelScopeLogin();
     state.pluginStore.modelScopeConnected = result.connected;
-    state.pluginStore.modelScopeMessage = result.connected ? '魔搭社区已连接' : (result.message || '尚未检测到魔搭登录态');
+    if (result.connected || !quiet) {
+      state.pluginStore.modelScopeMessage = result.connected ? '魔搭社区已连接' : (result.message || '尚未检测到魔搭登录态');
+      shouldRender = true;
+    }
     if (result.connected && options.refreshList) {
+      stopModelScopeLoginPoll();
       closePanel('plugin-source-login-panel');
+      if (options.closeDesktopLogin) closeModelScopeDesktopWindow();
       await loadPluginStorePage();
     }
   } catch (error) {
-    state.pluginStore.modelScopeConnected = false;
-    state.pluginStore.modelScopeMessage = error?.message || '登录状态检测失败。';
+    if (!quiet) {
+      state.pluginStore.modelScopeConnected = false;
+      state.pluginStore.modelScopeMessage = error?.message || '登录状态检测失败。';
+    }
   } finally {
-    state.pluginStore.loginChecking = false;
-    renderPluginSourceMenu();
-    renderPluginStoreGrid();
+    if (!quiet) state.pluginStore.loginChecking = false;
+    if (shouldRender) {
+      renderPluginSourceMenu();
+      renderPluginStoreGrid();
+    }
   }
 }
 
@@ -1754,10 +1841,13 @@ function renderPluginStoreGrid() {
   }
   if (state.pluginStore.error) {
     setText('plugin-store-status', state.pluginStore.error);
+    const errorTitle = isPureFrontendToolRuntime()
+      ? '网页版无法直接安装插件，请使用 APP 或点击下方按钮手动配置'
+      : '无法读取魔搭 MCP 列表';
     grid.innerHTML = `
       <div class="plugin-store-empty plugin-store-error">
         <img src="src/_logo/icons/circle-alert.svg" alt="">
-        <strong>无法读取魔搭 MCP 列表</strong>
+        <strong>${escapeHtml(errorTitle)}</strong>
         <button class="btn btn-soft" type="button" data-modelscope-open-official>
           <img src="src/_logo/icons/monitor-up.svg" alt="">
           <span>打开魔搭 MCP</span>
@@ -1918,8 +2008,27 @@ function renderPluginDetail() {
     </section>
   `;
   container.querySelector('[data-plugin-detail-official]')?.addEventListener('click', () => {
-    window.open(detail.detailUrl, '_blank', 'noopener');
+    openPluginOfficialDetail(detail);
   });
+}
+
+async function openPluginOfficialDetail(detail) {
+  const url = detail?.detailUrl || '';
+  if (!url) return;
+  const title = detail?.displayName || '官方详情';
+  state.pluginStore.officialUrl = url;
+  state.pluginStore.officialTitle = title;
+  if (await openModelScopeOfficialDesktopWindow(url, title)) return;
+  openPluginOfficialPanel(url, title);
+}
+
+function openPluginOfficialPanel(url, title = '官方详情') {
+  state.pluginStore.officialUrl = url;
+  state.pluginStore.officialTitle = title;
+  setText('plugin-official-browser-title', title);
+  const frame = document.getElementById('plugin-official-frame');
+  if (frame && frame.getAttribute('src') !== url) frame.setAttribute('src', url);
+  openPanel('plugin-official-browser-panel');
 }
 
 function createPluginConfigFieldHtml(field) {
@@ -2970,6 +3079,11 @@ function createMessageNode(message) {
       if (content.childNodes.length) content.appendChild(document.createElement('br'));
       content.appendChild(node);
     }
+    const otherToolAttachments = getToolOtherAttachments(message);
+    if (otherToolAttachments.length) {
+      if (content.childNodes.length) content.appendChild(document.createElement('br'));
+      content.appendChild(createToolOtherFilesButton(message, otherToolAttachments));
+    }
   }
   const meta = document.createElement('div');
   meta.className = 'message-meta';
@@ -3074,6 +3188,60 @@ function createMessageAttachmentNode(message, attachment, index = 0) {
     });
   });
   return button;
+}
+
+function getToolOtherAttachments(message = {}) {
+  if (message.meta?.toolMode !== true) return [];
+  const attachments = message.meta?.toolOtherAttachments;
+  return Array.isArray(attachments) ? attachments.filter(Boolean) : [];
+}
+
+function createToolOtherFilesButton(message, attachments = []) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'tool-other-files-button';
+  button.setAttribute('aria-label', `查看其他文件，共 ${attachments.length} 个`);
+  const icon = document.createElement('img');
+  icon.src = 'src/_logo/icons/paperclip.svg';
+  icon.alt = '';
+  const label = document.createElement('span');
+  label.textContent = `其他文件 · ${attachments.length}`;
+  button.append(icon, label);
+  button.addEventListener('click', event => {
+    event.stopPropagation();
+    openToolOtherFilesPanel(message, attachments);
+  });
+  return button;
+}
+
+function openToolOtherFilesPanel(message, attachments = []) {
+  state.toolOtherFiles = {
+    messageId: message?.id || '',
+    attachments: attachments.map(item => ({ ...item }))
+  };
+  renderToolOtherFilesPanel();
+  openPanel('tool-other-files-panel');
+}
+
+function renderToolOtherFilesPanel() {
+  const list = document.getElementById('tool-other-files-list');
+  if (!list) return;
+  const attachments = state.toolOtherFiles.attachments || [];
+  setText('tool-other-files-count', `${attachments.length} 个文件`);
+  list.innerHTML = '';
+  if (!attachments.length) {
+    list.innerHTML = '<div class="tool-other-files-empty">没有其他文件。</div>';
+    return;
+  }
+  const message = getConversationMessages(state.store, getActiveConversation()?.id)
+    .find(item => item.id === state.toolOtherFiles.messageId) || { id: state.toolOtherFiles.messageId };
+  attachments.forEach((attachment, index) => {
+    const item = document.createElement('article');
+    item.className = `tool-other-file-item is-${attachment.type || 'file'}`;
+    const node = createMessageAttachmentNode(message, attachment, index);
+    if (node) item.appendChild(node);
+    list.appendChild(item);
+  });
 }
 
 function setAttachmentImageSource(image, attachment = {}, fallback = 'src/_logo/emoji/robot_3d.png') {
@@ -4896,8 +5064,15 @@ function closePanel(id) {
   if (id === 'archive-panel') {
     state.archiveConfigOpen = false;
   }
-  if (id === 'plugin-store-panel' || id === 'plugin-detail-panel' || id === 'plugin-source-login-panel') {
+  if (id === 'plugin-store-panel' || id === 'plugin-detail-panel' || id === 'plugin-source-login-panel' || id === 'plugin-official-browser-panel') {
     closePluginSourceMenu();
+  }
+  if (id === 'plugin-official-browser-panel') {
+    document.getElementById('plugin-official-frame')?.setAttribute('src', 'about:blank');
+  }
+  if (id === 'tool-other-files-panel') {
+    state.toolOtherFiles = { messageId: '', attachments: [] };
+    renderToolOtherFilesPanel();
   }
   document.getElementById(id)?.classList.add('hidden');
   syncMobileBackAvailability();

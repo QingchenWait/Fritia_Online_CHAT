@@ -1,13 +1,28 @@
 # DEVELOP
 
+## 2026-07-08 Tool Panel / Official Site / v0.4.2
+
+- `src/styles/app.css` 调整 MCP 客户端页布局：client 视图使用剩余高度作为工作台区域，编辑区内部给 JSON 配置框分配 `minmax(0, 1fr)` 滚动空间，避免窗口高度不足时 `#mcp-client-json` 被 `.tool-client-workbench` 裁切。
+- `src/js/ui.js` 新增 `openExternalUrl()`，主菜单“访问官网”在 Tauri/WebView2 打包端优先调用壳层 `open_external_url`，失败或网页端回退到 `window.open()`。
+- `package.json` 版本更新为 `0.4.2`；`sw.js` 缓存版本升级到 `fritia-next-chat-v21`。
+
+## 2026-07-08 MCP Agent Output / v0.4.1
+
+- `src/js/tool_chat_engine.js` 调整工具模式流式输出：中间轮模型文本只进入 agent 内部 messages 和 `toolTrace`，运行中的 assistant 气泡保持 trace + typing 状态，直到无后续 tool calls 且判定为最终回复时才写入聊天正文。
+- `src/js/tool_chat_engine.js` 调整 MCP 文件聚合：按最后一个产生附件的 MCP 步骤作为最终输出文件写入 `message.attachments`；更早步骤的文件写入 `message.meta.toolOtherAttachments`，避免中间产物挤占最终回复。
+- `index.html` 新增 `#tool-other-files-panel`；`src/js/ui.js` 新增“其他文件”按钮和悬浮窗口渲染，复用现有附件节点创建、图片加载、本地文件读取和保存逻辑。
+- `src/styles/app.css` 新增 `.tool-other-files-*` 样式，按钮保持窄、低对比，悬浮窗口适配桌面和移动端现有 modal 布局。
+- `package.json` 版本更新为 `0.4.1`；`sw.js` 缓存版本升级到 `fritia-next-chat-v20`。
+- `src/js/ui.js` 的插件商店错误态增加纯前端运行时文案分支：无壳静态页面无法直接安装魔搭插件时提示使用 APP 或手动配置；Tauri/WebView 打包端仍显示原有读取失败文案。
+
 ## 2026-07-07 Plugin Store / ModelScope MCP
 
 - `index.html` 新增主菜单浮层 `#main-menu`，菜单项为“插件商店”和“访问官网”；“访问官网”使用浏览器新窗口打开 `https://fritia.online`。
-- `index.html` 新增 `#plugin-store-panel`、`#plugin-detail-panel` 和 `#plugin-source-login-panel`：插件商店包含“角色插件”和“MCP 插件”两个分组，角色插件暂留空，MCP 插件页提供搜索、来源下拉、刷新、卡片网格和分页；详情窗口提供介绍、固定 `remote` 类型和继承魔搭参数 schema 的服务配置项。
+- `index.html` 新增 `#plugin-store-panel`、`#plugin-detail-panel`、`#plugin-source-login-panel` 和 `#plugin-official-browser-panel`：插件商店包含“角色插件”和“MCP 插件”两个分组，角色插件暂留空，MCP 插件页提供搜索、来源下拉、刷新、卡片网格和分页；详情窗口提供介绍、固定 `remote` 类型和继承魔搭参数 schema 的服务配置项；登录窗口增加“在本页面中完成登录”提示和“检验登录状态”按钮；官方详情在网页/PWA 运行时使用悬浮浏览器面板。
 - 新增 `src/js/plugin_store.js`：封装魔搭社区 hosted MCP 列表接口、详情接口、部署/连接接口、登录态检测、MCP 数据归一化、参数 schema 归一化和标准 `mcpServers` JSON 生成。MCP 列表按魔搭当前前端实现使用 `PUT /api/v1/dolphin/mcpServers`；部署/连接优先使用 `POST /api/v1/mcpServers/deploy`。详情配置按魔搭前端逻辑选择可用 schema：双传输类型优先取 `EnvSchema`，单传输类型取对应传输 schema，并在空 schema 时回退到第一个非空 schema；服务配置还会补齐传输类型、鉴权类型和有效期这三个部署控制项。Tauri 桌面端会优先调用壳层 `modelscope_fetch`，在魔搭登录 WebView2 的同源上下文中带 `X-Requested-With` 和 `x-modelscope-accept-language` 请求接口；纯静态浏览器运行时若遇到 CORS、登录态或 WAF 限制，会抛出可展示错误。
-- `src/js/ui.js` 新增 `mainMenuOpen`、`pluginStoreSection`、`pluginSourceMenuOpen` 和 `pluginStore` 状态，新增主菜单绑定、插件商店分组切换、魔搭登录检测、列表刷新、详情加载、服务配置读取和“一键添加到 Streamable HTTP MCP 客户端”流程。服务配置读取会把 schema 字段写入 `EnvironmentVariables`，把传输类型、鉴权类型和有效期写入部署请求 options。Tauri 桌面端点击“魔搭社区”会优先调用 `open_modelscope_window` 打开独立 WebView2 插件源窗口，后续由壳层复用该窗口的浏览器/WAF 上下文请求 MCP 接口。
+- `src/js/ui.js` 新增 `mainMenuOpen`、`pluginStoreSection`、`pluginSourceMenuOpen` 和 `pluginStore` 状态，新增主菜单绑定、插件商店分组切换、魔搭登录检测、列表刷新、详情加载、官方详情窗口、服务配置读取和“一键添加到 Streamable HTTP MCP 客户端”流程。服务配置读取会把 schema 字段写入 `EnvironmentVariables`，把传输类型、鉴权类型和有效期写入部署请求 options。Tauri 桌面端点击“魔搭社区”会优先调用 `open_modelscope_window` 打开同一应用内 WebView2 插件源窗口，并在主应用内短时轮询登录态；“官方详情”优先调用 `open_modelscope_detail_window` 打开同一应用内 WebView2 详情窗口。后续由壳层复用魔搭窗口的浏览器/WAF 上下文请求 MCP 接口。
 - “添加到 MCP 服务”会调用魔搭部署接口获取远程 URL，复制标准 `mcpServers` JSON，并通过 `parseMcpServerConfigJson()` / `upsertMcpClient()` 新建启用状态的 Streamable HTTP MCP 客户端，服务器名称使用 MCP 工具展示名。
-- `src/styles/app.css` 新增主菜单和插件商店 Soft UI 样式：桌面端左侧分组 + 三列卡片网格，中等宽度两列卡片，移动端顶部分类 + 两列紧凑卡片；MCP 卡片标题与图标同排，简介固定两行；所有按钮继续使用 `src/_logo/icons` 下的 Lucide 风格图标。
+- `src/styles/app.css` 新增主菜单和插件商店 Soft UI 样式：桌面端左侧分组 + 三列卡片网格，中等宽度两列卡片，移动端顶部分类 + 两列紧凑卡片；MCP 卡片标题与图标同排，简介固定两行；插件商店、详情、登录、官方详情按固定 z-index 分层，确保后打开的业务窗口位于上层；所有按钮继续使用 `src/_logo/icons` 下的 Lucide 风格图标。
 - `sw.js` 缓存版本升级到 `fritia-next-chat-v19`，核心缓存加入 `plugin_store.js` 和插件商店新增图标；`package.json` 的 `check` 脚本加入 `src/js/plugin_store.js`。
 
 ## 2026-07-06 Tool Calling / WebMCP / MCP Relay

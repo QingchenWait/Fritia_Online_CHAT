@@ -1179,6 +1179,10 @@
         </button>
       </header>
       <div class="plugin-login-body">
+        <div class="plugin-login-guide">
+          <strong>在本页面中完成登录</strong>
+          <span>登录完成后点击“检验登录状态”。如果网页无法嵌入，请使用“打开登录页”。</span>
+        </div>
         <iframe id="modelscope-login-frame" title="魔搭社区登录" src="about:blank" loading="lazy"></iframe>
         <div class="plugin-login-actions">
           <span id="modelscope-login-status" class="plugin-store-status">等待登录检测</span>
@@ -1188,9 +1192,32 @@
           </button>
           <button id="modelscope-login-check" class="btn btn-primary" type="button">
             <img src="src/_logo/icons/refresh-cw.svg" alt="">
-            <span>完成登录检测</span>
+            <span>检验登录状态</span>
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="plugin-official-browser-panel" class="modal hidden plugin-official-modal" role="dialog" aria-modal="true" aria-labelledby="plugin-official-browser-title">
+    <div class="modal-shell modal-shell-wide plugin-official-shell">
+      <header class="modal-head">
+        <div>
+          <small>OFFICIAL DETAIL</small>
+          <h2 id="plugin-official-browser-title">官方详情</h2>
+        </div>
+        <div class="modal-head-actions">
+          <button id="plugin-official-open-external" class="btn btn-soft" type="button">
+            <img src="src/_logo/icons/monitor-up.svg" alt="">
+            <span>外部打开</span>
+          </button>
+          <button class="icon-btn" type="button" data-panel-close="plugin-official-browser-panel" aria-label="关闭官方详情">
+            <img src="src/_logo/icons/x.svg" alt="">
+          </button>
+        </div>
+      </header>
+      <div class="plugin-official-body">
+        <iframe id="plugin-official-frame" title="MCP 官方详情" src="about:blank" loading="lazy"></iframe>
       </div>
     </div>
   </div>
@@ -1609,6 +1636,24 @@
           <button id="memory-node-settings-save" class="btn btn-primary" type="button">保存设置</button>
         </aside>
       </div>
+    </div>
+  </div>
+
+  <div id="tool-other-files-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="tool-other-files-title">
+    <div class="modal-shell tool-other-files-shell">
+      <header class="modal-head">
+        <div>
+          <small>MCP FILES</small>
+          <h2 id="tool-other-files-title">其他文件</h2>
+        </div>
+        <div class="modal-head-actions">
+          <span id="tool-other-files-count" class="status-pill">0 个文件</span>
+          <button class="icon-btn" type="button" data-panel-close="tool-other-files-panel" aria-label="关闭其他文件" title="关闭">
+            <img src="src/_logo/icons/x.svg" alt="">
+          </button>
+        </div>
+      </header>
+      <div id="tool-other-files-list" class="tool-other-files-list"></div>
     </div>
   </div>
 

@@ -1,16 +1,33 @@
 # STRUCTURE
 
+## 2026-07-08 Tool Panel / Official Site Mapping
+
+- `src/styles/app.css`：`.tool-view[data-tool-view="client"].is-active` 改为三行网格，`.tool-client-workbench` 不再固定 `52dvh` 高度；`.tool-client-editor` 使用 `auto auto auto minmax(0, 1fr) auto` 行布局，`#mcp-client-json` 在编辑区内自滚动。
+- `src/js/ui.js`：新增 `openExternalUrl(url)`，复用 `getTauriInvoke()` 调用打包壳层 `open_external_url`；`#main-menu-official-site` 点击改走该函数，普通网页回退 `window.open()`。
+- `package.json`：版本 `0.4.2`。`sw.js`：缓存版本 `fritia-next-chat-v21`。
+
+## 2026-07-08 MCP Agent Output Mapping
+
+- `src/js/tool_chat_engine.js`：工具模式运行中的 `commit()` 不再写入中间轮 `visibleText`；流式 delta 只累计到当前 step，用于 tool call message 或最终回复判定。新增 `splitToolOutputAttachments()` 和 `toolAttachmentKey()`，按最后一个带附件的 MCP step 拆分最终附件与中间附件。
+- `src/js/tool_chat_engine.js`：最终 MCP 文件写入 `message.attachments`；中间文件写入 `message.meta.toolOtherAttachments`，并继续在 `toolTrace.calls[].attachments` 中保留摘要。
+- 新增 DOM：`#tool-other-files-panel`、`#tool-other-files-title`、`#tool-other-files-count`、`#tool-other-files-list`。
+- `src/js/ui.js` 新增状态 `toolOtherFiles`；新增函数 `getToolOtherAttachments()`、`createToolOtherFilesButton()`、`openToolOtherFilesPanel()`、`renderToolOtherFilesPanel()`。消息正文渲染在可见附件后追加 `.tool-other-files-button`，悬浮窗口内部复用 `createMessageAttachmentNode()`。
+- `src/styles/app.css` 新增 CSS：`.tool-other-files-button`、`.tool-other-files-shell`、`.tool-other-files-list`、`.tool-other-file-item`、`.tool-other-files-empty`。
+- `sw.js`：缓存版本 `fritia-next-chat-v20`。`package.json`：版本 `0.4.1`。
+- `src/js/ui.js`：`renderPluginStoreGrid()` 的错误态使用 `isPureFrontendToolRuntime()` 区分浏览器静态页和打包端；浏览器静态页显示手动配置提示，打包端保留“无法读取魔搭 MCP 列表”。
+
 ## 2026-07-07 Plugin Store / ModelScope MCP Mapping
 
 - 新增 `src/js/plugin_store.js`：导出 `MODELSCOPE_LOGIN_URL`、`MODELSCOPE_MCP_PAGE_URL`、`checkModelScopeLogin()`、`fetchHostedModelScopeMcps()`、`fetchModelScopeMcpDetail()`、`deployModelScopeMcp()`、`buildModelScopeMcpConfig()`、`normalizeModelScopeMcp()` 和 `normalizeModelScopeMcpDetail()`。详情归一化会生成 `serviceFields`，其中 schema 字段使用 `scope: "env"`，传输类型、鉴权类型和有效期使用 `scope: "deploy"`。
 - `src/js/plugin_store.js` 使用 `PUT https://www.modelscope.cn/api/v1/dolphin/mcpServers` 读取 hosted MCP 列表，使用 `GET https://www.modelscope.cn/api/v1/mcpServers/{Path}/{Name}` 读取详情，并优先通过 `POST https://www.modelscope.cn/api/v1/mcpServers/deploy` 获取 Streamable HTTP 远程 MCP URL，失败后再尝试 `/{Path}/{Name}/asyncDeploy`。Tauri 桌面端通过 `modelscope_fetch` 命令把这些请求放到魔搭登录 WebView2 同源上下文执行；请求头包含 `X-Requested-With` 和 `x-modelscope-accept-language`。
 - 新增主菜单 DOM：`#main-menu-wrap`、`#main-menu`、`#main-menu-plugin-store`、`#main-menu-official-site`；菜单按钮继续复用 `#mobile-menu-btn`。
-- 新增插件源登录 DOM：`#plugin-source-login-panel`、`#modelscope-login-frame`、`#modelscope-login-status`、`#modelscope-login-open`、`#modelscope-login-check`。
+- 新增插件源登录 DOM：`#plugin-source-login-panel`、`.plugin-login-guide`、`#modelscope-login-frame`、`#modelscope-login-status`、`#modelscope-login-open`、`#modelscope-login-check`。
 - 新增插件详情 DOM：`#plugin-detail-panel`、`#plugin-detail-content`、`#plugin-detail-install-status`、`#plugin-detail-add`。
+- 新增官方详情 DOM：`#plugin-official-browser-panel`、`#plugin-official-browser-title`、`#plugin-official-open-external`、`#plugin-official-frame`。
 - 新增插件商店 DOM：`#plugin-store-panel`、`[data-plugin-store-section]`、`[data-plugin-store-view]`、`#plugin-store-search`、`#plugin-source-trigger`、`#plugin-source-menu`、`#plugin-source-modelscope`、`#modelscope-source-dot`、`#plugin-store-refresh`、`#plugin-store-status`、`#plugin-store-grid`、`#plugin-store-prev`、`#plugin-store-pages`、`#plugin-store-next`。
-- `src/js/ui.js` 新增状态：`mainMenuOpen`、`pluginStoreSection`、`pluginSourceMenuOpen` 和 `pluginStore`；新增函数：`bindMainMenu()`、`renderMainMenu()`、`closeMainMenu()`、`bindPluginStore()`、`showPluginStoreSection()`、`renderPluginStorePanel()`、`renderPluginSourceMenu()`、`closePluginSourceMenu()`、`openModelScopeLoginPanel()`、`getTauriInvoke()`、`openModelScopeDesktopWindow()`、`checkModelScopeLoginStatus()`、`loadPluginStorePage()`、`renderPluginStoreGrid()`、`renderPluginStorePagination()`、`openPluginDetail()`、`renderPluginDetail()`、`createPluginConfigFieldHtml()`、`normalizePluginConfigOptions()`、`installSelectedPluginDetail()`、`readPluginServiceConfig()`、`writePluginDeployOption()`、`copyTextToClipboard()`。`readPluginServiceConfig()` 返回 `{ environmentVariables, options }`，用于区分魔搭环境变量和部署控制项。
+- `src/js/ui.js` 新增状态：`mainMenuOpen`、`pluginStoreSection`、`pluginSourceMenuOpen` 和 `pluginStore`；新增函数：`bindMainMenu()`、`renderMainMenu()`、`closeMainMenu()`、`bindPluginStore()`、`showPluginStoreSection()`、`renderPluginStorePanel()`、`renderPluginSourceMenu()`、`closePluginSourceMenu()`、`openModelScopeLoginPanel()`、`getTauriInvoke()`、`openModelScopeDesktopWindow()`、`closeModelScopeDesktopWindow()`、`openModelScopeOfficialDesktopWindow()`、`startModelScopeLoginPoll()`、`stopModelScopeLoginPoll()`、`checkModelScopeLoginStatus()`、`loadPluginStorePage()`、`renderPluginStoreGrid()`、`renderPluginStorePagination()`、`openPluginDetail()`、`renderPluginDetail()`、`openPluginOfficialDetail()`、`openPluginOfficialPanel()`、`createPluginConfigFieldHtml()`、`normalizePluginConfigOptions()`、`installSelectedPluginDetail()`、`readPluginServiceConfig()`、`writePluginDeployOption()`、`copyTextToClipboard()`。`readPluginServiceConfig()` 返回 `{ environmentVariables, options }`，用于区分魔搭环境变量和部署控制项。
 - `src/js/ui.js` 的 `openPanel()` 会在打开 `#plugin-store-panel` 时检测魔搭登录态并按需加载 MCP 列表；`closeTransientBackSurface()` 支持 Android/移动返回优先关闭主菜单和插件源菜单。
-- `src/styles/app.css` 新增 CSS 分区：`.main-menu-*`、`.plugin-store-*`、`.plugin-source-*`、`.plugin-card`、`.plugin-login-*`、`.plugin-detail-*`、`.plugin-config-*`，并追加 `max-width: 1180px` / `max-width: 760px` 响应式规则。`.plugin-card header` 采用图标、标题、更多按钮三列布局，描述区域固定两行以避免标题和简介被挤压。
+- `src/styles/app.css` 新增 CSS 分区：`.main-menu-*`、`.plugin-store-*`、`.plugin-source-*`、`.plugin-card`、`.plugin-login-*`、`.plugin-detail-*`、`.plugin-official-*`、`.plugin-config-*`，并追加 `max-width: 1180px` / `max-width: 760px` 响应式规则。`.plugin-card header` 采用图标、标题、更多按钮三列布局，描述区域固定两行以避免标题和简介被挤压；`#plugin-store-panel`、`#plugin-detail-panel`、`#plugin-source-login-panel`、`#plugin-official-browser-panel` 分别使用递增 z-index 保持窗口层级。
 - `sw.js`：缓存版本 `fritia-next-chat-v19`，核心缓存新增 `src/js/plugin_store.js`、`menu.svg`、`chevron-down.svg`、`circle-alert.svg`、`monitor-up.svg`、`network.svg`、`plus.svg`、`search.svg` 和 `users.svg`。
 - `package.json`：`check` 脚本加入 `node --check src/js/plugin_store.js`。
 

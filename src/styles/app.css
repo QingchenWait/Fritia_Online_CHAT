@@ -1055,6 +1055,80 @@ img {
   font-size: 11px;
 }
 
+.tool-other-files-button {
+  width: auto;
+  min-height: 28px;
+  margin-top: 6px;
+  border: 1px solid rgba(120, 140, 180, 0.14);
+  border-radius: 999px;
+  background: rgba(248, 250, 255, 0.62);
+  color: rgba(86, 96, 125, 0.82);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tool-other-files-button:hover {
+  border-color: rgba(99, 91, 255, 0.18);
+  background: rgba(244, 246, 255, 0.86);
+  color: var(--brand);
+}
+
+.tool-other-files-button img {
+  width: 14px;
+  height: 14px;
+  opacity: 0.62;
+}
+
+.tool-other-files-shell {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.tool-other-files-list {
+  min-height: 220px;
+  max-height: min(620px, calc(100dvh - 150px));
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface-soft);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 91, 255, 0.42) transparent;
+}
+
+.tool-other-files-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tool-other-files-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(99, 91, 255, 0.38);
+}
+
+.tool-other-file-item {
+  min-width: 0;
+}
+
+.tool-other-file-item .message-attachment-file {
+  width: min(420px, 100%);
+}
+
+.tool-other-file-item img.message-image,
+.tool-other-file-item video.message-video {
+  display: block;
+  max-width: min(520px, 100%);
+}
+
+.tool-other-files-empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 10px;
+}
+
 .message-content {
   display: inline-block;
   max-width: min(560px, 100%);
@@ -5038,6 +5112,11 @@ select:focus {
   gap: 16px;
 }
 
+.tool-view[data-tool-view="client"].is-active {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: stretch;
+}
+
 .tool-view,
 .tool-client-list,
 .tool-log-list,
@@ -5116,8 +5195,7 @@ select:focus {
 }
 
 .tool-client-workbench {
-  height: clamp(380px, 52dvh, 540px);
-  min-height: clamp(380px, 52dvh, 540px);
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fff;
@@ -5230,9 +5308,12 @@ select:focus {
 
 .tool-client-editor {
   min-width: 0;
+  min-height: 0;
   display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   align-content: start;
   gap: 14px;
+  overflow: hidden;
   padding: 16px;
 }
 
@@ -5383,6 +5464,16 @@ select:focus {
   background: #1f2329;
   color: #d8f3ff;
   font: 13px/1.65 "Cascadia Code", "Consolas", monospace;
+}
+
+.tool-client-editor .tool-json-field {
+  min-height: 0;
+}
+
+.tool-client-editor .tool-json-field textarea {
+  height: 100%;
+  min-height: 0;
+  resize: none;
 }
 
 .tool-card {
@@ -6179,16 +6270,52 @@ select:focus {
   width: min(920px, calc(100vw - 48px));
 }
 
+#plugin-store-panel.modal {
+  z-index: 92;
+}
+
+#plugin-detail-panel.modal {
+  z-index: 94;
+}
+
+#plugin-source-login-panel.modal {
+  z-index: 96;
+}
+
+#plugin-official-browser-panel.modal {
+  z-index: 98;
+}
+
 .plugin-login-body {
   min-height: min(620px, calc(100dvh - 170px));
   overflow: auto;
   display: grid;
-  grid-template-rows: minmax(360px, 1fr) auto;
+  grid-template-rows: auto minmax(360px, 1fr) auto;
   gap: 12px;
   padding: 14px;
   background: var(--surface-soft);
   scrollbar-width: thin;
   scrollbar-color: rgba(99, 91, 255, 0.42) transparent;
+}
+
+.plugin-login-guide {
+  border: 1px solid rgba(99, 91, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(99, 91, 255, 0.08);
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+  padding: 11px 13px;
+}
+
+.plugin-login-guide strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.plugin-login-guide span {
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .plugin-login-body iframe {
@@ -6210,6 +6337,25 @@ select:focus {
 
 .plugin-detail-shell {
   width: min(900px, calc(100vw - 48px));
+}
+
+.plugin-official-shell {
+  width: min(1120px, calc(100vw - 48px));
+}
+
+.plugin-official-body {
+  min-height: min(680px, calc(100dvh - 142px));
+  padding: 12px;
+  background: var(--surface-soft);
+}
+
+.plugin-official-body iframe {
+  width: 100%;
+  height: min(680px, calc(100dvh - 166px));
+  min-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
 }
 
 .plugin-detail-content {
@@ -7785,14 +7931,16 @@ select:focus {
 
   #plugin-store-panel.modal,
   #plugin-detail-panel.modal,
-  #plugin-source-login-panel.modal {
+  #plugin-source-login-panel.modal,
+  #plugin-official-browser-panel.modal {
     padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
     place-items: stretch;
   }
 
   .plugin-store-shell,
   .plugin-detail-shell,
-  .plugin-login-shell {
+  .plugin-login-shell,
+  .plugin-official-shell {
     width: 100%;
     min-height: 0;
     height: calc(100dvh - 16px);
@@ -7986,11 +8134,22 @@ select:focus {
   .plugin-login-body {
     min-height: 0;
     flex: 1;
-    grid-template-rows: minmax(300px, 1fr) auto;
+    grid-template-rows: auto minmax(260px, 1fr) auto;
     padding: 12px;
   }
 
   .plugin-login-body iframe {
     min-height: 300px;
+  }
+
+  .plugin-official-body {
+    min-height: 0;
+    flex: 1;
+    padding: 10px;
+  }
+
+  .plugin-official-body iframe {
+    height: 100%;
+    min-height: 0;
   }
 }
