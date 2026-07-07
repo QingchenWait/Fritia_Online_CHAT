@@ -1,6 +1,10 @@
 # Fritia Online NEXT Chat
 
-## 2026-07-08 v0.4.2 Tool Panel / Official Site
+## 2026-07-08 ModelScope MCP Install / v0.4.1
+
+- “插件商店 / MCP 插件”详情页的“添加到 MCP 服务”改为复刻魔搭网页“连接”流程：先读取平台部署 `DeploymentJobId`，再携带服务配置项提交 `asyncDeploy`，并轮询 `deployStatus` 获取新生成的远程 MCP URL。未提前在魔搭网页点击过“连接”的 hosted MCP 也可在 APP 内完成安装。
+
+## 2026-07-08 Tool Panel / Official Site
 
 - “工具调用 / MCP 客户端”页的服务器配置 JSON 区域在窗口高度不足时会保留在 MCP 客户端工作台内滚动，不再被工作台底部直接裁掉。
 - 打包客户端中主菜单“访问官网”改为通过系统默认浏览器打开 `https://fritia.online/`；网页端仍保持浏览器新窗口行为。

@@ -1,10 +1,15 @@
 # STRUCTURE
 
+## 2026-07-08 ModelScope MCP Install Mapping
+
+- `src/js/plugin_store.js`：`deployModelScopeMcp()` 的魔搭连接链路更新为 `listByStatus -> asyncDeploy -> deployStatus`。`listByStatus` 读取 `Data.McpDeployServers` 中 `InfraSource === "platform"` 的 `DeploymentJobId`；`asyncDeploy` 请求体携带环境变量、传输类型、鉴权类型、有效期和 `DeploymentJobId`；`deployStatus` 轮询 `Data.McpDeployInfo.Url` 作为 Streamable HTTP MCP URL。
+- `sw.js`：缓存版本 `fritia-next-chat-v22`。`package.json`：版本 `0.4.1`。
+
 ## 2026-07-08 Tool Panel / Official Site Mapping
 
 - `src/styles/app.css`：`.tool-view[data-tool-view="client"].is-active` 改为三行网格，`.tool-client-workbench` 不再固定 `52dvh` 高度；`.tool-client-editor` 使用 `auto auto auto minmax(0, 1fr) auto` 行布局，`#mcp-client-json` 在编辑区内自滚动。
 - `src/js/ui.js`：新增 `openExternalUrl(url)`，复用 `getTauriInvoke()` 调用打包壳层 `open_external_url`；`#main-menu-official-site` 点击改走该函数，普通网页回退 `window.open()`。
-- `package.json`：版本 `0.4.2`。`sw.js`：缓存版本 `fritia-next-chat-v21`。
+- 该项功能已并入当前 `0.4.1` 补丁线；历史缓存版本为 `fritia-next-chat-v21`。
 
 ## 2026-07-08 MCP Agent Output Mapping
 

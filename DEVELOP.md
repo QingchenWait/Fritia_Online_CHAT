@@ -1,10 +1,16 @@
 # DEVELOP
 
+## 2026-07-08 ModelScope MCP Install / v0.4.1
+
+- `src/js/plugin_store.js` 调整 `deployModelScopeMcp()`：安装 hosted MCP 时先请求 `GET /api/v1/mcpServers/{Path}/{Name}/listByStatus` 取平台 `DeploymentJobId`，再按魔搭详情页“连接”按钮流程提交 `POST /api/v1/mcpServers/{Path}/{Name}/asyncDeploy`，请求体保留 `EnvironmentVariables`、`ExpirationMinutes`、`TransportType`、`AuthCheck`、`InfraSource: "platform"` 和 `DeploymentJobId`。
+- `src/js/plugin_store.js` 新增部署状态轮询：提交连接后使用 `POST /api/v1/mcpServers/deployStatus` 等待 `published` 并读取 `Data.McpDeployInfo.Url`，避免只导入已在网页端提前连接过的 MCP。
+- `package.json` 版本按当前打包要求保持 `0.4.1`；`sw.js` 缓存版本升级到 `fritia-next-chat-v22`。
+
 ## 2026-07-08 Tool Panel / Official Site / v0.4.2
 
 - `src/styles/app.css` 调整 MCP 客户端页布局：client 视图使用剩余高度作为工作台区域，编辑区内部给 JSON 配置框分配 `minmax(0, 1fr)` 滚动空间，避免窗口高度不足时 `#mcp-client-json` 被 `.tool-client-workbench` 裁切。
 - `src/js/ui.js` 新增 `openExternalUrl()`，主菜单“访问官网”在 Tauri/WebView2 打包端优先调用壳层 `open_external_url`，失败或网页端回退到 `window.open()`。
-- `package.json` 版本更新为 `0.4.2`；`sw.js` 缓存版本升级到 `fritia-next-chat-v21`。
+- 该项功能已并入当前 `0.4.1` 补丁线；历史缓存版本为 `fritia-next-chat-v21`。
 
 ## 2026-07-08 MCP Agent Output / v0.4.1
 

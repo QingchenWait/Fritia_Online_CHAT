@@ -6,6 +6,9 @@ export const MODELSCOPE_MCP_ICON = 'src/_logo/icons/network.svg';
 const MODELSCOPE_API_PREFIX = `${MODELSCOPE_ORIGIN}/api/v1`;
 const MODELSCOPE_ENV_FIELD_SCOPE = 'env';
 const MODELSCOPE_DEPLOY_FIELD_SCOPE = 'deploy';
+const MODELSCOPE_PLATFORM_INFRA_SOURCE = 'platform';
+const MODELSCOPE_DEPLOY_POLL_INTERVAL_MS = 2000;
+const MODELSCOPE_DEPLOY_MAX_POLLS = 60;
 const MODELSCOPE_TRANSPORT_LABELS = {
   streamable_http: 'Streamable HTTP',
   sse: 'SSE'
@@ -67,6 +70,7 @@ export async function fetchModelScopeMcpDetail(server, signal) {
 export async function deployModelScopeMcp(server, environmentVariables = {}, options = {}) {
   const normalized = normalizeModelScopeMcp(server);
   const transportType = normalizeTransportType(options.transportType, normalized.supportedTransportTypes || normalized.SupportedDeployTransportType);
+  const deploymentJobId = await resolveModelScopeDeploymentJobId(normalized);
   const body = {
     Path: normalized.path,
     Name: normalized.name,
@@ -76,29 +80,28 @@ export async function deployModelScopeMcp(server, environmentVariables = {}, opt
     ExpirationMinutes: normalizeExpirationMinutes(options.expirationMinutes),
     TransportType: transportType,
     AuthCheck: Boolean(options.authCheck),
-    InfraSource: 'platform'
+    InfraSource: MODELSCOPE_PLATFORM_INFRA_SOURCE,
+    DeploymentJobId: deploymentJobId
   };
-  let payload = await modelScopeFetch('/mcpServers/deploy', { method: 'POST', body });
-  let deployUrl = extractDeployUrl(payload);
-  if (!deployUrl) {
-    payload = await modelScopeFetch(
-      `/mcpServers/${encodeSegment(normalized.path)}/${encodeSegment(normalized.name)}/asyncDeploy`,
-      { method: 'POST', body }
-    );
-    deployUrl = extractDeployUrl(payload);
-  }
+  const payload = await modelScopeFetch(
+    `/mcpServers/${encodeSegment(normalized.path)}/${encodeSegment(normalized.name)}/asyncDeploy`,
+    { method: 'POST', body }
+  );
+  const deployPayload = await waitForModelScopeDeployResult(deploymentJobId, payload);
+  let deployUrl = extractDeployUrl(deployPayload) || extractDeployUrl(payload);
   if (!deployUrl) {
     deployUrl = normalized.deployedUrl || normalized.streamableHttpUrl || normalized.sseUrl || '';
   }
   if (!deployUrl) {
     throw new Error('魔搭未返回可用的远程 MCP URL。');
   }
+  const mcpDeployInfo = deployPayload?.Data?.McpDeployInfo || payload?.Data?.McpDeployInfo || {};
   return {
     url: deployUrl,
-    transportType,
-    authCheck: Boolean(extractNested(payload, ['Data', 'McpDeployInfo', 'AuthCheck']) ?? payload?.Data?.AuthCheck ?? options.authCheck),
-    expiration: extractNested(payload, ['Data', 'McpDeployInfo', 'Expiration']) || payload?.Data?.Expiration || null,
-    raw: payload
+    transportType: normalizeTransportValue(mcpDeployInfo.TransportType) || transportType,
+    authCheck: Boolean(mcpDeployInfo.AuthCheck ?? deployPayload?.Data?.AuthCheck ?? payload?.Data?.AuthCheck ?? options.authCheck),
+    expiration: mcpDeployInfo.Expiration || deployPayload?.Data?.Expiration || payload?.Data?.Expiration || null,
+    raw: deployPayload || payload
   };
 }
 
@@ -172,6 +175,50 @@ export function normalizeModelScopeMcp(raw = {}) {
     sseUrl: raw.SSEUrl || '',
     detailUrl: `${MODELSCOPE_ORIGIN}/mcp/servers/${encodePathPart(path)}/${encodePathPart(name)}`
   };
+}
+
+async function resolveModelScopeDeploymentJobId(server) {
+  const fallback = `${server.path}/${server.name}/platform-pool`;
+  try {
+    const payload = await modelScopeFetch(
+      `/mcpServers/${encodeSegment(server.path)}/${encodeSegment(server.name)}/listByStatus`
+    );
+    const deployServers = payload?.Data?.McpDeployServers || payload?.McpDeployServers || [];
+    const platformServer = Array.isArray(deployServers)
+      ? deployServers.find(item => String(item?.InfraSource || '').toLowerCase() === MODELSCOPE_PLATFORM_INFRA_SOURCE)
+      : null;
+    return String(platformServer?.DeploymentJobId || fallback).trim();
+  } catch (error) {
+    console.warn('[plugin-store] Failed to read ModelScope deployment job id, using platform-pool fallback', error);
+    return fallback;
+  }
+}
+
+async function waitForModelScopeDeployResult(deploymentJobId, initialPayload) {
+  let payload = initialPayload;
+  if (extractDeployUrl(payload)) return payload;
+  for (let attempt = 0; attempt < MODELSCOPE_DEPLOY_MAX_POLLS; attempt += 1) {
+    if (attempt > 0) await delay(MODELSCOPE_DEPLOY_POLL_INTERVAL_MS);
+    payload = await modelScopeFetch('/mcpServers/deployStatus', {
+      method: 'POST',
+      body: { DeploymentJobId: deploymentJobId },
+      allowApiError: true
+    });
+    if (payload?.Success === false) {
+      throw new Error(payload?.Data?.Message || payload?.Message || '魔搭部署状态返回失败。');
+    }
+    const code = Number(payload?.Data?.Code ?? payload?.Code);
+    if (Number.isFinite(code) && code !== 200) {
+      throw new Error(payload?.Data?.Message || payload?.Message || '魔搭部署状态返回失败。');
+    }
+    const status = normalizeDeployStatus(payload?.Data?.DeployStatus || payload?.Data?.Status || payload?.DeployStatus || payload?.Status);
+    const deployUrl = extractDeployUrl(payload);
+    if (status === 'published' && deployUrl) return payload;
+    if (status === 'failed') {
+      throw new Error(payload?.Data?.Message || payload?.Message || '魔搭 MCP 连接失败。');
+    }
+  }
+  return payload;
 }
 
 async function modelScopeFetch(path, options = {}) {
@@ -409,6 +456,16 @@ function normalizeTransportValue(value) {
 function normalizeExpirationMinutes(value) {
   const minutes = Number(value);
   return Number.isFinite(minutes) ? minutes : -1;
+}
+
+function normalizeDeployStatus(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function delay(ms) {
+  return new Promise(resolve => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function normalizeAssetUrl(value) {
