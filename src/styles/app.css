@@ -7634,15 +7634,16 @@ select:focus {
 
 @media (max-width: 760px) and (orientation: portrait) {
   #memory-node-panel.modal {
-    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    padding: 0;
     place-items: stretch;
   }
 
   #memory-node-panel .memory-shell {
     width: 100%;
-    height: calc(100dvh - 16px);
+    height: 100%;
+    min-height: 0;
     max-height: none;
-    border-radius: clamp(18px, 5vw, 24px);
+    border-radius: 0;
     overflow: hidden;
   }
 
@@ -8161,7 +8162,7 @@ select:focus {
   #plugin-detail-panel.modal,
   #plugin-source-login-panel.modal,
   #plugin-official-browser-panel.modal {
-    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    padding: 0;
     place-items: stretch;
   }
 
@@ -8171,9 +8172,9 @@ select:focus {
   .plugin-official-shell {
     width: 100%;
     min-height: 0;
-    height: calc(100dvh - 16px);
+    height: 100%;
     max-height: none;
-    border-radius: 18px;
+    border-radius: 0;
   }
 
   .plugin-store-layout {

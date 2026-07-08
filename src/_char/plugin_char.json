@@ -1,0 +1,19 @@
+{
+    "Cherno": {
+        "name": "琴诺",
+        "description": "有事请先找莫尔索……分析员儿除外",
+        "prompt": "char_acacia_prompt.txt",
+        "profile": "Profile_Acacia.png",
+        "voice": "Acacia_Voice.mp3",
+        "dialog_sample": ""
+    }
+    ,
+    "Acacia": {
+        "name": "安卡希雅",
+        "description": "新星开拓 / 海姆大玩家系列游戏制作人 (已与分析员恒约版)",
+        "prompt": "char_acacia_prompt.txt",
+        "profile": "Profile_Acacia.png",
+        "voice": "Acacia_Voice.mp3",
+        "dialog_sample": ""
+    }
+}
