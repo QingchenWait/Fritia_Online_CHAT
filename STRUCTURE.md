@@ -1,5 +1,22 @@
 # STRUCTURE
 
+## 2026-07-09 v0.4.4 Quick Add Menu Mapping
+
+- `package.json`：版本 `0.4.4`。
+- `sw.js`：缓存版本 `fritia-next-chat-v27`。
+- `src/styles/app.css`：`.quick-create-menu` / `.quick-create-item` 的桌面端和 `max-width: 760px` 移动端尺寸、选项间距、选项高度与图标尺寸对齐 `.main-menu` / `.main-menu-item`；不新增 DOM、JS API 或打包文件。
+
+## 2026-07-09 Role Plugin Store Mapping
+
+- 新增资源：`src/_logo/icons/girl.svg`，作为角色插件卡片的通用女孩 logo，来源为联网下载的开源 Twemoji SVG。
+- `index.html`：插件商店默认激活“角色插件”；新增角色插件 DOM：`#role-plugin-refresh`、`#role-plugin-status`、`#role-plugin-grid`、`.role-plugin-toolbar`、`.role-plugin-heading`。
+- `src/js/ui.js`：新增常量 `ROLE_PLUGIN_CATALOG_URL`、`ROLE_PLUGIN_RESOURCE_BASE_URL`、`ROLE_PLUGIN_ACCESS_TOKEN`、`ROLE_PLUGIN_CARD_ICON`；`pluginStoreSection` 默认值改为 `roles`；新增状态 `rolePluginStore`，字段包含 `items`、`loading`、`loaded`、`error`、`requestId`、`installingId`、`installStatus`。
+- `src/js/ui.js`：新增角色插件函数 `loadRolePluginCatalog()`、`normalizeRolePluginCatalog()`、`renderRolePluginStoreGrid()`、`getSortedRolePluginItems()`、`createRolePluginCardHtml()`、`installRolePlugin()`、`fetchRolePluginText()`、`fetchRolePluginBlob()`、`buildRolePluginResourceUrl()`、`withRolePluginToken()`、`getExistingCharacterNameSet()`、`hasCharacterWithName()`、`normalizeRolePluginName()`、`createRolePluginCharacterId()`。
+- `src/js/ui.js`：`openPanel('plugin-store-panel')` 每次打开都会调用 `loadRolePluginCatalog({ force: true })`，强制重新同步云端 `plugin_char.json`；当前分组为 MCP 时才检测魔搭登录态和加载 MCP 列表。`renderAll()` 会刷新角色插件卡片的已安装状态。
+- 角色插件安装映射：远程目录 `https://chat.fritia.online/api/downloads/fritia-online-source/char/<key>/<filename>?token=cyandust_workshop`；`prompt` / `dialog_sample` 以文本读取，`profile` / `voice` 以 Blob 读取后通过 `saveBlobAsMedia()` 保存到 IndexedDB；最终调用 `normalizeCharacterRecord()`、`upsertCharacter()` 和 `ensurePrivateConversation()` 写入角色与私聊会话。
+- `src/styles/app.css`：新增 `.role-plugin-*` 样式；角色插件卡片沿用 `.plugin-card` 网格，已安装角色使用禁用灰色安装按钮；移动端安装按钮压缩为图标按钮。`.plugin-store-nav` 与 `.plugin-store-grid` 均拥有自绘滚动条。
+- `sw.js`：缓存版本 `fritia-next-chat-v26`，核心缓存新增 `src/_logo/icons/girl.svg` 和 `src/_logo/icons/download.svg`。
+
 ## 2026-07-08 Windows v0.4.3 Package Mapping
 
 - `package.json`：版本 `0.4.3`。

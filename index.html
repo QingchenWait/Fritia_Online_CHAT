@@ -1257,23 +1257,31 @@
       </header>
       <div class="plugin-store-layout">
         <nav class="plugin-store-nav" aria-label="插件商店分组">
-          <button type="button" data-plugin-store-section="roles">
+          <button class="is-active" type="button" data-plugin-store-section="roles">
             <img src="src/_logo/icons/users.svg" alt="">
             <span>角色插件</span>
           </button>
-          <button class="is-active" type="button" data-plugin-store-section="mcp">
+          <button type="button" data-plugin-store-section="mcp">
             <img src="src/_logo/icons/ai-agent.svg" alt="">
             <span>MCP 插件</span>
           </button>
         </nav>
         <section class="plugin-store-content">
-          <div class="plugin-store-view" data-plugin-store-view="roles">
-            <div class="plugin-store-empty">
-              <img src="src/_logo/icons/users.svg" alt="">
-              <strong>角色插件暂未开放</strong>
+          <div class="plugin-store-view is-active" data-plugin-store-view="roles">
+            <div class="plugin-store-toolbar role-plugin-toolbar">
+              <div class="role-plugin-heading">
+                <img src="src/_logo/icons/girl.svg" alt="">
+                <span>角色插件</span>
+              </div>
+              <button id="role-plugin-refresh" class="btn btn-soft role-plugin-refresh" type="button">
+                <img src="src/_logo/icons/refresh-cw.svg" alt="">
+                <span>刷新角色卡片</span>
+              </button>
             </div>
+            <div id="role-plugin-status" class="plugin-store-status">正在准备角色插件。</div>
+            <div id="role-plugin-grid" class="plugin-store-grid role-plugin-grid" aria-live="polite"></div>
           </div>
-          <div class="plugin-store-view is-active" data-plugin-store-view="mcp">
+          <div class="plugin-store-view" data-plugin-store-view="mcp">
             <div class="plugin-store-toolbar">
               <label class="plugin-store-search">
                 <img src="src/_logo/icons/search.svg" alt="">

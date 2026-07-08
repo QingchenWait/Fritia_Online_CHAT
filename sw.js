@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v24';
+const CACHE_NAME = 'fritia-next-chat-v27';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -22,6 +22,8 @@ const CORE_ASSETS = [
   './src/_logo/icons/ai-agent.svg',
   './src/_logo/icons/chevron-down.svg',
   './src/_logo/icons/circle-alert.svg',
+  './src/_logo/icons/download.svg',
+  './src/_logo/icons/girl.svg',
   './src/_logo/icons/menu.svg',
   './src/_logo/icons/refresh-cw.svg',
   './src/_logo/icons/role-card.svg',

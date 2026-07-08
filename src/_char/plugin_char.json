@@ -16,4 +16,13 @@
         "voice": "Acacia_Voice.mp3",
         "dialog_sample": ""
     }
+    ,
+    "Enya": {
+        "name": "恩雅",
+        "description": "有什么心事的话，就和姐姐大人说吧 ~",
+        "prompt": "char_prompt_enya.txt",
+        "profile": "Profile_Enya.png",
+        "voice": "Enya_Voice.mp3",
+        "dialog_sample": ""
+    }
 }

@@ -76,7 +76,7 @@ import {
   normalizeModelScopeMcp
 } from './plugin_store.js';
 import { getRoundtableError, runRoundtableTurn } from './roundtable.js';
-import { getMediaDataUrl, isMediaRef, saveFileAsMedia } from './media_store.js';
+import { getMediaDataUrl, isMediaRef, saveBlobAsMedia, saveFileAsMedia } from './media_store.js';
 import {
   exportArchiveZip,
   formatArchiveDate,
@@ -107,6 +107,10 @@ const MOBILE_EDGE_BACK_START = 48;
 const MOBILE_EDGE_BACK_DISTANCE = 76;
 const MODELSCOPE_LOGIN_POLL_INTERVAL_MS = 2500;
 const MODELSCOPE_LOGIN_POLL_TIMEOUT_MS = 120000;
+const ROLE_PLUGIN_CATALOG_URL = 'https://chat.fritia.online/api/downloads/fritia-online-source/char/plugin_char.json';
+const ROLE_PLUGIN_RESOURCE_BASE_URL = 'https://chat.fritia.online/api/downloads/fritia-online-source/char';
+const ROLE_PLUGIN_ACCESS_TOKEN = 'cyandust_workshop';
+const ROLE_PLUGIN_CARD_ICON = 'src/_logo/icons/girl.svg';
 
 let roundtableIdleTimer = 0;
 let layoutResizeFrame = 0;
@@ -154,7 +158,7 @@ const state = {
     messageId: '',
     attachments: []
   },
-  pluginStoreSection: 'mcp',
+  pluginStoreSection: 'roles',
   pluginSourceMenuOpen: false,
   pluginStore: {
     search: '',
@@ -174,6 +178,15 @@ const state = {
     installStatus: '',
     officialUrl: '',
     officialTitle: ''
+  },
+  rolePluginStore: {
+    items: [],
+    loading: false,
+    loaded: false,
+    error: '',
+    requestId: 0,
+    installingId: '',
+    installStatus: ''
   },
   stickerPopoverOpen: false,
   voiceNotice: null,
@@ -1580,6 +1593,7 @@ function bindPluginStore() {
   document.querySelectorAll('[data-plugin-store-section]').forEach(button => {
     button.addEventListener('click', () => showPluginStoreSection(button.dataset.pluginStoreSection));
   });
+  document.getElementById('role-plugin-refresh')?.addEventListener('click', () => loadRolePluginCatalog({ force: true }));
   document.getElementById('plugin-store-search')?.addEventListener('input', event => {
     state.pluginStore.search = event.target.value.trim();
     if (pluginStoreSearchTimer) clearTimeout(pluginStoreSearchTimer);
@@ -1632,7 +1646,11 @@ function bindPluginStore() {
 function showPluginStoreSection(section = 'mcp') {
   state.pluginStoreSection = section === 'roles' ? 'roles' : 'mcp';
   renderPluginStorePanel();
+  if (state.pluginStoreSection === 'roles' && !state.rolePluginStore.loaded && !state.rolePluginStore.loading) {
+    loadRolePluginCatalog();
+  }
   if (state.pluginStoreSection === 'mcp' && !state.pluginStore.items.length && !state.pluginStore.loading) {
+    checkModelScopeLoginStatus();
     loadPluginStorePage();
   }
 }
@@ -1647,8 +1665,265 @@ function renderPluginStorePanel() {
   const search = document.getElementById('plugin-store-search');
   if (search && document.activeElement !== search) search.value = state.pluginStore.search;
   renderPluginSourceMenu();
+  renderRolePluginStoreGrid();
   renderPluginStoreGrid();
   renderPluginStorePagination();
+}
+
+async function loadRolePluginCatalog(options = {}) {
+  if (state.rolePluginStore.loading || (state.rolePluginStore.loaded && !options.force)) return;
+  const requestId = Date.now();
+  state.rolePluginStore.requestId = requestId;
+  state.rolePluginStore.loading = true;
+  state.rolePluginStore.error = '';
+  if (options.force) state.rolePluginStore.installStatus = '';
+  renderRolePluginStoreGrid();
+  try {
+    const response = await fetch(withRolePluginToken(ROLE_PLUGIN_CATALOG_URL), { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    if (state.rolePluginStore.requestId !== requestId) return;
+    state.rolePluginStore.items = normalizeRolePluginCatalog(payload);
+    state.rolePluginStore.loaded = true;
+  } catch (error) {
+    if (state.rolePluginStore.requestId !== requestId) return;
+    state.rolePluginStore.items = [];
+    state.rolePluginStore.loaded = false;
+    state.rolePluginStore.error = `角色插件加载失败：${error?.message || '未知错误'}`;
+  } finally {
+    if (state.rolePluginStore.requestId === requestId) {
+      state.rolePluginStore.loading = false;
+      renderRolePluginStoreGrid();
+    }
+  }
+}
+
+function normalizeRolePluginCatalog(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('角色插件目录格式无效。');
+  }
+  return Object.entries(payload).map(([key, raw], index) => {
+    const source = raw && typeof raw === 'object' ? raw : {};
+    const name = String(source.name || key).trim();
+    if (!name) return null;
+    return {
+      key: String(key || '').trim(),
+      name,
+      description: String(source.description || '').trim(),
+      promptFile: String(source.prompt || '').trim(),
+      profileFile: String(source.profile || '').trim(),
+      voiceFile: String(source.voice || '').trim(),
+      dialogSampleFile: String(source.dialog_sample || '').trim(),
+      index
+    };
+  }).filter(item => item?.key);
+}
+
+function renderRolePluginStoreGrid() {
+  const grid = document.getElementById('role-plugin-grid');
+  if (!grid) return;
+  const refresh = document.getElementById('role-plugin-refresh');
+  const loading = state.rolePluginStore.loading;
+  const installing = Boolean(state.rolePluginStore.installingId);
+  if (refresh) refresh.disabled = loading || installing;
+  if (loading) {
+    setText('role-plugin-status', '正在下载并解析角色插件目录...');
+    grid.innerHTML = Array.from({ length: 6 }, () => '<article class="plugin-card role-plugin-card is-skeleton"></article>').join('');
+    return;
+  }
+  if (state.rolePluginStore.error) {
+    setText('role-plugin-status', state.rolePluginStore.error);
+    grid.innerHTML = `
+      <div class="plugin-store-empty plugin-store-error">
+        <img src="src/_logo/icons/circle-alert.svg" alt="">
+        <strong>无法读取角色插件</strong>
+      </div>
+    `;
+    return;
+  }
+  if (!state.rolePluginStore.loaded) {
+    setText('role-plugin-status', '打开插件商店后会自动加载角色插件。');
+    grid.innerHTML = `
+      <div class="plugin-store-empty">
+        <img src="${ROLE_PLUGIN_CARD_ICON}" alt="">
+        <strong>等待加载角色插件</strong>
+      </div>
+    `;
+    return;
+  }
+  const items = getSortedRolePluginItems();
+  const installableCount = items.filter(item => !item.installed).length;
+  setText(
+    'role-plugin-status',
+    state.rolePluginStore.installStatus || (items.length
+      ? `共 ${items.length} 个角色插件，${installableCount} 个可安装。`
+      : '暂无可显示的角色插件。')
+  );
+  if (!items.length) {
+    grid.innerHTML = '<div class="plugin-store-empty"><img src="src/_logo/icons/search.svg" alt=""><strong>没有找到角色插件</strong></div>';
+    return;
+  }
+  grid.innerHTML = items.map(createRolePluginCardHtml).join('');
+  grid.querySelectorAll('[data-role-plugin-install]').forEach(button => {
+    button.addEventListener('click', () => installRolePlugin(button.dataset.rolePluginInstall));
+  });
+}
+
+function getSortedRolePluginItems() {
+  const existingNames = getExistingCharacterNameSet();
+  return state.rolePluginStore.items
+    .map(item => ({ ...item, installed: existingNames.has(normalizeRolePluginName(item.name)) }))
+    .sort((left, right) => Number(left.installed) - Number(right.installed) || left.index - right.index);
+}
+
+function createRolePluginCardHtml(item) {
+  const installing = state.rolePluginStore.installingId === item.key;
+  const disabled = item.installed || installing || Boolean(state.rolePluginStore.installingId);
+  const label = installing ? '安装中' : (item.installed ? '已安装' : '安装');
+  return `
+    <article class="plugin-card role-plugin-card${item.installed ? ' is-installed' : ''}${installing ? ' is-installing' : ''}">
+      <header>
+        <img src="${ROLE_PLUGIN_CARD_ICON}" alt="">
+        <div class="role-plugin-card-main">
+          <strong>${escapeHtml(item.name)}</strong>
+        </div>
+        <button class="btn btn-primary role-plugin-install-btn" type="button" data-role-plugin-install="${escapeHtml(item.key)}" aria-label="${escapeHtml(label)} ${escapeHtml(item.name)}" title="${escapeHtml(label)}" ${disabled ? 'disabled' : ''}>
+          <img src="src/_logo/icons/download.svg" alt="">
+          <span>${escapeHtml(label)}</span>
+        </button>
+      </header>
+      <p>${escapeHtml(item.description || '暂无角色简介。')}</p>
+    </article>
+  `;
+}
+
+async function installRolePlugin(key) {
+  if (state.rolePluginStore.installingId) return;
+  const item = state.rolePluginStore.items.find(candidate => candidate.key === key);
+  if (!item) return;
+  if (hasCharacterWithName(item.name)) {
+    state.rolePluginStore.installStatus = `${item.name} 已存在，不能重复安装。`;
+    renderRolePluginStoreGrid();
+    return;
+  }
+  state.rolePluginStore.installingId = item.key;
+  state.rolePluginStore.installStatus = `正在下载 ${item.name} 的人格设定...`;
+  renderRolePluginStoreGrid();
+  try {
+    const prompt = item.promptFile ? await fetchRolePluginText(item, item.promptFile, '人格设定') : '';
+    let profileBlob = null;
+    if (item.profileFile) {
+      state.rolePluginStore.installStatus = `正在下载 ${item.name} 的头像...`;
+      renderRolePluginStoreGrid();
+      profileBlob = await fetchRolePluginBlob(item, item.profileFile, '头像');
+    }
+    let voiceBlob = null;
+    if (item.voiceFile) {
+      state.rolePluginStore.installStatus = `正在下载 ${item.name} 的参考语音...`;
+      renderRolePluginStoreGrid();
+      voiceBlob = await fetchRolePluginBlob(item, item.voiceFile, '参考语音');
+    }
+    let examples = '';
+    if (item.dialogSampleFile) {
+      state.rolePluginStore.installStatus = `正在下载 ${item.name} 的示例对话...`;
+      renderRolePluginStoreGrid();
+      examples = await fetchRolePluginText(item, item.dialogSampleFile, '示例对话');
+    }
+    if (hasCharacterWithName(item.name)) {
+      state.rolePluginStore.installStatus = `${item.name} 已存在，不能重复安装。`;
+      return;
+    }
+    state.rolePluginStore.installStatus = `正在保存 ${item.name} 到本地存档...`;
+    renderRolePluginStoreGrid();
+    const avatarMedia = profileBlob
+      ? await saveBlobAsMedia(profileBlob.blob, {
+        category: 'avatar',
+        prefix: 'avatar',
+        name: item.profileFile,
+        mime: profileBlob.mime,
+        size: profileBlob.blob.size
+      })
+      : null;
+    const voiceMedia = voiceBlob
+      ? await saveBlobAsMedia(voiceBlob.blob, {
+        category: 'voice',
+        prefix: 'voice',
+        name: item.voiceFile,
+        mime: voiceBlob.mime,
+        size: voiceBlob.blob.size
+      })
+      : null;
+    const character = normalizeCharacterRecord({
+      id: createRolePluginCharacterId(item),
+      name: item.name,
+      description: item.description,
+      prompt,
+      examples,
+      avatar: avatarMedia ? avatarMedia.ref : 'src/_logo/emoji/robot_3d.png',
+      voiceSample: voiceMedia ? voiceMedia.ref : '',
+      source: 'custom',
+      tags: ['插件角色'],
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    if (!character) throw new Error('角色数据无效。');
+    const next = upsertCharacter(state.store, character);
+    ensurePrivateConversation(next, character);
+    updateStore(loadAppStore());
+    state.rolePluginStore.installStatus = `${item.name} 已安装到角色列表。`;
+  } catch (error) {
+    state.rolePluginStore.installStatus = `${item.name} 安装失败：${error?.message || '未知错误'}`;
+  } finally {
+    state.rolePluginStore.installingId = '';
+    renderRolePluginStoreGrid();
+  }
+}
+
+async function fetchRolePluginText(item, fileName, label) {
+  const response = await fetch(buildRolePluginResourceUrl(item.key, fileName), { cache: 'no-cache' });
+  if (!response.ok) throw new Error(`${label}下载失败：HTTP ${response.status}`);
+  return response.text();
+}
+
+async function fetchRolePluginBlob(item, fileName, label) {
+  const response = await fetch(buildRolePluginResourceUrl(item.key, fileName), { cache: 'no-cache' });
+  if (!response.ok) throw new Error(`${label}下载失败：HTTP ${response.status}`);
+  const blob = await response.blob();
+  return {
+    blob,
+    mime: response.headers.get('content-type') || blob.type || ''
+  };
+}
+
+function buildRolePluginResourceUrl(key, fileName) {
+  return withRolePluginToken(`${ROLE_PLUGIN_RESOURCE_BASE_URL}/${encodeURIComponent(key)}/${encodeURIComponent(fileName)}`);
+}
+
+function withRolePluginToken(url) {
+  const separator = String(url).includes('?') ? '&' : '?';
+  return `${url}${separator}token=${encodeURIComponent(ROLE_PLUGIN_ACCESS_TOKEN)}`;
+}
+
+function getExistingCharacterNameSet() {
+  return new Set(state.store.characters.map(character => normalizeRolePluginName(character.name)).filter(Boolean));
+}
+
+function hasCharacterWithName(name) {
+  return getExistingCharacterNameSet().has(normalizeRolePluginName(name));
+}
+
+function normalizeRolePluginName(name) {
+  return String(name || '').trim().toLocaleLowerCase();
+}
+
+function createRolePluginCharacterId(item) {
+  const base = String(item.key || item.name || 'remote')
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 36) || 'remote';
+  return `char_plugin_${base}_${Date.now().toString(36)}`;
 }
 
 function renderPluginSourceMenu() {
@@ -3000,6 +3275,7 @@ function renderAll() {
   renderStickerPopover();
   renderStickerManager();
   renderMcpPicker();
+  renderRolePluginStoreGrid();
   updateContextStatus();
   renderRoundtableErrorIndicator();
   renderVoiceErrorIndicator();
@@ -5139,8 +5415,9 @@ function openPanel(id, options = {}) {
   if (id === 'tool-call-panel') renderToolCallPanel();
   if (id === 'plugin-store-panel') {
     renderPluginStorePanel();
-    checkModelScopeLoginStatus();
+    loadRolePluginCatalog({ force: true });
     if (state.pluginStoreSection === 'mcp' && !state.pluginStore.items.length && !state.pluginStore.loading) {
+      checkModelScopeLoginStatus();
       loadPluginStorePage();
     }
   }

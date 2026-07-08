@@ -265,36 +265,36 @@ img {
 
 .quick-create-menu {
   position: absolute;
-  top: calc(100% + 0.55rem);
+  top: calc(100% + 0.45rem);
   right: 0;
   z-index: 40;
-  width: min(11rem, calc(100vw - 2rem));
-  padding: 0.35rem;
+  width: min(10.25rem, calc(100vw - 2rem));
+  padding: 0.32rem;
   border: 1px solid rgba(120, 140, 180, 0.20);
-  border-radius: clamp(0.875rem, 2vw, 1.125rem);
+  border-radius: clamp(0.85rem, 2vw, 1.05rem);
   background: rgba(255, 255, 255, 0.96);
   box-shadow: var(--shadow-floating);
   backdrop-filter: blur(18px);
   display: grid;
-  gap: 0.25rem;
+  gap: 0.18rem;
   transform-origin: top right;
   animation: quickCreateMenuIn 160ms ease;
 }
 
 .quick-create-item {
   width: 100%;
-  min-height: clamp(2.45rem, 5.8vw, 3rem);
+  min-height: 2.45rem;
   border: 0;
-  border-radius: clamp(0.65rem, 1.6vw, 0.9rem);
+  border-radius: 0.8rem;
   background: transparent;
   color: var(--text);
   display: grid;
-  grid-template-columns: 1.35rem minmax(0, 1fr);
+  grid-template-columns: 1.25rem minmax(0, 1fr);
   align-items: center;
-  gap: 0.65rem;
-  padding: 0 0.75rem;
+  gap: 0.55rem;
+  padding: 0 0.68rem;
   text-align: left;
-  font-size: clamp(0.95rem, 0.85vw, 1.02rem);
+  font-size: 0.95rem;
   font-weight: 650;
   line-height: 1.2;
   white-space: nowrap;
@@ -302,8 +302,8 @@ img {
 }
 
 .quick-create-item img {
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .quick-create-item span {
@@ -5969,6 +5969,8 @@ select:focus {
   display: grid;
   align-content: start;
   gap: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 91, 255, 0.42) transparent;
 }
 
 .plugin-store-nav button {
@@ -6023,6 +6025,7 @@ select:focus {
   gap: 14px;
 }
 
+.plugin-store-view[data-plugin-store-view="roles"].is-active,
 .plugin-store-view[data-plugin-store-view="mcp"].is-active {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   align-content: stretch;
@@ -6034,6 +6037,38 @@ select:focus {
   grid-template-columns: minmax(260px, 1fr) auto auto;
   align-items: center;
   gap: 12px;
+}
+
+.role-plugin-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.role-plugin-heading,
+.role-plugin-refresh,
+.role-plugin-install-btn {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.role-plugin-heading {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.role-plugin-heading img,
+.role-plugin-refresh img,
+.role-plugin-install-btn img {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.role-plugin-refresh {
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .plugin-store-search {
@@ -6176,6 +6211,7 @@ select:focus {
 }
 
 .plugin-store-grid::-webkit-scrollbar,
+.plugin-store-nav::-webkit-scrollbar,
 .plugin-detail-content::-webkit-scrollbar,
 .plugin-login-body::-webkit-scrollbar {
   width: 9px;
@@ -6183,6 +6219,7 @@ select:focus {
 }
 
 .plugin-store-grid::-webkit-scrollbar-thumb,
+.plugin-store-nav::-webkit-scrollbar-thumb,
 .plugin-detail-content::-webkit-scrollbar-thumb,
 .plugin-login-body::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
@@ -6192,6 +6229,7 @@ select:focus {
 }
 
 .plugin-store-grid::-webkit-scrollbar-track,
+.plugin-store-nav::-webkit-scrollbar-track,
 .plugin-detail-content::-webkit-scrollbar-track,
 .plugin-login-body::-webkit-scrollbar-track {
   background: transparent;
@@ -6336,6 +6374,54 @@ select:focus {
     rgba(255, 255, 255, 0.92);
   background-size: 220% 100%;
   animation: pluginSkeleton 1.2s ease-in-out infinite;
+}
+
+.role-plugin-card {
+  min-height: 134px;
+  grid-template-rows: auto minmax(40px, 1fr);
+  cursor: default;
+}
+
+.role-plugin-card:hover,
+.role-plugin-card:focus-visible {
+  transform: none;
+}
+
+.role-plugin-card.is-installed {
+  background: rgba(248, 250, 255, 0.82);
+}
+
+.role-plugin-card-main {
+  min-width: 0;
+}
+
+.role-plugin-card .role-plugin-install-btn {
+  min-height: 34px;
+  border-radius: 12px;
+  padding: 6px 11px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.role-plugin-install-btn img {
+  filter: brightness(0) invert(1);
+}
+
+.role-plugin-install-btn:disabled {
+  border-color: rgba(120, 140, 180, 0.22);
+  background: #e8edf7;
+  color: #7d8799;
+  opacity: 1;
+  box-shadow: none;
+}
+
+.role-plugin-install-btn:disabled img {
+  filter: none;
+  opacity: 0.62;
+}
+
+.role-plugin-card.is-installing .role-plugin-install-btn:disabled {
+  cursor: wait;
 }
 
 @keyframes pluginSkeleton {
@@ -6876,12 +6962,12 @@ select:focus {
 
   .quick-create-menu {
     right: -0.25rem;
-    width: min(10.75rem, calc(100vw - 2.25rem));
+    width: min(10rem, calc(100vw - 2.25rem));
   }
 
   .quick-create-item {
-    min-height: 2.75rem;
-    font-size: 1rem;
+    min-height: 2.6rem;
+    font-size: 0.98rem;
   }
 
   .conversation-list,
@@ -8212,6 +8298,15 @@ select:focus {
     gap: 9px;
   }
 
+  .role-plugin-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .role-plugin-refresh {
+    min-height: 40px;
+    padding: 8px 10px;
+  }
+
   .plugin-store-search {
     grid-column: 1 / -1;
     min-height: 42px;
@@ -8296,6 +8391,33 @@ select:focus {
     border-radius: 10px;
     padding: 5px 11px;
     font-size: 12px;
+  }
+
+  .role-plugin-card {
+    grid-template-rows: auto minmax(42px, 1fr);
+  }
+
+  .role-plugin-card header {
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
+  }
+
+  .role-plugin-card .role-plugin-install-btn {
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+    border-radius: 12px;
+    display: inline-grid;
+    place-items: center;
+  }
+
+  .role-plugin-install-btn span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
 
   .plugin-store-pagination {

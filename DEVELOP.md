@@ -1,5 +1,18 @@
 # DEVELOP
 
+## 2026-07-09 v0.4.4 Quick Add Menu
+
+- `src/styles/app.css` 将 `.quick-create-menu` / `.quick-create-item` 的宽度、padding、圆角、gap、选项高度、图标尺寸和移动端覆盖值对齐 `.main-menu` / `.main-menu-item`，让“添加”和“菜单”两个悬浮下拉菜单保持一致。
+- `package.json` 版本更新到 `0.4.4`；`sw.js` 缓存版本更新到 `fritia-next-chat-v27`，确保本轮 CSS 调整能替换旧缓存。本次只改静态前端源码，不做打包。
+
+## 2026-07-09 Role Plugin Store
+
+- `index.html` 将插件商店默认分组切到“角色插件”，新增 `#role-plugin-refresh`、`#role-plugin-status` 和 `#role-plugin-grid`，角色插件页不再显示“暂未开放”占位。
+- `src/js/ui.js` 新增 `rolePluginStore` 状态和角色插件目录流程：每次打开 `#plugin-store-panel` 都会强制请求 `https://chat.fritia.online/api/downloads/fritia-online-source/char/plugin_char.json?token=cyandust_workshop`，点击“刷新角色卡片”也会重新同步云端目录。每个 key 归一化为角色插件项，并按本地角色名称判断已安装状态。
+- `src/js/ui.js` 新增角色插件安装流程：按 `char/<key>/<filename>?token=cyandust_workshop` 逐个下载 prompt、profile、voice 和 dialog_sample；头像与 TTS 参考语音通过 `saveBlobAsMedia()` 写入 IndexedDB，角色按 `normalizeCharacterRecord()` / `upsertCharacter()` / `ensurePrivateConversation()` 写入用户存档。安装前和资源下载后都会再次检查同名角色，避免重复导入。
+- `src/styles/app.css` 新增 `.role-plugin-*` 样式，桌面端沿用插件商店三列/两列卡片网格，移动端按钮压缩为图标按钮；`plugin-store-nav` 与角色/MCP 卡片网格均有自绘滚动条。新增联网下载图标 `src/_logo/icons/girl.svg` 作为角色插件通用女孩 logo。
+- `sw.js` 缓存版本升级到 `fritia-next-chat-v26`，核心缓存加入 `girl.svg` 和角色安装按钮使用的 `download.svg`。本次只改静态前端源码，不做打包。
+
 ## 2026-07-08 Windows v0.4.3 Package
 
 - `package.json` 版本更新到 `0.4.3`；`sw.js` 缓存版本更新到 `fritia-next-chat-v24`，确保用户手动文案修改和本轮 UI 修正不会被旧缓存覆盖。
