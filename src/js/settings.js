@@ -3,13 +3,13 @@ import { STORAGE_KEYS, loadJson, saveJson } from './storage.js';
 export const DEFAULT_SETTINGS = {
   apiKey: '',
   baseUrl: 'https://api.openai.com/v1',
-  model: 'gpt-4.1-mini',
+  model: 'gpt-5.4-mini',
   chatProviders: [
     {
       id: 'openai',
       apiKey: '',
       baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4.1-mini'
+      model: 'gpt-5.4-mini'
     }
   ],
   ttsProviders: [

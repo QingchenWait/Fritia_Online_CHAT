@@ -1,5 +1,16 @@
 # STRUCTURE
 
+## 2026-07-11 App Help Mapping
+
+- 新增资源：`src/_logo/icons/help-circle.svg`，作为主菜单“使用说明”和帮助目录的帮助图标，来源为联网下载的 Lucide SVG。
+- `index.html`：主菜单新增 `#main-menu-help`；新增帮助弹窗 DOM：`#app-help-panel`、`#app-help-layout`、`#app-help-status`、`#app-help-doc-list`、`#app-help-back`、`#app-help-doc-title`、`#app-help-content`。
+- `src/js/ui.js`：新增常量 `APP_HELP_DOCS_GITHUB_API`、`APP_HELP_DOC_FILENAME_RE`；新增状态 `appHelp`，字段包含 `docs`、`selectedId`、`loading`、`error`、`contentLoading`、`contentError`、`contentHtml`、`mobilePage`、`requestId`、`contentRequestId`。
+- `src/js/ui.js`：新增函数 `bindAppHelpPanel()`、`openAppHelpPanel()`、`loadAppHelpDocs()`、`discoverAppHelpDocs()`、`fetchLocalHelpDocIndex()`、`fetchGitHubHelpDocIndex()`、`normalizeAppHelpDocEntries()`、`normalizeAppHelpDocEntry()`、`normalizeAppHelpDocName()`、`selectAppHelpDoc()`、`loadAppHelpDocument()`、`fetchAppHelpMarkdown()`、`withNoCache()`、`renderAppHelpPanel()`、`appHelpStatusText()`、`isAppHelpTwoLevelLayout()`。
+- `src/js/ui.js`：`#main-menu-help` 点击会关闭主菜单并打开 `#app-help-panel`；`openPanel('app-help-panel')` 每次都会重新发现 `src/docs/doc_*.md`；移动/竖屏内容层返回优先切回目录层。
+- `src/styles/app.css`：新增 `.app-help-*` 桌面双栏、竖屏两级页面和自绘滚动条样式；帮助正文复用 `.markdown-body`，支持标题、列表、引用、表格、链接、图片、代码块和公式文本。
+- `tools/static_server.mjs`：`/src/docs/` 请求返回 `{ name, type }` JSON 文件清单并设置 `Cache-Control: no-store`，用于本地开发实时枚举帮助文档。
+- `sw.js`：缓存版本 `fritia-next-chat-v28`，核心缓存新增 `help-circle.svg`；`src/docs/doc_*.md` 请求直接走网络，避免 PWA 缓存复用旧帮助文档。
+
 ## 2026-07-09 v0.4.4 Quick Add Menu Mapping
 
 - `package.json`：版本 `0.4.4`。

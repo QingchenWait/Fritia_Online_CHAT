@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v27';
+const CACHE_NAME = 'fritia-next-chat-v28';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -24,6 +24,7 @@ const CORE_ASSETS = [
   './src/_logo/icons/circle-alert.svg',
   './src/_logo/icons/download.svg',
   './src/_logo/icons/girl.svg',
+  './src/_logo/icons/help-circle.svg',
   './src/_logo/icons/menu.svg',
   './src/_logo/icons/refresh-cw.svg',
   './src/_logo/icons/role-card.svg',
@@ -62,6 +63,16 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
+  let pathname = url.pathname;
+  try {
+    pathname = decodeURIComponent(pathname);
+  } catch {
+    // Keep the encoded path if the URL contains invalid escape sequences.
+  }
+  if (url.origin === location.origin && /\/src\/docs\/doc_[^/]+\.md$/i.test(pathname)) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   const networkFirst = url.origin === location.origin
     && (url.pathname.endsWith('/')
       || url.pathname.endsWith('.html')

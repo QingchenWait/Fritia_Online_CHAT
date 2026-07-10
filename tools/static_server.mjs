@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = path.resolve(process.argv[2] || process.cwd());
@@ -37,6 +37,25 @@ createServer(async (request, response) => {
     return;
   }
   try {
+    const fileStats = await stat(filePath);
+    if (fileStats.isDirectory()) {
+      const relativePath = path.relative(root, filePath).replace(/\\/g, '/');
+      if (relativePath === 'src/docs') {
+        const entries = await readdir(filePath, { withFileTypes: true });
+        response.writeHead(200, {
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'no-store',
+          'Content-Type': 'application/json; charset=utf-8'
+        });
+        response.end(JSON.stringify(entries
+          .filter(entry => entry.isFile())
+          .map(entry => ({ name: entry.name, type: 'file' }))));
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+      return;
+    }
     const body = await readFile(filePath);
     response.writeHead(200, {
       'Access-Control-Allow-Origin': '*',

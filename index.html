@@ -52,6 +52,10 @@
               <img src="src/_logo/icons/tool-skills.svg" alt="">
               <span>插件商店</span>
             </button>
+            <button class="main-menu-item" id="main-menu-help" type="button" role="menuitem">
+              <img src="src/_logo/icons/help-circle.svg" alt="">
+              <span>使用说明</span>
+            </button>
             <button class="main-menu-item" id="main-menu-official-site" type="button" role="menuitem">
               <img src="src/_logo/icons/monitor-up.svg" alt="">
               <span>访问官网</span>
@@ -855,7 +859,7 @@
                       <label><span>ID</span><small>提供商源唯一 ID</small><input id="chat-provider-id" autocomplete="off"></label>
                       <label><span>API Key</span><small>OpenAI Compatible API 密钥</small><input id="chat-provider-api-key" type="password" autocomplete="off"></label>
                       <label><span>API Base URL</span><small>自定义 API 端点 URL</small><input id="chat-provider-base-url" placeholder="https://api.openai.com/v1"></label>
-                      <label><span>模型名称</span><small>OpenAI Compatible 模型 ID</small><input id="chat-provider-model" placeholder="gpt-4.1-mini"></label>
+                      <label><span>模型名称</span><small>OpenAI Compatible 模型 ID</small><input id="chat-provider-model" placeholder="gpt-5.4-mini"></label>
                     </div>
                   </section>
                 </div>
@@ -1317,6 +1321,45 @@
               </button>
             </div>
           </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-help-panel" class="modal hidden app-help-modal" role="dialog" aria-modal="true" aria-labelledby="app-help-title">
+    <div class="modal-shell modal-shell-wide app-help-shell">
+      <header class="modal-head">
+        <div>
+          <small>HELP</small>
+          <h2 id="app-help-title">使用说明</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="app-help-panel" aria-label="关闭使用说明">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <div id="app-help-layout" class="app-help-layout">
+        <aside class="app-help-sidebar" aria-label="使用说明文档目录">
+          <div class="app-help-sidebar-head">
+            <img src="src/_logo/icons/help-circle.svg" alt="">
+            <div>
+              <h3>文档目录</h3>
+              <p id="app-help-status">正在准备使用说明。</p>
+            </div>
+          </div>
+          <div id="app-help-doc-list" class="app-help-doc-list" aria-live="polite"></div>
+        </aside>
+        <section class="app-help-reader" aria-label="使用说明文档内容">
+          <header class="app-help-reader-head">
+            <button id="app-help-back" class="btn btn-soft app-help-back" type="button">
+              <img src="src/_logo/icons/chevron-down.svg" alt="">
+              <span>返回目录</span>
+            </button>
+            <div>
+              <small>DOCUMENT</small>
+              <h3 id="app-help-doc-title">使用说明</h3>
+            </div>
+          </header>
+          <section id="app-help-content" class="app-help-content" aria-live="polite"></section>
         </section>
       </div>
     </div>

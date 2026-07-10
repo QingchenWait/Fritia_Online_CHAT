@@ -107,6 +107,8 @@ const MOBILE_EDGE_BACK_START = 48;
 const MOBILE_EDGE_BACK_DISTANCE = 76;
 const MODELSCOPE_LOGIN_POLL_INTERVAL_MS = 2500;
 const MODELSCOPE_LOGIN_POLL_TIMEOUT_MS = 120000;
+const APP_HELP_DOCS_GITHUB_API = 'https://api.github.com/repos/QingchenWait/Fritia_Online_CHAT/contents/src/docs';
+const APP_HELP_DOC_FILENAME_RE = /^doc_(.+)\.md$/i;
 const ROLE_PLUGIN_CATALOG_URL = 'https://chat.fritia.online/api/downloads/fritia-online-source/char/plugin_char.json';
 const ROLE_PLUGIN_RESOURCE_BASE_URL = 'https://chat.fritia.online/api/downloads/fritia-online-source/char';
 const ROLE_PLUGIN_ACCESS_TOKEN = 'cyandust_workshop';
@@ -140,6 +142,18 @@ const state = {
   voiceError: null,
   mainMenuOpen: false,
   quickCreateMenuOpen: false,
+  appHelp: {
+    docs: [],
+    selectedId: '',
+    loading: false,
+    error: '',
+    contentLoading: false,
+    contentError: '',
+    contentHtml: '',
+    mobilePage: 'list',
+    requestId: 0,
+    contentRequestId: 0
+  },
   archiveConfigOpen: false,
   archiveProgress: {
     phase: 'idle',
@@ -361,6 +375,7 @@ function bindGlobalEvents() {
   });
   bindMainMenu();
   bindQuickCreateMenu();
+  bindAppHelpPanel();
   document.addEventListener('click', event => {
     if (!state.roundtableErrorPopoverOpen) return;
     const popover = document.getElementById('roundtable-error-popover');
@@ -428,6 +443,11 @@ function bindMainMenu() {
     event.stopPropagation();
     closeMainMenu();
     openPanel('plugin-store-panel');
+  });
+  document.getElementById('main-menu-help')?.addEventListener('click', event => {
+    event.stopPropagation();
+    closeMainMenu();
+    openPanel('app-help-panel');
   });
   document.getElementById('main-menu-official-site')?.addEventListener('click', event => {
     event.stopPropagation();
@@ -498,6 +518,213 @@ function closeQuickCreateMenu() {
   if (!state.quickCreateMenuOpen) return;
   state.quickCreateMenuOpen = false;
   renderQuickCreateMenu();
+}
+
+function bindAppHelpPanel() {
+  document.getElementById('app-help-back')?.addEventListener('click', () => {
+    state.appHelp.mobilePage = 'list';
+    renderAppHelpPanel();
+    syncMobileBackAvailability();
+  });
+}
+
+function openAppHelpPanel() {
+  state.appHelp.mobilePage = 'list';
+  state.appHelp.contentHtml = '';
+  state.appHelp.contentError = '';
+  loadAppHelpDocs();
+}
+
+async function loadAppHelpDocs() {
+  const requestId = state.appHelp.requestId + 1;
+  state.appHelp.requestId = requestId;
+  state.appHelp.loading = true;
+  state.appHelp.error = '';
+  state.appHelp.docs = [];
+  state.appHelp.selectedId = '';
+  state.appHelp.contentLoading = false;
+  state.appHelp.contentError = '';
+  state.appHelp.contentHtml = '';
+  renderAppHelpPanel();
+  try {
+    const docs = await discoverAppHelpDocs();
+    if (state.appHelp.requestId !== requestId) return;
+    state.appHelp.docs = docs;
+    state.appHelp.loading = false;
+    state.appHelp.error = docs.length ? '' : '没有找到 src/docs/doc_<标题>.md 文档。';
+    state.appHelp.selectedId = docs[0]?.id || '';
+    renderAppHelpPanel();
+    if (state.appHelp.selectedId) loadAppHelpDocument(state.appHelp.selectedId, { openContent: false });
+  } catch (error) {
+    if (state.appHelp.requestId !== requestId) return;
+    state.appHelp.loading = false;
+    state.appHelp.error = error?.message || '使用说明目录加载失败。';
+    renderAppHelpPanel();
+  }
+}
+
+async function discoverAppHelpDocs() {
+  const localDocs = await fetchLocalHelpDocIndex().catch(() => []);
+  if (localDocs.length) return localDocs;
+  return fetchGitHubHelpDocIndex();
+}
+
+async function fetchLocalHelpDocIndex() {
+  const response = await fetch(withNoCache('src/docs/'), { cache: 'no-store' });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const type = response.headers.get('content-type') || '';
+  if (type.includes('application/json')) {
+    const data = await response.json();
+    return normalizeAppHelpDocEntries(Array.isArray(data) ? data : []);
+  }
+  const html = await response.text();
+  const documentHtml = new DOMParser().parseFromString(html, 'text/html');
+  const entries = [...documentHtml.querySelectorAll('a')]
+    .map(anchor => anchor.getAttribute('href') || anchor.textContent || '');
+  return normalizeAppHelpDocEntries(entries);
+}
+
+async function fetchGitHubHelpDocIndex() {
+  const response = await fetch(withNoCache(APP_HELP_DOCS_GITHUB_API), {
+    cache: 'no-store',
+    headers: { Accept: 'application/vnd.github+json' }
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+  return normalizeAppHelpDocEntries(Array.isArray(data) ? data : []);
+}
+
+function normalizeAppHelpDocEntries(entries) {
+  const seen = new Set();
+  return entries
+    .map(entry => normalizeAppHelpDocEntry(entry))
+    .filter(doc => {
+      if (!doc || seen.has(doc.id)) return false;
+      seen.add(doc.id);
+      return true;
+    })
+    .sort((left, right) => left.title.localeCompare(right.title, 'zh-Hans-CN'));
+}
+
+function normalizeAppHelpDocEntry(entry) {
+  const source = typeof entry === 'string' ? { name: entry } : (entry || {});
+  if (source.type && source.type !== 'file') return null;
+  const name = normalizeAppHelpDocName(source.name || source.path || source.href || source.download_url || '');
+  const match = name.match(APP_HELP_DOC_FILENAME_RE);
+  if (!match) return null;
+  return {
+    id: name,
+    name,
+    title: match[1],
+    url: `src/docs/${encodeURIComponent(name)}`,
+    downloadUrl: source.downloadUrl || source.download_url || ''
+  };
+}
+
+function normalizeAppHelpDocName(value = '') {
+  let clean = String(value || '').trim().split('#')[0].split('?')[0].replace(/\\/g, '/');
+  try {
+    clean = decodeURIComponent(clean);
+  } catch {
+    // Keep the original text if a directory listing contains a partially encoded link.
+  }
+  return clean.split('/').pop() || '';
+}
+
+function selectAppHelpDoc(id, options = {}) {
+  if (!state.appHelp.docs.some(doc => doc.id === id)) return;
+  state.appHelp.selectedId = id;
+  if (options.openContent) state.appHelp.mobilePage = 'content';
+  loadAppHelpDocument(id, { openContent: options.openContent === true });
+}
+
+async function loadAppHelpDocument(id, options = {}) {
+  const doc = state.appHelp.docs.find(item => item.id === id);
+  if (!doc) return;
+  const requestId = state.appHelp.contentRequestId + 1;
+  state.appHelp.contentRequestId = requestId;
+  state.appHelp.selectedId = id;
+  if (options.openContent) state.appHelp.mobilePage = 'content';
+  state.appHelp.contentLoading = true;
+  state.appHelp.contentError = '';
+  state.appHelp.contentHtml = '';
+  renderAppHelpPanel();
+  try {
+    const markdown = await fetchAppHelpMarkdown(doc);
+    if (state.appHelp.contentRequestId !== requestId) return;
+    state.appHelp.contentHtml = renderMarkdownDocument(markdown);
+    state.appHelp.contentLoading = false;
+    renderAppHelpPanel();
+  } catch (error) {
+    if (state.appHelp.contentRequestId !== requestId) return;
+    state.appHelp.contentLoading = false;
+    state.appHelp.contentError = error?.message || '文档内容加载失败。';
+    renderAppHelpPanel();
+  }
+}
+
+async function fetchAppHelpMarkdown(doc) {
+  const urls = [doc.url, doc.downloadUrl].filter(Boolean);
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      const response = await fetch(withNoCache(url), { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.text();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error('文档不可读取。');
+}
+
+function withNoCache(url = '') {
+  const value = String(url || '');
+  const [base, hash = ''] = value.split('#');
+  const separator = base.includes('?') ? '&' : '?';
+  return `${base}${separator}_=${Date.now()}${hash ? `#${hash}` : ''}`;
+}
+
+function renderAppHelpPanel() {
+  const layout = document.getElementById('app-help-layout');
+  const list = document.getElementById('app-help-doc-list');
+  const content = document.getElementById('app-help-content');
+  if (!layout || !list || !content) return;
+  const docs = state.appHelp.docs;
+  const selected = docs.find(doc => doc.id === state.appHelp.selectedId) || docs[0] || null;
+  layout.classList.toggle('is-content-open', state.appHelp.mobilePage === 'content');
+  setText('app-help-status', appHelpStatusText());
+  setText('app-help-doc-title', selected?.title || '使用说明');
+  if (state.appHelp.loading) {
+    list.innerHTML = '<div class="tool-empty">正在加载文档目录。</div>';
+  } else if (state.appHelp.error) {
+    list.innerHTML = `<div class="tool-empty">${escapeHtml(state.appHelp.error)}</div>`;
+  } else {
+    list.innerHTML = docs.map(doc => `
+      <button class="app-help-doc-item${doc.id === selected?.id ? ' is-active' : ''}" type="button" data-app-help-doc="${escapeHtml(doc.id)}">
+        <img src="src/_logo/icons/help-circle.svg" alt="">
+        <span>${escapeHtml(doc.title)}</span>
+      </button>
+    `).join('');
+    list.querySelectorAll('[data-app-help-doc]').forEach(button => {
+      button.addEventListener('click', () => selectAppHelpDoc(button.dataset.appHelpDoc, { openContent: true }));
+    });
+  }
+  if (state.appHelp.contentLoading) {
+    content.innerHTML = '<div class="tool-empty">正在加载文档内容。</div>';
+  } else if (state.appHelp.contentError) {
+    content.innerHTML = `<div class="tool-empty">文档内容加载失败：${escapeHtml(state.appHelp.contentError)}</div>`;
+  } else if (state.appHelp.contentHtml) {
+    content.innerHTML = state.appHelp.contentHtml;
+  } else {
+    content.innerHTML = '<div class="tool-empty">请选择左侧文档查看内容。</div>';
+  }
+}
+
+function appHelpStatusText() {
+  if (state.appHelp.loading) return '正在刷新 src/docs 文档。';
+  if (state.appHelp.error) return state.appHelp.error;
+  return `${state.appHelp.docs.length} 篇文档`;
 }
 
 function toggleMcpPicker() {
@@ -3117,6 +3344,10 @@ function isMobilePortraitLayout() {
   return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
 }
 
+function isAppHelpTwoLevelLayout() {
+  return window.matchMedia('(max-width: 760px), (orientation: portrait)').matches;
+}
+
 function hasMobileBackDestination() {
   const app = document.getElementById('app');
   const groupInfo = document.getElementById('group-info-panel');
@@ -3185,6 +3416,12 @@ function closeTransientBackSurface() {
   }
   if (state.quickCreateMenuOpen) {
     closeQuickCreateMenu();
+    return true;
+  }
+  const helpPanel = document.getElementById('app-help-panel');
+  if (helpPanel && !helpPanel.classList.contains('hidden') && state.appHelp.mobilePage === 'content' && isAppHelpTwoLevelLayout()) {
+    state.appHelp.mobilePage = 'list';
+    renderAppHelpPanel();
     return true;
   }
   if (state.mcpPickerOpen) {
@@ -5167,7 +5404,7 @@ function addModelProvider(kind) {
     saveSettings({
       chatProviders: [
         ...settings.chatProviders,
-        { id, apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1-mini' }
+        { id, apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.4-mini' }
       ],
       ...defaults
     });
@@ -5191,7 +5428,7 @@ function deleteModelProvider(kind) {
   const selectedId = kind === 'chat' ? state.selectedChatProviderId : state.selectedTtsProviderId;
   const nextProviders = providers.filter(provider => provider.id !== selectedId);
   const fallback = nextProviders[0] || (kind === 'chat'
-    ? { id: 'openai', apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1-mini' }
+    ? { id: 'openai', apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.4-mini' }
     : { id: 'mimo-tts', apiKey: '', baseUrl: 'https://api.xiaomimimo.com/v1', model: 'mimo-v2.5-tts-voiceclone', speed: 1 });
   if (!nextProviders.length) nextProviders.push(fallback);
   if (kind === 'chat') {
@@ -5293,7 +5530,7 @@ function readModelProviderForm(kind) {
       id: document.getElementById('chat-provider-id')?.value || state.selectedChatProviderId || 'openai',
       apiKey: document.getElementById('chat-provider-api-key')?.value || '',
       baseUrl: document.getElementById('chat-provider-base-url')?.value || 'https://api.openai.com/v1',
-      model: document.getElementById('chat-provider-model')?.value || 'gpt-4.1-mini'
+      model: document.getElementById('chat-provider-model')?.value || 'gpt-5.4-mini'
     };
   }
   return {
@@ -5412,6 +5649,7 @@ function openPanel(id, options = {}) {
     renderStickerManager();
   }
   if (id === 'archive-panel') renderArchivePanel();
+  if (id === 'app-help-panel') openAppHelpPanel();
   if (id === 'tool-call-panel') renderToolCallPanel();
   if (id === 'plugin-store-panel') {
     renderPluginStorePanel();
@@ -5437,6 +5675,9 @@ function closePanel(id) {
   }
   if (id === 'archive-panel') {
     state.archiveConfigOpen = false;
+  }
+  if (id === 'app-help-panel') {
+    state.appHelp.mobilePage = 'list';
   }
   if (id === 'plugin-store-panel' || id === 'plugin-detail-panel' || id === 'plugin-source-login-panel' || id === 'plugin-official-browser-panel') {
     closePluginSourceMenu();

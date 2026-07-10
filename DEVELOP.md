@@ -1,5 +1,12 @@
 # DEVELOP
 
+## 2026-07-11 App Help
+
+- `index.html` 在主菜单中新增 `#main-menu-help`，并新增 `#app-help-panel` 独立悬浮帮助窗口；窗口横屏显示文档目录和 Markdown 阅读区，竖屏通过 `.is-content-open` 在目录层和内容层之间切换。
+- `src/js/ui.js` 新增 `appHelp` 状态、菜单绑定、帮助窗口生命周期和 `doc_<标题>.md` 文档发现流程。网页端先尝试读取同源 `src/docs/` 目录清单，再回退到 GitHub Contents API；读取具体 Markdown 时使用 cache bust 和 `cache: 'no-store'`，并复用现有 `renderMarkdownDocument()`。
+- `src/styles/app.css` 新增 `.app-help-*` 样式，遵循现有蓝紫 Soft UI、玻璃拟态窗口和自绘滚动条规则；`tools/static_server.mjs` 仅为 `/src/docs/` 增加无缓存 JSON 目录清单，方便本地开发实时枚举文档。
+- `sw.js` 缓存版本更新到 `fritia-next-chat-v28`，新增缓存 `help-circle.svg`，并让 `src/docs/doc_*.md` 直接走网络请求，避免帮助文档复用旧缓存。本次只改静态前端源码，不做打包。
+
 ## 2026-07-09 v0.4.4 Quick Add Menu
 
 - `src/styles/app.css` 将 `.quick-create-menu` / `.quick-create-item` 的宽度、padding、圆角、gap、选项高度、图标尺寸和移动端覆盖值对齐 `.main-menu` / `.main-menu-item`，让“添加”和“菜单”两个悬浮下拉菜单保持一致。
