@@ -95,7 +95,7 @@ export async function exportArchiveZip(options = {}) {
   const files = snapshotToFiles(snapshot);
   setSyncStatus('working', '正在生成 ZIP 备份', 0.72, options);
   const blob = createZipBlob(files);
-  const filename = `fritia-next-archive-${formatFilenameDate(Date.now())}.zip`;
+  const filename = `fritia-chat-archive-${formatFilenameDate(Date.now())}.zip`;
   downloadBlob(filename, blob);
   const config = getWebDavConfig();
   saveWebDavConfig({
