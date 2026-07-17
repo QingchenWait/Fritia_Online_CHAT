@@ -7,6 +7,9 @@
   <title>Fritia Online NEXT Chat</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="src/styles/app.css">
+  <link rel="stylesheet" href="src/styles/onboarding.css">
+  <link rel="stylesheet" href="src/styles/onboarding-desktop.css">
+  <link rel="stylesheet" href="src/styles/onboarding-mobile.css">
 </head>
 <body>
   <div id="app" class="app-shell" data-view="chat">
@@ -774,6 +777,164 @@
         </article>
       </div>
     </section>
+  </div>
+
+  <div id="onboarding-welcome-panel" class="modal hidden onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="onboarding-welcome-title" aria-hidden="true">
+    <div class="onboarding-welcome-shell" tabindex="-1">
+      <div class="onboarding-welcome-scroll">
+        <div class="onboarding-welcome-mark" aria-hidden="true">
+          <img src="src/_logo/emoji/speech_balloon_3d.png" alt="">
+        </div>
+        <div class="onboarding-welcome-copy">
+          <h2 id="onboarding-welcome-title">分析员，欢迎回家</h2>
+          <p>请先按照指引，完成大模型 API 的建立和配置，开始与少女们的甜蜜互动吧 ~</p>
+        </div>
+        <label class="onboarding-dismiss-row" for="onboarding-dismiss-toggle">
+          <span>不再弹出</span>
+          <span class="onboarding-ios-switch">
+            <input id="onboarding-dismiss-toggle" type="checkbox" aria-label="以后不再显示欢迎窗口">
+            <span class="onboarding-ios-switch__track" aria-hidden="true"></span>
+          </span>
+        </label>
+      </div>
+      <div class="onboarding-welcome-actions">
+        <button id="onboarding-deepseek" class="onboarding-action-btn" type="button">
+          <img src="src/_logo/icons/message-circle.svg" alt="">
+          <span>快速配置 Deepseek [💬]</span>
+        </button>
+        <button id="onboarding-mimo" class="onboarding-action-btn" type="button">
+          <img src="src/_logo/icons/bot.svg" alt="">
+          <span>快速配置 MiMo [💬🖼️🔊]</span>
+        </button>
+        <button id="onboarding-help" class="onboarding-action-btn" type="button">
+          <img src="src/_logo/icons/help-circle.svg" alt="">
+          <span>查看使用文档</span>
+        </button>
+        <button id="onboarding-close" class="onboarding-action-btn" type="button">
+          <img src="src/_logo/icons/x.svg" alt="">
+          <span>关闭</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="quick-setup-panel" class="modal hidden onboarding-modal quick-setup-modal" role="dialog" aria-modal="true" aria-labelledby="quick-setup-title" aria-hidden="true">
+    <div class="quick-setup-shell" tabindex="-1">
+      <header class="quick-setup-head">
+        <div class="quick-setup-head__icon" aria-hidden="true">
+          <img id="quick-setup-provider-icon" src="src/_logo/icons/bot.svg" alt="">
+        </div>
+        <div class="quick-setup-head__copy">
+          <small id="quick-setup-kicker">QUICK SETUP</small>
+          <h2 id="quick-setup-title">快速配置大模型 API</h2>
+          <p id="quick-setup-subtitle">只需复制一次 API Key，其余配置由 APP 完成。</p>
+        </div>
+        <button id="quick-setup-close" class="icon-btn" type="button" aria-label="关闭快速配置" title="关闭">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+
+      <ol class="quick-setup-progress" aria-label="配置进度">
+        <li class="is-active" data-quick-setup-progress="1" aria-current="step"><span>1</span><strong>获取 Key</strong></li>
+        <li data-quick-setup-progress="2"><span>2</span><strong>导入</strong></li>
+        <li data-quick-setup-progress="3"><span>3</span><strong>检查</strong></li>
+      </ol>
+
+      <div class="quick-setup-scroll">
+        <section class="quick-setup-step" data-quick-setup-step="1">
+          <div class="quick-setup-step__head">
+            <small>第 1 步</small>
+            <h3 id="quick-setup-step-one-title">在官网创建密钥</h3>
+          </div>
+          <ol id="quick-setup-instructions" class="quick-setup-instructions"></ol>
+          <p id="quick-setup-official-note" class="quick-setup-note">账号、充值和密钥均在官方页面完成。</p>
+        </section>
+
+        <section class="quick-setup-step hidden" data-quick-setup-step="2">
+          <div class="quick-setup-step__head">
+            <small>第 2 步</small>
+            <h3>导入刚复制的 API Key</h3>
+            <p>优先读取剪贴板；未获授权时可手动粘贴。</p>
+          </div>
+          <div id="quick-setup-key-summary" class="quick-setup-key-summary hidden" aria-live="polite"></div>
+          <button id="quick-setup-manual-entry" class="quick-setup-text-btn" type="button">无法读取？手动粘贴</button>
+          <div id="quick-setup-manual-wrap" class="quick-setup-manual hidden">
+            <label for="quick-setup-key-input">API Key</label>
+            <div class="quick-setup-key-row">
+              <input id="quick-setup-key-input" type="password" maxlength="512" autocomplete="new-password" autocapitalize="off" spellcheck="false" placeholder="粘贴 API Key">
+              <button id="quick-setup-use-key" class="onboarding-icon-btn" type="button" aria-label="使用此 API Key" title="使用此 API Key">
+                <img src="src/_logo/icons/chevron-down.svg" alt="">
+              </button>
+            </div>
+          </div>
+          <p class="quick-setup-privacy">密钥仅保存在当前浏览器或 APP 本地。</p>
+        </section>
+
+        <section class="quick-setup-step hidden" data-quick-setup-step="3">
+          <div class="quick-setup-step__head">
+            <small>第 3 步</small>
+            <h3>检查连接并保存</h3>
+          </div>
+          <div id="quick-setup-result" class="quick-setup-result" data-state="checking">
+            <span class="quick-setup-result__icon" aria-hidden="true"><img src="src/_logo/icons/refresh-cw.svg" alt=""></span>
+            <div><strong id="quick-setup-result-title">等待检查</strong><p id="quick-setup-result-copy">检查通过后会自动写入模型设置。</p></div>
+          </div>
+          <dl class="quick-setup-fixed-config">
+            <div><dt>提供商源</dt><dd id="quick-setup-provider-id">-</dd></div>
+            <div><dt>模型</dt><dd id="quick-setup-model">-</dd></div>
+            <div><dt>默认用途</dt><dd id="quick-setup-defaults">-</dd></div>
+          </dl>
+          <p class="quick-setup-cost-note">检查只发送一次极小请求。</p>
+        </section>
+
+        <p id="quick-setup-status" class="quick-setup-status" data-state="info" aria-live="polite">准备配置大模型 API。</p>
+      </div>
+
+      <footer class="quick-setup-foot">
+        <div class="quick-setup-actions" data-quick-setup-actions="1">
+          <button id="quick-setup-open-official" class="onboarding-action-btn is-primary" type="button">
+            <img src="src/_logo/icons/monitor-up.svg" alt="">
+            <span>打开官网并创建 Key</span>
+          </button>
+          <button id="quick-setup-to-import" class="onboarding-action-btn" type="button">
+            <img src="src/_logo/icons/chevron-down.svg" alt="">
+            <span>我已复制，下一步</span>
+          </button>
+        </div>
+        <div class="quick-setup-actions hidden" data-quick-setup-actions="2">
+          <button id="quick-setup-read-clipboard" class="onboarding-action-btn is-primary" type="button">
+            <img src="src/_logo/icons/download.svg" alt="">
+            <span>读取刚复制的 Key</span>
+          </button>
+        </div>
+        <div class="quick-setup-actions hidden" data-quick-setup-actions="3">
+          <button id="quick-setup-check" class="onboarding-action-btn is-primary" type="button">
+            <img src="src/_logo/icons/save-config.svg" alt="">
+            <span>检查并保存</span>
+          </button>
+          <button id="quick-setup-top-up" class="onboarding-action-btn is-primary hidden" type="button">
+            <img src="src/_logo/icons/monitor-up.svg" alt="">
+            <span>前往充值</span>
+          </button>
+          <button id="quick-setup-retry" class="onboarding-action-btn is-primary hidden" type="button">
+            <img src="src/_logo/icons/refresh-cw.svg" alt="">
+            <span>重试</span>
+          </button>
+          <button id="quick-setup-finish" class="onboarding-action-btn is-primary hidden" type="button">
+            <img src="src/_logo/icons/message-circle.svg" alt="">
+            <span>进入 APP</span>
+          </button>
+          <button id="quick-setup-view-settings" class="onboarding-action-btn hidden" type="button">
+            <img src="src/_logo/icons/settings.svg" alt="">
+            <span>查看模型设置</span>
+          </button>
+          <button id="quick-setup-reset" class="onboarding-action-btn" type="button">
+            <img src="src/_logo/icons/refresh-cw.svg" alt="">
+            <span>重新配置</span>
+          </button>
+        </div>
+      </footer>
+    </div>
   </div>
 
   <div id="settings-panel" class="modal hidden settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">

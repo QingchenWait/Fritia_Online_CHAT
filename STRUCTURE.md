@@ -1,5 +1,18 @@
 # STRUCTURE
 
+## 2026-07-17 New User Onboarding Mapping
+
+- 新增模块 `src/js/onboarding.js`：导出 `initOnboarding(options)` 和 `buildImportedSettings(providerKey, apiKey, settings)`，负责欢迎窗、本地偏好、三步向导、剪贴板/手动 Key 导入、官方 API 检查、错误映射和提供商持久化。
+- 新增布局模块 `src/js/onboarding_desktop.js` / `src/js/onboarding_mobile.js`：分别导出 `initOnboardingDesktopLayout()` / `initOnboardingMobileLayout()`，通过互斥 media query 处理横屏和竖屏交互。
+- 新增样式 `src/styles/onboarding.css`、`src/styles/onboarding-desktop.css`、`src/styles/onboarding-mobile.css`：公共 Soft UI 与 iOS 开关、桌面横屏双列按钮、移动竖屏单列按钮、两套自绘滚动条和矮视口滚动边界。
+- 新增欢迎 DOM：`#onboarding-welcome-panel`、`#onboarding-dismiss-toggle`、`#onboarding-deepseek`、`#onboarding-help`、`#onboarding-mimo`、`#onboarding-close`。
+- 新增向导 DOM：`#quick-setup-panel`、`[data-quick-setup-progress]`、`[data-quick-setup-step]`、`[data-quick-setup-actions]`、`#quick-setup-key-input`、`#quick-setup-check`、`#quick-setup-top-up`、`#quick-setup-finish`、`#quick-setup-view-settings`。
+- 新增存储键 `localStorage.fritia_chat_onboarding_dismissed`。值为 `1` 时启动不显示欢迎窗；关闭开关会删除该键。模型配置继续保存到 `localStorage.fritia-settings`。
+- DeepSeek 导入映射：`DeepSeek_Import` / `https://api.deepseek.com` / `deepseek-v4-flash`，更新 `defaultChatProviderId`。
+- MiMo 导入映射：`MiMo_Import` / `https://api.xiaomimimo.com/v1` / `mimo-v2.5`，更新 `defaultChatProviderId` 与 `defaultImageCaptionProviderId`；`MiMoTTS_Import` / `mimo-v2.5-tts-voiceclone`，更新 `defaultTtsProviderId`。
+- `src/js/ui.js` 监听 `fritia-ui-open-panel`，供欢迎窗打开帮助窗口或导入后的模型设置页；`src/js/main.js` 在 `initUi()` 后执行 `initOnboarding({ autoShow: true })`。
+- `src/js/llm_request.js`：`providerImageInputSupport()` 识别 `mimo-v2.5`；Xiaomi MiMo 请求增加 `api-key` 头。`sw.js` 缓存版本为 `fritia-next-chat-v29`，缓存新增三份 JS 与三份 CSS。
+
 ## 2026-07-11 App Help Mapping
 
 - 新增资源：`src/_logo/icons/help-circle.svg`，作为主菜单“使用说明”和帮助目录的帮助图标，来源为联网下载的 Lucide SVG。
@@ -319,6 +332,9 @@ fritia_online_next_chat/
     │   └── mcp_help.md
     ├── js/
     │   ├── main.js
+    │   ├── onboarding.js
+    │   ├── onboarding_desktop.js
+    │   ├── onboarding_mobile.js
     │   ├── storage.js
     │   ├── settings.js
     │   ├── characters.js
@@ -333,7 +349,10 @@ fritia_online_next_chat/
     │   ├── roundtable.js
     │   └── ui.js
     └── styles/
-        └── app.css
+        ├── app.css
+        ├── onboarding.css
+        ├── onboarding-desktop.css
+        └── onboarding-mobile.css
 ```
 
 ## 页面元素映射
@@ -345,6 +364,19 @@ fritia_online_next_chat/
 - `.conversation-list`：会话、联系人、群聊列表区域。
 - `.chat-pane`：聊天窗口区域。
 - `.detail-pane`：桌面右侧详情与快捷操作。
+
+### 新用户引导
+
+- `#onboarding-welcome-panel`：每次启动按本地偏好显示的无标题栏欢迎小窗。
+- `#onboarding-dismiss-toggle`：自绘 iOS 开关，控制 `fritia_chat_onboarding_dismissed`。
+- `#onboarding-deepseek` / `#onboarding-mimo`：进入对应官方 API 三步配置。
+- `#onboarding-help`：关闭欢迎窗并通过 `fritia-ui-open-panel` 打开 `#app-help-panel`。
+- `#quick-setup-panel`：DeepSeek/MiMo 共用的三步配置悬浮窗。
+- `[data-quick-setup-progress]` / `[data-quick-setup-step]` / `[data-quick-setup-actions]`：进度、正文和底部操作的步骤映射。
+- `#quick-setup-read-clipboard` / `#quick-setup-key-input`：剪贴板读取与手动 Key 输入。
+- `#quick-setup-check`：发起极小官方请求，成功后才调用 `saveSettings()`。
+- `#quick-setup-top-up`：余额不足时在系统默认浏览器打开官方充值页面。
+- `#quick-setup-finish` / `#quick-setup-view-settings`：进入 APP 或打开已导入提供商的模型设置页。
 
 ### 会话列表
 
@@ -580,7 +612,17 @@ fritia_online_next_chat/
 
 ### `src/js/main.js`
 
-- `boot()`：启动流程。先加载预置角色，再初始化 UI，最后注册 service worker。
+- `boot()`：启动流程。先加载预置角色，再初始化 UI 与新用户引导，最后注册 service worker。
+
+### `src/js/onboarding.js`
+
+- `initOnboarding({ autoShow })`：绑定欢迎窗与通用三步配置向导；返回打开、关闭和销毁控制器。
+- `buildImportedSettings(providerKey, apiKey, settings)`：生成不破坏其他提供商的增量设置 patch；DeepSeek 只更新默认对话，MiMo 更新对话、图像转述与 TTS 默认项。
+
+### `src/js/onboarding_desktop.js` / `src/js/onboarding_mobile.js`
+
+- `initOnboardingDesktopLayout()`：桌面横屏布局标记和步骤滚动复位。
+- `initOnboardingMobileLayout()`：移动/竖屏布局标记、`visualViewport` 高度同步、步骤滚动复位和输入框软键盘可见性。
 
 ### `tools/static_server.mjs`
 
@@ -588,7 +630,7 @@ fritia_online_next_chat/
 
 ### `sw.js`
 
-- `CACHE_NAME = 'fritia-next-chat-v2'`：更新离线缓存版本，旧缓存会在 activate 阶段删除。
+- `CACHE_NAME = 'fritia-next-chat-v29'`：更新离线缓存版本，旧缓存会在 activate 阶段删除。
 - `install` 阶段调用 `skipWaiting()`，`activate` 阶段调用 `clients.claim()`，让新缓存策略尽快接管页面。
 - HTML / JS / CSS / JSON 请求使用 network-first，避免前端更新后继续返回旧代码。
 - 图片、图标等静态资源优先走 cache-first，降低重复加载成本。
@@ -636,6 +678,7 @@ fritia_online_next_chat/
 - `requestLlmCompletion({ settings, messages, body })`：统一发起 OpenAI-compatible chat completions 请求。图片请求会按默认对话模型能力单次路由到默认图像转述模型，或在默认模型返回图片不支持错误后回退。
 - `messagesContainImages(messages)`：检测 `image_url` content part，用于判断本次请求是否需要图像输入能力。
 - `providerSupportsImageInput(provider)`：根据模型名识别明确的多模态模型；内部请求路由对未知模型采用先试默认模型、失败再回退的策略。
+- Xiaomi MiMo 域名请求同时发送 `Authorization: Bearer` 与 `api-key`；`mimo-v2.5` 被识别为明确支持图片输入。
 
 ### `src/js/characters.js`
 
@@ -734,7 +777,7 @@ fritia_online_next_chat/
 
 ## CSS 结构
 
-`src/styles/app.css` 使用单文件样式，主要分区：
+`src/styles/app.css` 保留应用主样式；新用户引导拆分为独立公共、桌面横屏和移动竖屏样式：
 
 - 根变量：颜色、间距、尺寸、三栏宽度。
 - 主布局：`.app-shell`、`.rail`、`.conversation-list`、`.chat-pane`、`.detail-pane`、`.is-detail-open`。
@@ -748,6 +791,9 @@ fritia_online_next_chat/
 - 群聊侧边面板：`.group-info-panel`、`.group-info-shell`、`.group-info-member-grid`、`.group-info-member-editor`、`.toggle-row`、`.group-setting-row`。
 - 记忆节点：`.memory-layout`、`.memory-command-panel`、`.memory-graph-wrap`、`.memory-result-panel`、`.memory-archive-popover`、`.memory-settings-popover`、`.memory-node-detail`。
 - 响应式：`@media (max-width: 1180px)` 隐藏详情栏，`@media (max-width: 760px)` 切换移动竖屏布局。
+- `src/styles/onboarding.css`：欢迎窗、向导、iOS 开关、进度、状态和按钮公共视觉。
+- `src/styles/onboarding-desktop.css`：`min-width: 761px + landscape` 双列操作、桌面窗口约束和横屏自绘滚动条。
+- `src/styles/onboarding-mobile.css`：`max-width: 760px 或 portrait` 单列操作、可视视口高度、安全区和竖屏自绘滚动条。
 
 ## 事件
 
@@ -756,6 +802,9 @@ fritia_online_next_chat/
 - `fritia-advanced-settings-updated`：高级设置更新。
 - `fritia-knowledge-base-updated`：知识库更新。
 - `fritia-long-term-memory-updated`：长期记忆更新。
+- `fritia-ui-open-panel`：跨模块请求打开帮助或设置悬浮窗口，可携带设置分组、模型页签和提供商 id。
+- `fritia-onboarding-step-changed`：向横屏/竖屏布局模块广播当前向导步骤。
+- `fritia-onboarding-closed`：欢迎窗或快速配置向导关闭通知。
 
 ## 资源许可记录
 

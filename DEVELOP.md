@@ -1,5 +1,15 @@
 # DEVELOP
 
+## 2026-07-17 New User Onboarding / Quick API Setup
+
+- 新增 `src/js/onboarding.js`，复刻“芙提雅 ONLINE NEXT”的三步“获取 Key / 导入 / 检查”流程。DeepSeek 和 MiMo 官网均通过系统默认浏览器或新标签打开；从官网返回后保留当前步骤并高亮下一操作。
+- 新增 `src/js/onboarding_desktop.js` 与 `src/js/onboarding_mobile.js`，分别处理桌面横屏和移动/竖屏的布局状态、步骤滚动复位、可视视口高度与软键盘聚焦滚动。
+- 欢迎窗使用 `localStorage.fritia_chat_onboarding_dismissed` 保存“不再弹出”偏好；API Key 继续只写入现有 `localStorage.fritia-settings`，不会清空已有提供商、角色、聊天或其他用户数据。
+- `buildImportedSettings()` 对同名导入源执行更新，否则追加。DeepSeek 写入 `DeepSeek_Import / https://api.deepseek.com / deepseek-v4-flash`；MiMo 写入 `MiMo_Import / mimo-v2.5` 和 `MiMoTTS_Import / mimo-v2.5-tts-voiceclone`，并更新三个默认模型 id。
+- `src/js/llm_request.js` 将 `mimo-v2.5` 标记为明确支持图片输入；请求 Xiaomi MiMo 域名时同时发送 OpenAI-compatible `Authorization` 与官方 `api-key` 请求头，TTS 仍沿用既有 `api-key` 实现。
+- 新增 `src/styles/onboarding.css`、`onboarding-desktop.css`、`onboarding-mobile.css`。欢迎窗无标题栏；快速配置正文独立滚动、底部操作固定；横屏和竖屏均定义自绘滚动条。`sw.js` 缓存版本更新到 `fritia-next-chat-v29`。
+- 验证覆盖 1440×900、390×844、915×412：欢迎窗和向导均位于视口内，按钮文字不换行，矮横屏正文可滚且底部操作可见；通过 Playwright 路由模拟验证 DeepSeek/MiMo 成功导入、帮助窗口跳转和“不再弹出”刷新行为。
+
 ## 2026-07-11 App Help
 
 - `index.html` 在主菜单中新增 `#main-menu-help`，并新增 `#app-help-panel` 独立悬浮帮助窗口；窗口横屏显示文档目录和 Markdown 阅读区，竖屏通过 `.is-content-open` 在目录层和内容层之间切换。

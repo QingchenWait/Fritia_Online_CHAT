@@ -1,9 +1,15 @@
-const CACHE_NAME = 'fritia-next-chat-v28';
+const CACHE_NAME = 'fritia-next-chat-v29';
 const CORE_ASSETS = [
   './',
   './index.html',
   './src/styles/app.css',
+  './src/styles/onboarding.css',
+  './src/styles/onboarding-desktop.css',
+  './src/styles/onboarding-mobile.css',
   './src/js/main.js',
+  './src/js/onboarding.js',
+  './src/js/onboarding_desktop.js',
+  './src/js/onboarding_mobile.js',
   './src/js/runtime_env.js',
   './src/js/storage.js',
   './src/js/characters.js',

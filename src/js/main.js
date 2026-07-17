@@ -3,6 +3,7 @@ import { initUi } from './ui.js';
 import { migrateLegacyAppMediaToIndexedDb } from './storage.js';
 import { migrateLegacyStickersToIndexedDb } from './stickers.js';
 import { initRuntimeEnvironment } from './runtime_env.js';
+import { initOnboarding } from './onboarding.js';
 
 async function boot() {
   initRuntimeEnvironment();
@@ -10,6 +11,7 @@ async function boot() {
   await migrateLegacyStickersToIndexedDb();
   await ensurePresetCharacters();
   initUi();
+  initOnboarding({ autoShow: true });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('./sw.js').catch(err => {
       console.warn('[pwa] service worker registration failed', err);

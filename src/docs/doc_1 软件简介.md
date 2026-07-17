@@ -8,7 +8,7 @@
 - 支持工具调用 (MCP)，商店中有 2000+ 个 MCP 插件可供下载，让恋人们真正成为你的贴心特助。
 
 
-### 游戏信息
+### 终端信息
 
 - 官方网站：[https://fritia.online](https://fritia.online)
 - 客户端下载：[GitHub](https://github.com/QingchenWait/Fritia_Online_CHAT/releases) | [百度网盘](https://pan.baidu.com/s/1CzvxrLvKgNi9EwMuldtaCg?pwd=chen)

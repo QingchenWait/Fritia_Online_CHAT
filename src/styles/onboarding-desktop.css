@@ -1,0 +1,71 @@
+@media (min-width: 761px) and (orientation: landscape) {
+  .onboarding-modal {
+    padding: 1rem;
+    place-items: center;
+  }
+
+  .onboarding-welcome-shell {
+    width: min(35rem, calc(100vw - 2rem));
+    max-height: min(36rem, calc(100dvh - 2rem));
+  }
+
+  .onboarding-welcome-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-setup-shell {
+    width: min(45rem, calc(100vw - 2rem));
+    max-height: min(42rem, calc(100dvh - 2rem));
+  }
+
+  .quick-setup-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-setup-actions[data-quick-setup-actions="2"] {
+    grid-template-columns: minmax(14rem, 22rem);
+    justify-content: end;
+  }
+
+  .onboarding-welcome-scroll,
+  .quick-setup-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 91, 255, 0.48) rgba(120, 140, 180, 0.06);
+  }
+
+  .onboarding-welcome-scroll::-webkit-scrollbar,
+  .quick-setup-scroll::-webkit-scrollbar {
+    width: 0.48rem;
+  }
+
+  .onboarding-welcome-scroll::-webkit-scrollbar-track,
+  .quick-setup-scroll::-webkit-scrollbar-track {
+    background: rgba(120, 140, 180, 0.06);
+    border-radius: 999px;
+  }
+
+  .onboarding-welcome-scroll::-webkit-scrollbar-thumb,
+  .quick-setup-scroll::-webkit-scrollbar-thumb {
+    border: 0.1rem solid transparent;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #7d8cff, #635bff) padding-box;
+  }
+
+  @media (max-height: 34rem) {
+    .quick-setup-head {
+      padding-block: 0.55rem;
+    }
+
+    .quick-setup-head__copy p {
+      display: none;
+    }
+
+    .quick-setup-progress {
+      padding-block: 0.48rem;
+    }
+
+    .quick-setup-scroll {
+      padding-block: 0.7rem;
+    }
+  }
+}

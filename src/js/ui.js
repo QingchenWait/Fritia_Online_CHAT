@@ -320,6 +320,16 @@ function bindGlobalEvents() {
   document.querySelectorAll('[data-panel-close]').forEach(button => {
     button.addEventListener('click', () => closePanel(button.dataset.panelClose));
   });
+  document.addEventListener('fritia-ui-open-panel', event => {
+    const detail = event.detail || {};
+    if (!detail.id) return;
+    if (detail.chatProviderId) state.selectedChatProviderId = detail.chatProviderId;
+    if (detail.ttsProviderId) state.selectedTtsProviderId = detail.ttsProviderId;
+    openPanel(detail.id);
+    if (detail.settingsSection) showSettingsSection(detail.settingsSection);
+    if (detail.modelTab) showModelProviderTab(detail.modelTab);
+    if (detail.id === 'settings-panel') renderModelSettings(getSettings());
+  });
   document.querySelectorAll('[data-view-btn]').forEach(button => {
     button.addEventListener('click', () => {
       document.querySelectorAll('[data-view-btn]').forEach(item => item.classList.toggle('is-active', item === button));

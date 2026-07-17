@@ -1,5 +1,13 @@
 # Fritia Online NEXT Chat
 
+## 2026-07-17 New User Onboarding
+
+- 每次进入网页或打包 APP 时都会显示无标题栏欢迎小窗；开启“不再弹出”后会把偏好保存到本地，后续启动直接进入主界面。
+- 欢迎窗可直接进入 DeepSeek 或 MiMo 三步快速配置，也可打开“使用说明”悬浮窗口。横屏按钮每行 2 个，竖屏每行 1 个，文字保持单行。
+- 快速配置按“获取 Key → 导入 → 检查”进行：官网在系统默认浏览器或新标签打开，APP 优先读取剪贴板，未获授权时可手动粘贴；连接通过后才保存密钥。
+- DeepSeek 会新增/更新 `DeepSeek_Import`，使用 `https://api.deepseek.com` 和 `deepseek-v4-flash`，并设为默认对话模型。
+- MiMo 会新增/更新 `MiMo_Import`，使用 `https://api.xiaomimimo.com/v1` 和 `mimo-v2.5`，设为默认对话与图像转述模型；同时新增/更新 `MiMoTTS_Import`，使用 `mimo-v2.5-tts-voiceclone`，并设为默认文字转语音模型。
+
 ## 2026-07-11 App Help
 
 - 主菜单在“插件商店”和“访问官网”之间新增“使用说明”，使用联网下载的帮助图标，点击后打开独立悬浮帮助窗口。

@@ -47,6 +47,7 @@ function providerImageInputSupport(provider) {
     /vision|multimodal|omni|image|pixtral/,
     /claude-3|claude-sonnet|claude-opus|claude-haiku/,
     /gemini/,
+    /mimo-v2\.5/,
     /qwen[\w.-]*(?:vl|omni|vision)/,
     /glm-[\w.-]*v/,
     /internvl/,
@@ -70,12 +71,14 @@ function buildProviderBody(provider, settings, body, messages) {
 }
 
 async function fetchCompletion(provider, body) {
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: 'Bearer ' + provider.apiKey
+  };
+  if (isXiaomiMimoProvider(provider)) headers['api-key'] = provider.apiKey;
   const response = await fetch(`${normalizeBaseUrl(provider.baseUrl)}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${provider.apiKey}`
-    },
+    headers,
     body: JSON.stringify(body)
   });
   if (!response.ok) {
@@ -151,4 +154,12 @@ function annotateProviderError(error, provider, needsImages) {
 
 function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function isXiaomiMimoProvider(provider) {
+  try {
+    return new URL(String(provider?.baseUrl || '')).hostname.toLowerCase().endsWith('xiaomimimo.com');
+  } catch {
+    return /xiaomimimo\.com/i.test(String(provider?.baseUrl || ''));
+  }
 }
