@@ -243,6 +243,42 @@
     padding: 0 1.4rem 1.3rem;
   }
 
+  .role-migration-confirm-actions.is-complete {
+    grid-template-columns: minmax(12rem, 20rem);
+    justify-content: center;
+  }
+
+  .role-migration-success {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    border: 1px solid rgba(0, 168, 132, 0.2);
+    border-radius: var(--radius);
+    background: rgba(0, 168, 132, 0.07);
+    padding: 0.75rem 0.85rem;
+  }
+
+  .role-migration-success > img {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+    margin-top: 0.12rem;
+    filter: invert(43%) sepia(72%) saturate(761%) hue-rotate(124deg) brightness(86%) contrast(101%);
+  }
+
+  .role-migration-success strong {
+    display: block;
+    color: #007a61;
+    font-size: 0.86rem;
+  }
+
+  .role-migration-success p {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+
   .role-migration-failure {
     position: fixed;
     top: 1.25rem;

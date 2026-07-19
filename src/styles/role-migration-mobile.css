@@ -255,6 +255,42 @@
     background: rgba(255, 255, 255, 0.97);
   }
 
+  .role-migration-confirm-actions.is-complete {
+    grid-template-columns: minmax(11rem, 1fr);
+    justify-content: center;
+  }
+
+  .role-migration-success {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    border: 1px solid rgba(0, 168, 132, 0.2);
+    border-radius: var(--radius);
+    background: rgba(0, 168, 132, 0.07);
+    padding: 0.65rem 0.7rem;
+  }
+
+  .role-migration-success > img {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    margin-top: 0.1rem;
+    filter: invert(43%) sepia(72%) saturate(761%) hue-rotate(124deg) brightness(86%) contrast(101%);
+  }
+
+  .role-migration-success strong {
+    display: block;
+    color: #007a61;
+    font-size: 0.8rem;
+  }
+
+  .role-migration-success p {
+    margin: 0.2rem 0 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+    line-height: 1.48;
+  }
+
   .role-migration-failure {
     position: fixed;
     top: max(0.625rem, env(safe-area-inset-top));

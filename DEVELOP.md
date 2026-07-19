@@ -497,4 +497,5 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - `src/js/long_term_memory.js` 新增 `migrateLongTermMemoryCharacterData()`，在原有容量裁剪规则内原位改写长期记忆归属，避免迁移时临时复制导致 420 条上限误裁剪。
 - MCP 选择配置按目标私聊会话合并，源会话配置仅在 app store 和长期记忆校验通过后删除；媒体和知识库 IndexedDB 记录由备份覆盖，消息附件引用保持有效。
 - `index.html` 的迁移提示、确认和恢复 DOM 使用 `role-migration-*` 前缀；横屏和竖屏样式分别位于 `src/styles/role-migration-desktop.css`、`src/styles/role-migration-mobile.css`。
+- 迁移成功后 `state.roleMigration.completed` 保持确认窗口打开，显示 100% 进度、成功摘要和单独的“完成”按钮；移动返回操作在该状态下只消费事件，不关闭窗口。`#detail-role-migration-action` 仅在当前角色存在迁移候选时显示，并复用 `openRoleMigrationConfirm()`。
 - `sw.js` 缓存批次更新为 `fritia-next-chat-v30` 并加入迁移模块与两套布局样式；`package.json` 的 `check` 脚本加入 `role_migration.js`。

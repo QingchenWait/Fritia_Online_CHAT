@@ -857,5 +857,7 @@ fritia_online_next_chat/
 - `index.html`
   - `#role-migration-prompt`：聊天页同名角色提示卡。
   - `#role-migration-confirm`：迁移二次确认与进度窗口。
+  - `#role-migration-complete-btn` / `#role-migration-success`：迁移完成后的成功状态与显式关闭操作。
   - `#role-migration-failure`：失败恢复悬浮窗口及 ZIP 文件选择器。
+- `#detail-role-migration-action`：角色资料卡“快速操作”中的迁移入口，仅对存在同名内置目标的自定义角色显示。
 - `src/styles/role-migration-desktop.css` / `src/styles/role-migration-mobile.css`：横屏桌面和竖屏移动端独立布局、进度状态与响应式窗口样式。

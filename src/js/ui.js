@@ -179,6 +179,7 @@ const state = {
     promptOpen: false,
     confirmOpen: false,
     running: false,
+    completed: false,
     progress: null,
     error: ''
   },
@@ -328,6 +329,7 @@ function bindGlobalEvents() {
     if (event.detail?.status === 'failed') {
       state.roleMigration.confirmOpen = false;
       state.roleMigration.running = false;
+      state.roleMigration.completed = false;
     }
     renderRoleMigrationSurfaces();
   });
@@ -1082,8 +1084,10 @@ function bindRoleMigrationControls() {
     renderRoleMigrationSurfaces();
   });
   document.getElementById('role-migration-confirm-btn')?.addEventListener('click', startRoleMigration);
+  document.getElementById('role-migration-complete-btn')?.addEventListener('click', completeRoleMigrationSurface);
+  document.getElementById('detail-role-migration-action')?.addEventListener('click', openRoleMigrationConfirm);
   document.getElementById('role-migration-cancel-btn')?.addEventListener('click', () => {
-    if (state.roleMigration.running) return;
+    if (state.roleMigration.running || state.roleMigration.completed) return;
     state.roleMigration.confirmOpen = false;
     state.roleMigration.error = '';
     renderRoleMigrationSurfaces();
@@ -1111,12 +1115,13 @@ function bindRoleMigrationControls() {
 }
 
 function openRoleMigrationConfirm() {
-  const candidate = state.roleMigration.candidate || findRoleMigrationCandidate(state.store, getActiveConversation());
+  const candidate = findRoleMigrationCandidate(state.store, getActiveConversation()) || state.roleMigration.candidate;
   if (!candidate) return;
   state.roleMigration.candidate = candidate;
   state.roleMigration.promptOpen = false;
   state.roleMigration.confirmOpen = true;
   state.roleMigration.running = false;
+  state.roleMigration.completed = false;
   state.roleMigration.error = '';
   state.roleMigration.progress = {
     status: 'idle',
@@ -1149,12 +1154,13 @@ async function startRoleMigration() {
       }
     });
     state.roleMigration.running = false;
-    state.roleMigration.confirmOpen = false;
+    state.roleMigration.completed = true;
+    state.roleMigration.confirmOpen = true;
     state.roleMigration.promptOpen = false;
-    state.roleMigration.candidate = null;
     renderRoleMigrationSurfaces();
   } catch (error) {
     state.roleMigration.running = false;
+    state.roleMigration.completed = false;
     state.roleMigration.error = error?.message || '角色迁移失败。';
     const persisted = getRoleMigrationState();
     if (persisted?.status === 'failed') state.roleMigration.persisted = persisted;
@@ -1168,6 +1174,17 @@ async function startRoleMigration() {
     };
     renderRoleMigrationSurfaces();
   }
+}
+
+function completeRoleMigrationSurface() {
+  if (!state.roleMigration.completed || state.roleMigration.running) return;
+  state.roleMigration.completed = false;
+  state.roleMigration.confirmOpen = false;
+  state.roleMigration.promptOpen = false;
+  state.roleMigration.candidate = null;
+  state.roleMigration.progress = null;
+  state.roleMigration.error = '';
+  renderRoleMigrationSurfaces();
 }
 
 function renderRoleMigrationRecoveryProgress(progress = 0) {
@@ -1207,9 +1224,19 @@ function renderRoleMigrationSurfaces() {
   const progress = state.roleMigration.progress || persisted;
   const progressNode = document.getElementById('role-migration-progress');
   const running = Boolean(state.roleMigration.running || progress?.status === 'migrating');
-  progressNode?.classList.toggle('hidden', !running && !state.roleMigration.error);
-  if (progressNode && (running || state.roleMigration.error)) renderRoleMigrationProgress(progress || {});
-  document.getElementById('role-migration-confirm-actions')?.classList.toggle('hidden', running);
+  progressNode?.classList.toggle('hidden', !running && !state.roleMigration.error && !state.roleMigration.completed);
+  if (progressNode && (running || state.roleMigration.error || state.roleMigration.completed)) {
+    renderRoleMigrationProgress(state.roleMigration.completed
+      ? { ...(progress || {}), label: '迁移成功完成', progress: 1, errorMessage: '全部数据已通过校验。点击“完成”关闭窗口。' }
+      : (progress || {}));
+  }
+  const actions = document.getElementById('role-migration-confirm-actions');
+  actions?.classList.toggle('hidden', running && !state.roleMigration.completed);
+  actions?.classList.toggle('is-complete', state.roleMigration.completed);
+  document.getElementById('role-migration-confirm-btn')?.classList.toggle('hidden', state.roleMigration.completed);
+  document.getElementById('role-migration-cancel-btn')?.classList.toggle('hidden', running || state.roleMigration.completed);
+  document.getElementById('role-migration-complete-btn')?.classList.toggle('hidden', !state.roleMigration.completed);
+  document.getElementById('role-migration-success')?.classList.toggle('hidden', !state.roleMigration.completed);
   if (failed || recovering) {
     const errorDetail = state.roleMigration.error || persisted?.errorMessage || '迁移未完整完成。';
     const backupDetail = persisted?.backupFilename ? `备份文件：${persisted.backupFilename}` : '';
@@ -3691,7 +3718,7 @@ function closeTransientBackSurface() {
 
 function closeRoleMigrationSurface() {
   if (state.roleMigration.confirmOpen) {
-    if (state.roleMigration.running) return true;
+    if (state.roleMigration.running || state.roleMigration.completed) return true;
     state.roleMigration.confirmOpen = false;
     state.roleMigration.error = '';
     renderRoleMigrationSurfaces();
@@ -4489,13 +4516,20 @@ function renderDetailCharacterAction(character) {
   const button = document.getElementById('detail-character-action');
   const icon = document.getElementById('detail-character-action-icon');
   const label = document.getElementById('detail-character-action-label');
+  const migrationButton = document.getElementById('detail-role-migration-action');
   const editable = isEditableCharacter(character);
+  const migrationCandidate = character ? findRoleMigrationCandidate(state.store, getActiveConversation()) : null;
   if (button) {
     button.dataset.panelOpen = editable ? 'character-edit-panel' : 'character-import-panel';
     button.title = editable ? '编辑角色' : '导入角色';
   }
   if (icon) icon.src = editable ? 'src/_logo/icons/pencil.svg' : 'src/_logo/icons/user-plus.svg';
   if (label) label.textContent = editable ? '编辑角色' : '导入角色';
+  migrationButton?.classList.toggle('hidden', !migrationCandidate);
+  if (migrationCandidate) {
+    migrationButton.title = `迁移到内置角色「${migrationCandidate.targetCharacter.name}」`;
+    migrationButton.setAttribute('aria-label', `迁移到内置角色「${migrationCandidate.targetCharacter.name}」`);
+  }
 }
 
 function getActivePrivateCharacter() {

@@ -223,6 +223,10 @@
             <img id="detail-character-action-icon" src="src/_logo/icons/user-plus.svg" alt="">
             <span id="detail-character-action-label">导入角色</span>
           </button>
+          <button id="detail-role-migration-action" class="detail-role-migration-action hidden" type="button" title="迁移角色">
+            <img src="src/_logo/icons/refresh-cw.svg" alt="">
+            <span>迁移角色</span>
+          </button>
           <button type="button" data-panel-open="settings-panel" data-settings-section-jump="knowledge">
             <img src="src/_logo/icons/database.svg" alt="">
             <span>知识库</span>
@@ -795,11 +799,18 @@
           <strong>不会迁移的数据</strong>
           <p>内置角色的基础信息、头像、TTS 参考语音、人格设定提示词和示例对话会保持系统内置版本。自定义角色中的这些设定不会合并，并会在迁移完成后直接丢弃。</p>
         </section>
-        <p class="role-migration-danger"><img src="src/_logo/icons/circle-alert.svg" alt="">迁移过程不可恢复。APP 会先自动导出最新 ZIP 备份；仅在全部数据通过校验后，才会删除自定义角色。</p>
+        <p class="role-migration-danger"><img src="src/_logo/icons/circle-alert.svg" alt="">迁移过程不可中断。APP 会先自动导出最新 ZIP 备份；仅在全部数据通过校验后，才会删除自定义角色。</p>
         <div id="role-migration-progress" class="role-migration-progress hidden" aria-live="polite">
           <div><span id="role-migration-progress-label">准备迁移</span><strong id="role-migration-progress-percent">0%</strong></div>
           <i><b id="role-migration-progress-fill"></b></i>
           <p id="role-migration-progress-detail">正在准备迁移前备份。</p>
+        </div>
+        <div id="role-migration-success" class="role-migration-success hidden" aria-live="polite">
+          <img src="src/_logo/icons/circle-alert.svg" alt="">
+          <div>
+            <strong>迁移成功完成</strong>
+            <p>全部数据已通过校验，自定义角色已经安全移除。点击“完成”关闭此窗口。</p>
+          </div>
         </div>
       </div>
       <div id="role-migration-confirm-actions" class="role-migration-confirm-actions">
@@ -808,6 +819,9 @@
         </button>
         <button id="role-migration-cancel-btn" class="btn" type="button">
           <img src="src/_logo/icons/x.svg" alt=""><span>取消</span>
+        </button>
+        <button id="role-migration-complete-btn" class="btn btn-primary hidden" type="button">
+          <img src="src/_logo/icons/circle-alert.svg" alt=""><span>完成</span>
         </button>
       </div>
     </section>
