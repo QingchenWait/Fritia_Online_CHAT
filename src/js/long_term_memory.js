@@ -643,6 +643,72 @@ export function importLongTermMemory(data = {}) {
     return { imported, edges: edgeImported, skipped };
 }
 
+export function removeLongTermMemoryCharacterData(characterId) {
+    const id = String(characterId || '').trim();
+    if (!id) return { removedMemories: 0, removedEdges: 0 };
+    const store = loadRawStore();
+    const sourceScope = buildMemoryScope(id);
+    const removedMemoryIds = new Set(store.memories
+        .filter(item => item.characterId === id || item.scope === sourceScope)
+        .map(item => item.id));
+    const memories = store.memories.filter(item => !removedMemoryIds.has(item.id));
+    const edges = store.edges
+        .filter(item => item.characterId !== id && item.scope !== sourceScope)
+        .map(item => ({
+            ...item,
+            sourceMemoryIds: (item.sourceMemoryIds || []).filter(memoryId => !removedMemoryIds.has(memoryId))
+        }))
+        .filter(item => item.sourceMemoryIds.length > 0);
+    const removedEdges = store.edges.length - edges.length;
+    const saved = saveStore({ ...store, memories, edges });
+    refreshMemoryPanelIfOpen(saved);
+    return { removedMemories: removedMemoryIds.size, removedEdges };
+}
+
+export function migrateLongTermMemoryCharacterData(sourceCharacterId, targetCharacterId, targetCharacterName, messageIdMap = new Map()) {
+    const sourceId = String(sourceCharacterId || '').trim();
+    const targetId = String(targetCharacterId || '').trim();
+    if (!sourceId || !targetId || sourceId === targetId) return { memories: 0, edges: 0, memoryIds: [] };
+    const store = loadRawStore();
+    const sourceScope = buildMemoryScope(sourceId);
+    const targetScope = buildMemoryScope(targetId);
+    const migratedMemoryIds = [];
+    let migratedEdges = 0;
+    const memories = store.memories.map(item => {
+        if (item.characterId !== sourceId && item.scope !== sourceScope) return item;
+        migratedMemoryIds.push(item.id);
+        return {
+            ...item,
+            characterId: targetId,
+            characterName: clampString(targetCharacterName || item.characterName, 32),
+            scope: item.scope === sourceScope ? targetScope : item.scope,
+            speakerId: item.speakerId === sourceId ? targetId : item.speakerId,
+            speakerName: item.speakerId === sourceId
+                ? clampString(targetCharacterName || item.speakerName, 32)
+                : item.speakerName,
+            sourceMessageIds: (item.sourceMessageIds || []).map(id => messageIdMap.get?.(id) || id),
+            updatedAt: nowMs()
+        };
+    });
+    const edges = store.edges.map(item => {
+        if (item.characterId !== sourceId && item.scope !== sourceScope) return item;
+        migratedEdges += 1;
+        return {
+            ...item,
+            characterId: item.characterId === sourceId ? targetId : item.characterId,
+            scope: item.scope === sourceScope ? targetScope : item.scope,
+            updatedAt: nowMs()
+        };
+    });
+    const saved = saveStore({ ...store, memories, edges });
+    const savedIds = new Set(saved.memories.map(item => item.id));
+    if (migratedMemoryIds.some(id => !savedIds.has(id))) {
+        throw new Error('长期记忆迁移校验失败。');
+    }
+    refreshMemoryPanelIfOpen(saved);
+    return { memories: migratedMemoryIds.length, edges: migratedEdges, memoryIds: migratedMemoryIds };
+}
+
 function mergeMemory(a, b) {
     return {
         ...a,

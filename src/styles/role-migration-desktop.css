@@ -1,0 +1,296 @@
+@media (min-width: 761px) and (orientation: landscape) {
+  .role-migration-prompt {
+    position: absolute;
+    top: 4.625rem;
+    right: 1.125rem;
+    z-index: 32;
+    width: min(26rem, calc(100% - 2.25rem));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: var(--shadow-floating);
+    backdrop-filter: blur(1.125rem);
+    padding: 1rem;
+    animation: role-migration-float-in 180ms ease-out;
+  }
+
+  .role-migration-prompt header,
+  .role-migration-confirm-card > header,
+  .role-migration-failure-card > header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .role-migration-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: rgba(79, 99, 255, 0.11);
+  }
+
+  .role-migration-icon img {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .role-migration-icon.is-danger {
+    background: rgba(217, 58, 58, 0.1);
+  }
+
+  .role-migration-icon.is-danger img,
+  .role-migration-danger img {
+    filter: invert(34%) sepia(73%) saturate(1732%) hue-rotate(332deg) brightness(91%) contrast(90%);
+  }
+
+  .role-migration-prompt header > div,
+  .role-migration-confirm-card > header > div,
+  .role-migration-failure-card > header > div {
+    min-width: 0;
+  }
+
+  .role-migration-prompt strong {
+    font-size: 0.9rem;
+  }
+
+  .role-migration-prompt p {
+    margin: 0.3rem 0 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+
+  .role-migration-prompt-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(7.5rem, 1.4fr);
+    gap: 0.5rem;
+    margin-top: 0.9rem;
+  }
+
+  .role-migration-prompt-actions .btn,
+  .role-migration-confirm-actions .btn,
+  .role-migration-file-button {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+  }
+
+  .role-migration-prompt-actions .btn img,
+  .role-migration-confirm-actions .btn img,
+  .role-migration-file-button img {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+  }
+
+  .role-migration-prompt-actions .btn-primary img,
+  .role-migration-confirm-actions .btn-primary img,
+  .role-migration-file-button img {
+    filter: brightness(0) invert(1);
+  }
+
+  .role-migration-confirm {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: clamp(1.25rem, 3vh, 2.5rem);
+    background: rgba(15, 23, 42, 0.44);
+    backdrop-filter: blur(0.35rem);
+  }
+
+  .role-migration-confirm-card {
+    width: min(44rem, 100%);
+    max-height: calc(100dvh - clamp(2.5rem, 6vh, 5rem));
+    overflow: auto;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 1.75rem 4.5rem rgba(30, 45, 90, 0.24);
+    animation: role-migration-dialog-in 180ms ease-out;
+  }
+
+  .role-migration-confirm-card > header {
+    padding: 1.25rem 1.4rem 1rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .role-migration-confirm-card small,
+  .role-migration-failure-card small {
+    display: block;
+    color: var(--brand);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+
+  .role-migration-confirm-card h2,
+  .role-migration-failure-card h2 {
+    margin: 0.15rem 0 0;
+    font-size: 1.22rem;
+    line-height: 1.35;
+  }
+
+  .role-migration-confirm-card header p {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.84rem;
+  }
+
+  .role-migration-confirm-body {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1.15rem 1.4rem;
+  }
+
+  .role-migration-copy-block strong {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.9rem;
+  }
+
+  .role-migration-copy-block p,
+  .role-migration-danger,
+  .role-migration-progress p,
+  .role-migration-failure-card > p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.62;
+  }
+
+  .role-migration-copy-block.is-warning {
+    border-left: 0.2rem solid rgba(183, 121, 31, 0.5);
+    background: rgba(255, 248, 231, 0.72);
+    padding: 0.75rem 0.85rem;
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+
+  .role-migration-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.65rem;
+  }
+
+  .role-migration-stats span {
+    border: 1px solid rgba(79, 99, 255, 0.15);
+    border-radius: 999px;
+    background: rgba(79, 99, 255, 0.07);
+    color: #3140d4;
+    padding: 0.3rem 0.62rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .role-migration-danger {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    color: var(--danger);
+    font-weight: 650;
+  }
+
+  .role-migration-danger img {
+    width: 1.05rem;
+    height: 1.05rem;
+    flex: 0 0 auto;
+    margin-top: 0.18rem;
+  }
+
+  .role-migration-progress {
+    display: grid;
+    gap: 0.5rem;
+    border-top: 1px solid var(--line);
+    padding-top: 0.9rem;
+  }
+
+  .role-migration-progress > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    color: var(--text);
+    font-size: 0.8rem;
+  }
+
+  .role-migration-progress i {
+    height: 0.45rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(120, 140, 180, 0.15);
+  }
+
+  .role-migration-progress i b {
+    display: block;
+    width: var(--migration-progress, 0%);
+    height: 100%;
+    border-radius: inherit;
+    background: var(--brand-gradient);
+    transition: width 180ms ease;
+  }
+
+  .role-migration-confirm-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    padding: 0 1.4rem 1.3rem;
+  }
+
+  .role-migration-failure {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    z-index: 110;
+    width: min(26rem, calc(100vw - 2.5rem));
+    pointer-events: none;
+  }
+
+  .role-migration-failure-card {
+    pointer-events: auto;
+    border: 1px solid rgba(217, 58, 58, 0.2);
+    border-radius: var(--radius);
+    background: #fff;
+    isolation: isolate;
+    opacity: 1;
+    box-shadow: var(--shadow-floating);
+    backdrop-filter: blur(1.125rem);
+    padding: 1rem;
+    animation: role-migration-float-in 180ms ease-out;
+  }
+
+  .role-migration-failure-card > p {
+    margin-top: 0.8rem;
+  }
+
+  .role-migration-failure-card .role-migration-progress {
+    margin-top: 0.85rem;
+  }
+
+  .role-migration-file-button {
+    width: 100%;
+    margin-top: 0.9rem;
+    cursor: pointer;
+  }
+
+  .role-migration-file-button.is-disabled {
+    pointer-events: none;
+    opacity: 0.56;
+  }
+
+  @keyframes role-migration-float-in {
+    from { opacity: 0; transform: translateY(-0.5rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes role-migration-dialog-in {
+    from { opacity: 0; transform: translateY(0.75rem) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+}

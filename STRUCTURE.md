@@ -844,3 +844,18 @@ fritia_online_next_chat/
 - `@media (max-width: 760px) and (orientation: portrait) #memory-node-panel`：记忆节点竖屏专用布局覆盖，限制作用域不影响其他弹窗和横屏模式。
 - `.memory-search-console.is-compact-open`：竖屏左下角悬浮实体搜索展开态，沿用旧项目长期记忆模块的交互类名。
 - `.memory-result-panel` / `.memory-archive-popover` / `.memory-settings-popover`：竖屏底部浮层，用于搜索结果、记忆档案和长期记忆设置。
+# 角色迁移映射（2026-07-19）
+
+- `src/js/role_migration.js`
+  - `findRoleMigrationCandidate(store, conversation)`：按名称匹配 `source: "custom"` 与 `source: "preset"` 角色。
+  - `getMigrationStats(candidate, store)`：统计私聊、群聊发言、工具调用、附件引用、长期记忆和关系数据。
+  - `runRoleMigration(candidate, options)`：执行备份、统计、合并、校验、清理和完成状态写入。
+  - `initializeRoleMigrationState()` / `recoverRoleMigration(file)`：处理闪退中断和 ZIP 存档恢复。
+- `src/js/long_term_memory.js`
+  - `migrateLongTermMemoryCharacterData(sourceId, targetId, targetName, messageIdMap)`：保留记录 ID 原位迁移角色长期记忆与关系边。
+  - `removeLongTermMemoryCharacterData(characterId)`：迁移完成后的源角色记忆清理兜底。
+- `index.html`
+  - `#role-migration-prompt`：聊天页同名角色提示卡。
+  - `#role-migration-confirm`：迁移二次确认与进度窗口。
+  - `#role-migration-failure`：失败恢复悬浮窗口及 ZIP 文件选择器。
+- `src/styles/role-migration-desktop.css` / `src/styles/role-migration-mobile.css`：横屏桌面和竖屏移动端独立布局、进度状态与响应式窗口样式。

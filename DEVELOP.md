@@ -489,3 +489,12 @@ D:\Models\vibe_coding\fritia_online_v3 (dev)
 - `completePrivateMessageReply()` 新增 `voiceReplyEnabled` 和 `onVoiceNotice` 参数。语音模式下先完成 LLM 文本回复，再调用 `synthesizeMimoVoiceClone()` 生成声音克隆音频。
 - TTS 返回音频会写入 IndexedDB 媒体库，bot 消息以 `meta.voiceReply` 和 `source: "tts-reply"` 音频附件记录；`message.text` 仍保存后台回复文字，供长期记忆和后续上下文使用。
 - UI 新增语音气泡、倒计时播放、语音模式切换提示条和 TTS 错误提示条；TTS 失败时聊天头会在电话按钮左侧显示感叹号，点击可查看脱敏后的原始请求/响应/网络错误日志。会话列表对语音回复显示 `[语音]`，不泄露隐藏文字。
+# 角色迁移实现说明（2026-07-19）
+
+- `src/js/role_migration.js` 负责同名自定义角色与内置角色的候选识别、迁移状态机、迁移前 ZIP 备份、统计、合并、校验和失败恢复。
+- 迁移状态保存在 `localStorage.fritia_role_migration_state`；状态为 `migrating` 时启动会自动标记为失败，但不会阻止主界面启动。
+- app store 在一次 `saveAppStore()` 中完成私聊消息按时间合并、群聊成员和发言人 ID 重映射、自定义角色删除；内置角色基础字段不被写入覆盖。
+- `src/js/long_term_memory.js` 新增 `migrateLongTermMemoryCharacterData()`，在原有容量裁剪规则内原位改写长期记忆归属，避免迁移时临时复制导致 420 条上限误裁剪。
+- MCP 选择配置按目标私聊会话合并，源会话配置仅在 app store 和长期记忆校验通过后删除；媒体和知识库 IndexedDB 记录由备份覆盖，消息附件引用保持有效。
+- `index.html` 的迁移提示、确认和恢复 DOM 使用 `role-migration-*` 前缀；横屏和竖屏样式分别位于 `src/styles/role-migration-desktop.css`、`src/styles/role-migration-mobile.css`。
+- `sw.js` 缓存批次更新为 `fritia-next-chat-v30` 并加入迁移模块与两套布局样式；`package.json` 的 `check` 脚本加入 `role_migration.js`。

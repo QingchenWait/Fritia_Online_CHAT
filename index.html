@@ -7,6 +7,8 @@
   <title>Fritia Online NEXT Chat</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="src/styles/app.css">
+  <link rel="stylesheet" href="src/styles/role-migration-desktop.css">
+  <link rel="stylesheet" href="src/styles/role-migration-mobile.css">
   <link rel="stylesheet" href="src/styles/onboarding.css">
   <link rel="stylesheet" href="src/styles/onboarding-desktop.css">
   <link rel="stylesheet" href="src/styles/onboarding-mobile.css">
@@ -141,6 +143,27 @@
       </aside>
 
       <aside id="mcp-picker-popover" class="mcp-picker-popover hidden" role="menu" aria-label="MCP 客户端列表"></aside>
+
+      <aside id="role-migration-prompt" class="role-migration-prompt hidden" aria-live="polite">
+        <header>
+          <span class="role-migration-icon"><img src="src/_logo/icons/refresh-cw.svg" alt=""></span>
+          <div>
+            <strong>发现同名内置角色</strong>
+            <p>该角色已经内置在聊天室里。是否进行数据迁移？</p>
+          </div>
+        </header>
+        <div class="role-migration-prompt-actions">
+          <button id="role-migration-yes" class="btn btn-primary" type="button">
+            <img src="src/_logo/icons/refresh-cw.svg" alt=""><span>是</span>
+          </button>
+          <button id="role-migration-no" class="btn" type="button">
+            <img src="src/_logo/icons/x.svg" alt=""><span>否</span>
+          </button>
+          <button id="role-migration-never" class="btn" type="button">
+            <img src="src/_logo/icons/circle-alert.svg" alt=""><span>不再提示</span>
+          </button>
+        </div>
+      </aside>
 
       <section id="message-list" class="message-list" aria-live="polite">
         <div class="empty-state">
@@ -751,6 +774,65 @@
       </div>
     </aside>
   </div>
+
+  <div id="role-migration-confirm" class="role-migration-confirm hidden" role="dialog" aria-modal="true" aria-labelledby="role-migration-confirm-title">
+    <section class="role-migration-confirm-card">
+      <header>
+        <span class="role-migration-icon"><img src="src/_logo/icons/refresh-cw.svg" alt=""></span>
+        <div>
+          <small>ROLE MIGRATION</small>
+          <h2 id="role-migration-confirm-title">确认迁移角色数据</h2>
+          <p id="role-migration-route">自定义角色将迁移到同名内置角色。</p>
+        </div>
+      </header>
+      <div class="role-migration-confirm-body">
+        <section class="role-migration-copy-block">
+          <strong>将迁移的数据</strong>
+          <p>私聊与群聊中的对话记录、工具调用过程与附件引用、会话工具配置、长期记忆及其关系数据，将按时间顺序合并到内置角色。</p>
+          <div id="role-migration-stats" class="role-migration-stats" aria-label="迁移数据统计"></div>
+        </section>
+        <section class="role-migration-copy-block is-warning">
+          <strong>不会迁移的数据</strong>
+          <p>内置角色的基础信息、头像、TTS 参考语音、人格设定提示词和示例对话会保持系统内置版本。自定义角色中的这些设定不会合并，并会在迁移完成后直接丢弃。</p>
+        </section>
+        <p class="role-migration-danger"><img src="src/_logo/icons/circle-alert.svg" alt="">迁移过程不可恢复。APP 会先自动导出最新 ZIP 备份；仅在全部数据通过校验后，才会删除自定义角色。</p>
+        <div id="role-migration-progress" class="role-migration-progress hidden" aria-live="polite">
+          <div><span id="role-migration-progress-label">准备迁移</span><strong id="role-migration-progress-percent">0%</strong></div>
+          <i><b id="role-migration-progress-fill"></b></i>
+          <p id="role-migration-progress-detail">正在准备迁移前备份。</p>
+        </div>
+      </div>
+      <div id="role-migration-confirm-actions" class="role-migration-confirm-actions">
+        <button id="role-migration-confirm-btn" class="btn btn-primary" type="button">
+          <img src="src/_logo/icons/refresh-cw.svg" alt=""><span>确认</span>
+        </button>
+        <button id="role-migration-cancel-btn" class="btn" type="button">
+          <img src="src/_logo/icons/x.svg" alt=""><span>取消</span>
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <aside id="role-migration-failure" class="role-migration-failure hidden" role="alertdialog" aria-labelledby="role-migration-failure-title">
+    <section class="role-migration-failure-card">
+      <header>
+        <span class="role-migration-icon is-danger"><img src="src/_logo/icons/circle-alert.svg" alt=""></span>
+        <div>
+          <small>RECOVERY REQUIRED</small>
+          <h2 id="role-migration-failure-title">角色迁移失败</h2>
+        </div>
+      </header>
+      <p id="role-migration-failure-detail">迁移未完整完成。请使用迁移前自动导出的 ZIP 存档恢复数据。</p>
+      <div id="role-migration-recovery-progress" class="role-migration-progress hidden" aria-live="polite">
+        <div><span id="role-migration-recovery-label">正在恢复存档</span><strong id="role-migration-recovery-percent">0%</strong></div>
+        <i><b id="role-migration-recovery-fill"></b></i>
+      </div>
+      <label id="role-migration-recovery-button" class="btn btn-primary role-migration-file-button" for="role-migration-recovery-file">
+        <img src="src/_logo/icons/upload.svg" alt=""><span>选择备份存档</span>
+      </label>
+      <input id="role-migration-recovery-file" type="file" accept=".zip,application/zip" hidden>
+    </section>
+  </aside>
 
   <div id="archive-conflict-overlay" class="archive-conflict-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="archive-conflict-title">
     <section class="archive-conflict-card">

@@ -92,6 +92,17 @@ import {
   testWebDavConnection
 } from './archive_sync.js';
 import { getRuntimeEnvironment, isBrowserFrontendRuntime } from './runtime_env.js';
+import {
+  ROLE_MIGRATION_EVENT,
+  dismissRoleMigrationPrompt,
+  findRoleMigrationCandidate,
+  getMigrationStats,
+  getRoleMigrationState,
+  initializeRoleMigrationState,
+  isRoleMigrationDismissed,
+  recoverRoleMigration,
+  runRoleMigration
+} from './role_migration.js';
 
 const MAX_KB_PREVIEW_CHUNKS = 80;
 const MAX_KB_PREVIEW_CHARS = 360;
@@ -161,6 +172,16 @@ const state = {
     progress: 0
   },
   archiveConflict: null,
+  roleMigration: {
+    persisted: null,
+    candidate: null,
+    lastConversationId: '',
+    promptOpen: false,
+    confirmOpen: false,
+    running: false,
+    progress: null,
+    error: ''
+  },
   toolPanelSection: 'client',
   mcpTransport: MCP_TRANSPORTS.STREAMABLE_HTTP,
   selectedMcpClientId: '',
@@ -240,6 +261,7 @@ const state = {
 
 export function initUi() {
   state.store = loadAppStore();
+  state.roleMigration.persisted = initializeRoleMigrationState() || getRoleMigrationState();
   installNativeBackHandler();
   initWebMcpServer({ getStore: () => state.store });
   bindGlobalEvents();
@@ -301,6 +323,14 @@ function bindGlobalEvents() {
     state.archiveConflict = event.detail || null;
     renderArchiveConflict();
   });
+  document.addEventListener(ROLE_MIGRATION_EVENT, event => {
+    state.roleMigration.persisted = event.detail || null;
+    if (event.detail?.status === 'failed') {
+      state.roleMigration.confirmOpen = false;
+      state.roleMigration.running = false;
+    }
+    renderRoleMigrationSurfaces();
+  });
   bindConversationListResizer();
   bindMobileBackGesture();
   window.addEventListener('resize', () => {
@@ -320,6 +350,7 @@ function bindGlobalEvents() {
   document.querySelectorAll('[data-panel-close]').forEach(button => {
     button.addEventListener('click', () => closePanel(button.dataset.panelClose));
   });
+  bindRoleMigrationControls();
   document.addEventListener('fritia-ui-open-panel', event => {
     const detail = event.detail || {};
     if (!detail.id) return;
@@ -1036,6 +1067,185 @@ function bindStickers() {
   document.getElementById('sticker-manager-add')?.addEventListener('click', () => {
     document.getElementById('sticker-upload-input')?.click();
   });
+}
+
+function bindRoleMigrationControls() {
+  document.getElementById('role-migration-yes')?.addEventListener('click', openRoleMigrationConfirm);
+  document.getElementById('role-migration-no')?.addEventListener('click', () => {
+    state.roleMigration.promptOpen = false;
+    renderRoleMigrationSurfaces();
+  });
+  document.getElementById('role-migration-never')?.addEventListener('click', () => {
+    const candidate = state.roleMigration.candidate;
+    if (candidate) dismissRoleMigrationPrompt(candidate.sourceCharacter.id, candidate.targetCharacter.id, { never: true });
+    state.roleMigration.promptOpen = false;
+    renderRoleMigrationSurfaces();
+  });
+  document.getElementById('role-migration-confirm-btn')?.addEventListener('click', startRoleMigration);
+  document.getElementById('role-migration-cancel-btn')?.addEventListener('click', () => {
+    if (state.roleMigration.running) return;
+    state.roleMigration.confirmOpen = false;
+    state.roleMigration.error = '';
+    renderRoleMigrationSurfaces();
+  });
+  document.getElementById('role-migration-recovery-file')?.addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const progress = document.getElementById('role-migration-recovery-progress');
+    const button = document.getElementById('role-migration-recovery-button');
+    progress?.classList.remove('hidden');
+    if (button) button.classList.add('is-disabled');
+    try {
+      await recoverRoleMigration(file, { onProgress: renderRoleMigrationRecoveryProgress });
+      state.roleMigration.persisted = null;
+      state.roleMigration.progress = null;
+      state.roleMigration.error = '';
+      renderRoleMigrationSurfaces();
+    } catch (error) {
+      state.roleMigration.error = error?.message || '存档恢复失败。';
+      if (button) button.classList.remove('is-disabled');
+      renderRoleMigrationSurfaces();
+    }
+  });
+}
+
+function openRoleMigrationConfirm() {
+  const candidate = state.roleMigration.candidate || findRoleMigrationCandidate(state.store, getActiveConversation());
+  if (!candidate) return;
+  state.roleMigration.candidate = candidate;
+  state.roleMigration.promptOpen = false;
+  state.roleMigration.confirmOpen = true;
+  state.roleMigration.running = false;
+  state.roleMigration.error = '';
+  state.roleMigration.progress = {
+    status: 'idle',
+    progress: 0,
+    phase: 'confirm',
+    label: '等待确认',
+    stats: getMigrationStats(candidate, state.store)
+  };
+  renderRoleMigrationSurfaces();
+}
+
+async function startRoleMigration() {
+  const candidate = state.roleMigration.candidate;
+  if (!candidate || state.roleMigration.running) return;
+  state.roleMigration.running = true;
+  state.roleMigration.error = '';
+  state.roleMigration.progress = {
+    ...(state.roleMigration.progress || {}),
+    status: 'migrating',
+    phase: 'backup',
+    progress: 0,
+    label: '正在导出迁移前备份'
+  };
+  renderRoleMigrationSurfaces();
+  try {
+    await runRoleMigration(candidate, {
+      onProgress: progress => {
+        state.roleMigration.progress = progress;
+        renderRoleMigrationSurfaces();
+      }
+    });
+    state.roleMigration.running = false;
+    state.roleMigration.confirmOpen = false;
+    state.roleMigration.promptOpen = false;
+    state.roleMigration.candidate = null;
+    renderRoleMigrationSurfaces();
+  } catch (error) {
+    state.roleMigration.running = false;
+    state.roleMigration.error = error?.message || '角色迁移失败。';
+    const persisted = getRoleMigrationState();
+    if (persisted?.status === 'failed') state.roleMigration.persisted = persisted;
+    state.roleMigration.progress = {
+      ...(state.roleMigration.progress || {}),
+      status: 'failed',
+      phase: 'failed',
+      label: '角色迁移失败',
+      errorMessage: state.roleMigration.error,
+      backupAvailable: Boolean(persisted?.backupFilename)
+    };
+    renderRoleMigrationSurfaces();
+  }
+}
+
+function renderRoleMigrationRecoveryProgress(progress = 0) {
+  const percent = Math.round(Math.max(0, Math.min(1, Number(progress) || 0)) * 100);
+  setText('role-migration-recovery-percent', `${percent}%`);
+  document.getElementById('role-migration-recovery-fill')?.style.setProperty('--migration-progress', `${percent}%`);
+  setText('role-migration-recovery-label', percent >= 100 ? '恢复完成' : '正在恢复迁移前存档');
+}
+
+function renderRoleMigrationSurfaces() {
+  const persisted = state.roleMigration.persisted || getRoleMigrationState();
+  const active = getActiveConversation();
+  const activeId = active?.id || '';
+  if (activeId !== state.roleMigration.lastConversationId && !state.roleMigration.running) {
+    state.roleMigration.lastConversationId = activeId;
+    state.roleMigration.candidate = findRoleMigrationCandidate(state.store, active);
+    const candidate = state.roleMigration.candidate;
+    state.roleMigration.promptOpen = Boolean(
+      candidate
+      && !isRoleMigrationDismissed(candidate.sourceCharacter.id, candidate.targetCharacter.id)
+      && !['migrating', 'failed', 'recovering'].includes(persisted?.status)
+    );
+  }
+  const prompt = document.getElementById('role-migration-prompt');
+  const confirm = document.getElementById('role-migration-confirm');
+  const failure = document.getElementById('role-migration-failure');
+  const candidate = state.roleMigration.candidate;
+  prompt?.classList.toggle('hidden', !state.roleMigration.promptOpen || !candidate || Boolean(persisted && ['migrating', 'failed', 'recovering'].includes(persisted.status)));
+  confirm?.classList.toggle('hidden', !state.roleMigration.confirmOpen);
+  const failed = persisted?.status === 'failed';
+  const recovering = persisted?.status === 'recovering';
+  failure?.classList.toggle('hidden', !failed && !recovering);
+  if (candidate) {
+    setText('role-migration-route', `${candidate.sourceCharacter.name} 的聊天数据将合并到内置角色「${candidate.targetCharacter.name}」。`);
+    renderRoleMigrationStats(state.roleMigration.progress?.stats || getMigrationStats(candidate, state.store));
+  }
+  const progress = state.roleMigration.progress || persisted;
+  const progressNode = document.getElementById('role-migration-progress');
+  const running = Boolean(state.roleMigration.running || progress?.status === 'migrating');
+  progressNode?.classList.toggle('hidden', !running && !state.roleMigration.error);
+  if (progressNode && (running || state.roleMigration.error)) renderRoleMigrationProgress(progress || {});
+  document.getElementById('role-migration-confirm-actions')?.classList.toggle('hidden', running);
+  if (failed || recovering) {
+    const errorDetail = state.roleMigration.error || persisted?.errorMessage || '迁移未完整完成。';
+    const backupDetail = persisted?.backupFilename ? `备份文件：${persisted.backupFilename}` : '';
+    const detail = [
+      errorDetail,
+      '请使用迁移前自动导出的 ZIP 存档恢复数据。',
+      backupDetail
+    ].filter(Boolean).join('\n');
+    setText('role-migration-failure-detail', detail);
+    const recoveryProgress = document.getElementById('role-migration-recovery-progress');
+    recoveryProgress?.classList.toggle('hidden', !recovering);
+    document.getElementById('role-migration-recovery-button')?.classList.toggle('is-disabled', recovering);
+    if (recovering) renderRoleMigrationRecoveryProgress(persisted?.progress || 0);
+  }
+}
+
+function renderRoleMigrationStats(stats = {}) {
+  const labels = [
+    ['privateConversations', '私聊', '个'],
+    ['messages', '消息', '条'],
+    ['toolCalls', '工具调用', '次'],
+    ['attachments', '附件引用', '个'],
+    ['memories', '长期记忆', '条'],
+    ['memoryEdges', '关系数据', '条']
+  ];
+  const container = document.getElementById('role-migration-stats');
+  if (!container) return;
+  container.innerHTML = labels.map(([key, label, suffix]) => `<span>${label} ${Number(stats[key]) || 0}${suffix}</span>`).join('');
+}
+
+function renderRoleMigrationProgress(progress = {}) {
+  const percent = Math.round(Math.max(0, Math.min(1, Number(progress.progress) || 0)) * 100);
+  setText('role-migration-progress-label', progress.label || '正在迁移');
+  setText('role-migration-progress-percent', `${percent}%`);
+  setText('role-migration-progress-detail', progress.errorMessage || '请保持页面打开，完成校验后才会删除自定义角色。');
+  document.getElementById('role-migration-progress-fill')?.style.setProperty('--migration-progress', `${percent}%`);
 }
 
 function bindCharacterForm() {
@@ -3362,7 +3572,14 @@ function hasMobileBackDestination() {
   const app = document.getElementById('app');
   const groupInfo = document.getElementById('group-info-panel');
   const groupInfoOpen = Boolean(groupInfo && !groupInfo.classList.contains('hidden'));
-  return Boolean(getTopOpenModalId() || groupInfoOpen || app?.classList.contains('is-detail-open') || app?.classList.contains('is-chat-open'));
+  return Boolean(
+    state.roleMigration.confirmOpen
+    || state.roleMigration.promptOpen
+    || getTopOpenModalId()
+    || groupInfoOpen
+    || app?.classList.contains('is-detail-open')
+    || app?.classList.contains('is-chat-open')
+  );
 }
 
 function syncMobileBackAvailability() {
@@ -3372,6 +3589,11 @@ function syncMobileBackAvailability() {
 
 function performMobileBackGesture() {
   let handled = false;
+  if (closeRoleMigrationSurface()) {
+    syncMobileBackAvailability();
+    clearMobileTouchActivationState();
+    return true;
+  }
   const openModalId = getTopOpenModalId();
   if (openModalId) {
     closePanel(openModalId);
@@ -3416,6 +3638,7 @@ function handleAndroidBackAction() {
 }
 
 function closeTransientBackSurface() {
+  if (closeRoleMigrationSurface()) return true;
   if (state.mainMenuOpen) {
     closeMainMenu();
     return true;
@@ -3461,6 +3684,22 @@ function closeTransientBackSurface() {
   if (hideOpenElement('#memory-settings-popover')) return true;
   if (document.querySelector('.custom-select.is-open')) {
     closeCustomSelects();
+    return true;
+  }
+  return false;
+}
+
+function closeRoleMigrationSurface() {
+  if (state.roleMigration.confirmOpen) {
+    if (state.roleMigration.running) return true;
+    state.roleMigration.confirmOpen = false;
+    state.roleMigration.error = '';
+    renderRoleMigrationSurfaces();
+    return true;
+  }
+  if (state.roleMigration.promptOpen) {
+    state.roleMigration.promptOpen = false;
+    renderRoleMigrationSurfaces();
     return true;
   }
   return false;
@@ -3526,6 +3765,7 @@ function renderAll() {
   updateContextStatus();
   renderRoundtableErrorIndicator();
   renderVoiceErrorIndicator();
+  renderRoleMigrationSurfaces();
   scheduleRoundtableIdle();
   syncMobileBackAvailability();
 }

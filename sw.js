@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v29';
+const CACHE_NAME = 'fritia-next-chat-v30';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,8 @@ const CORE_ASSETS = [
   './src/styles/onboarding.css',
   './src/styles/onboarding-desktop.css',
   './src/styles/onboarding-mobile.css',
+  './src/styles/role-migration-desktop.css',
+  './src/styles/role-migration-mobile.css',
   './src/js/main.js',
   './src/js/onboarding.js',
   './src/js/onboarding_desktop.js',
@@ -23,6 +25,7 @@ const CORE_ASSETS = [
   './src/js/mcp_tools.js',
   './src/js/plugin_store.js',
   './src/js/tool_chat_engine.js',
+  './src/js/role_migration.js',
   './src/js/ui.js',
   './src/docs/mcp_help.md',
   './src/_logo/icons/ai-agent.svg',
