@@ -1,5 +1,6 @@
 import { appendMessage, createId, getConversationMessages, now, replaceMessage } from './storage.js';
 import { getDefaultChatProvider, getSettings, getAdvancedSettings } from './settings.js';
+import { buildModelReasoningBody } from './model_reasoning.js';
 import { buildRagReferenceMessage } from './knowledge_base.js';
 import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_term_memory.js';
 import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
@@ -26,6 +27,8 @@ export async function completeToolPrivateMessageReply({
   text,
   userMessage = null,
   selectedClientIds = [],
+  chatSettings = null,
+  reasoningEffort = '',
   onStore,
   signal = null
 }) {
@@ -64,7 +67,7 @@ export async function completeToolPrivateMessageReply({
 
   try {
     throwIfToolAborted(signal);
-    const settings = getSettings();
+    const settings = chatSettings || getSettings();
     if (!settings.apiKey) {
       trace = finishTrace(trace, '未配置模型，已切回本地占位回复。');
       const fallback = `${character.name}已经准备好调用工具了。配置默认模型后，我就能根据外部工具结果继续回复。`;
@@ -93,7 +96,8 @@ export async function completeToolPrivateMessageReply({
       character,
       userText: text,
       userMessage,
-      toolSummary
+      toolSummary,
+      settings
     });
     const agentMessages = resumeState?.messages?.length
       ? cloneResumeMessages(resumeState.messages)
@@ -136,6 +140,7 @@ export async function completeToolPrivateMessageReply({
         tools: availableTools,
         toolChoice: availableTools.length ? 'auto' : 'none',
         completeToolResultReply: completeToolResultReply !== false,
+        reasoningEffort,
         signal,
         onDelta: delta => {
           stepText += delta;
@@ -326,8 +331,7 @@ export async function completeToolPrivateMessageReply({
   }
 }
 
-async function buildToolMessages({ store, conversation, character, userText, userMessage, toolSummary }) {
-  const settings = getSettings();
+async function buildToolMessages({ store, conversation, character, userText, userMessage, toolSummary, settings = getSettings() }) {
   const advanced = getAdvancedSettings();
   const history = getConversationMessages(store, conversation.id)
     .filter(item => item.status !== 'typing')
@@ -392,6 +396,7 @@ async function requestToolAwareCompletion({
   tools = [],
   toolChoice = 'auto',
   completeToolResultReply = true,
+  reasoningEffort = '',
   onDelta,
   signal = null
 }) {
@@ -405,14 +410,17 @@ async function requestToolAwareCompletion({
     messages: requestMessages,
     temperature: settings.temperature,
     stream: true,
+    ...buildModelReasoningBody(provider, reasoningEffort),
     ...(tools.length ? { tools, tool_choice: toolChoice } : {})
   };
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${provider.apiKey}`
+  };
+  if (isXiaomiMimoProvider(provider)) headers['api-key'] = provider.apiKey;
   const response = await fetch(`${normalizeBaseUrl(provider.baseUrl)}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${provider.apiKey}`
-    },
+    headers,
     body: JSON.stringify(body),
     signal
   });
@@ -1338,4 +1346,12 @@ function escapeRegExp(value) {
 
 function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function isXiaomiMimoProvider(provider) {
+  try {
+    return new URL(String(provider?.baseUrl || '')).hostname.toLowerCase().endsWith('xiaomimimo.com');
+  } catch {
+    return /xiaomimimo\.com/i.test(String(provider?.baseUrl || ''));
+  }
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v30';
+const CACHE_NAME = 'fritia-next-chat-v31';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,8 @@ const CORE_ASSETS = [
   './src/styles/onboarding-mobile.css',
   './src/styles/role-migration-desktop.css',
   './src/styles/role-migration-mobile.css',
+  './src/styles/chat-model-picker-desktop.css',
+  './src/styles/chat-model-picker-mobile.css',
   './src/js/main.js',
   './src/js/onboarding.js',
   './src/js/onboarding_desktop.js',
@@ -16,6 +18,7 @@ const CORE_ASSETS = [
   './src/js/storage.js',
   './src/js/characters.js',
   './src/js/settings.js',
+  './src/js/model_reasoning.js',
   './src/js/knowledge_base.js',
   './src/js/long_term_memory.js',
   './src/js/llm_request.js',
@@ -29,12 +32,15 @@ const CORE_ASSETS = [
   './src/js/ui.js',
   './src/docs/mcp_help.md',
   './src/_logo/icons/ai-agent.svg',
+  './src/_logo/icons/bot.svg',
+  './src/_logo/icons/brain.svg',
   './src/_logo/icons/chevron-down.svg',
   './src/_logo/icons/circle-alert.svg',
   './src/_logo/icons/download.svg',
   './src/_logo/icons/girl.svg',
   './src/_logo/icons/help-circle.svg',
   './src/_logo/icons/menu.svg',
+  './src/_logo/icons/mic.svg',
   './src/_logo/icons/refresh-cw.svg',
   './src/_logo/icons/role-card.svg',
   './src/_logo/icons/save-config.svg',

@@ -19,6 +19,8 @@ export async function sendPrivateMessage({
   character,
   text,
   attachments = [],
+  chatSettings = null,
+  reasoningEffort = '',
   voiceReplyEnabled = false,
   onVoiceNotice,
   onStore
@@ -42,6 +44,8 @@ export async function sendPrivateMessage({
     character,
     text,
     userMessage,
+    chatSettings,
+    reasoningEffort,
     voiceReplyEnabled,
     onVoiceNotice,
     onStore
@@ -54,6 +58,8 @@ export async function completePrivateMessageReply({
   character,
   text,
   userMessage = null,
+  chatSettings = null,
+  reasoningEffort = '',
   voiceReplyEnabled = false,
   onVoiceNotice,
   onStore
@@ -77,7 +83,9 @@ export async function completePrivateMessageReply({
       conversation,
       character,
       userText: text,
-      userMessage
+      userMessage,
+      chatSettings,
+      reasoningEffort
     });
     const reply = typeof result === 'string' ? result : result.text;
     const baseMeta = {
@@ -148,8 +156,8 @@ export async function completePrivateMessageReply({
   }
 }
 
-export async function requestCharacterReply({ store, conversation, character, userText, mode = 'private', event = null, userMessage = null }) {
-  const settings = getSettings();
+export async function requestCharacterReply({ store, conversation, character, userText, mode = 'private', event = null, userMessage = null, chatSettings = null, reasoningEffort = '' }) {
+  const settings = chatSettings || getSettings();
   if (!settings.apiKey) {
     return localFallbackReply(character, userText, mode);
   }
@@ -185,7 +193,7 @@ export async function requestCharacterReply({ store, conversation, character, us
     mode,
     event
   });
-  const responseText = await requestOpenAICompatible(settings, messages);
+  const responseText = await requestOpenAICompatible(settings, messages, reasoningEffort);
   return {
     text: sanitizeReply(responseText, character.name),
     deepseekIntimateMode: Boolean(intimateMessage)
@@ -249,10 +257,11 @@ async function buildMessages({ character, history, userText, userMessage, ragMes
   ];
 }
 
-async function requestOpenAICompatible(settings, messages) {
+async function requestOpenAICompatible(settings, messages, reasoningEffort = '') {
   const text = await requestLlmCompletion({
     settings,
     messages,
+    reasoningEffort,
     body: {
       temperature: settings.temperature,
       stream: false

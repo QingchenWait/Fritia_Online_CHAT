@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="src/styles/onboarding.css">
   <link rel="stylesheet" href="src/styles/onboarding-desktop.css">
   <link rel="stylesheet" href="src/styles/onboarding-mobile.css">
+  <link rel="stylesheet" href="src/styles/chat-model-picker-desktop.css">
+  <link rel="stylesheet" href="src/styles/chat-model-picker-mobile.css">
 </head>
 <body>
   <div id="app" class="app-shell" data-view="chat">
@@ -178,6 +180,22 @@
         <section id="sticker-popover" class="sticker-popover hidden" aria-label="表情包">
           <div class="sticker-grid" id="sticker-popover-grid"></div>
         </section>
+        <section id="chat-model-popover" class="chat-model-popover hidden" role="menu" aria-label="模型与思考强度">
+          <header class="chat-model-popover__head">
+            <img src="src/_logo/icons/brain.svg" alt="">
+            <strong>思考强度</strong>
+          </header>
+          <div id="chat-reasoning-options" class="chat-reasoning-options"></div>
+          <button id="chat-model-submenu-trigger" class="chat-model-current" type="button" role="menuitem" aria-haspopup="menu" aria-expanded="false">
+            <img src="src/_logo/icons/bot.svg" alt="">
+            <span>
+              <small>当前模型</small>
+              <strong id="chat-model-current-name"></strong>
+            </span>
+            <img class="chat-model-current__arrow" src="src/_logo/icons/chevron-down.svg" alt="">
+          </button>
+          <aside id="chat-model-submenu" class="chat-model-submenu hidden" role="menu" aria-label="对话模型"></aside>
+        </section>
         <div id="attachment-preview" class="attachment-preview hidden"></div>
         <div class="composer-tools">
           <button id="sticker-toggle-btn" class="icon-btn" type="button" title="表情" aria-label="打开表情包">
@@ -191,8 +209,9 @@
             <img src="src/_logo/icons/paperclip.svg" alt="">
             <input id="file-input" type="file" hidden>
           </label>
-          <button class="icon-btn" type="button" title="语音输入占位">
+          <button id="chat-model-control-btn" class="icon-btn chat-model-control" type="button" title="模型与思考强度" aria-label="模型与思考强度" aria-haspopup="menu" aria-expanded="false">
             <img src="src/_logo/icons/mic.svg" alt="">
+            <span id="chat-reasoning-progress" class="chat-reasoning-progress" role="progressbar" aria-label="当前思考强度"></span>
           </button>
         </div>
         <textarea id="message-input" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>

@@ -17,7 +17,8 @@ import {
   updateGroupConversation
 } from './storage.js';
 import { characterAvatar, getCharacterById } from './characters.js';
-import { getSettings, saveSettings, getAdvancedSettings, saveAdvancedSettings, isDeepSeekIntimateModeAvailable } from './settings.js';
+import { getSettings, saveSettings, getAdvancedSettings, saveAdvancedSettings, isDeepSeekIntimateModeAvailable, getDefaultChatProvider } from './settings.js';
+import { getModelReasoningProfile, normalizeModelReasoningEffort } from './model_reasoning.js';
 import {
   createKnowledgeBase,
   deleteKnowledgeBase,
@@ -148,6 +149,9 @@ const state = {
   modelProviderTab: 'chat',
   selectedChatProviderId: '',
   selectedTtsProviderId: '',
+  characterChatRuntime: new Map(),
+  chatModelPickerOpen: false,
+  chatModelSubmenuOpen: false,
   roundtableErrorPopoverOpen: false,
   voiceErrorPopoverOpen: false,
   voiceError: null,
@@ -294,6 +298,8 @@ function bindGlobalEvents() {
   document.addEventListener('fritia-settings-updated', () => {
     syncSettingsToForm();
     updateContextStatus();
+    reconcileCharacterChatRuntime();
+    renderChatModelControl();
   });
   document.addEventListener('fritia-advanced-settings-updated', () => {
     syncSettingsToForm();
@@ -338,6 +344,7 @@ function bindGlobalEvents() {
   window.addEventListener('resize', () => {
     scheduleConversationListWidthSync();
     syncMobileBackAvailability();
+    syncChatModelPickerLayout();
   });
 
   document.querySelectorAll('[data-panel-open]').forEach(button => {
@@ -389,6 +396,7 @@ function bindGlobalEvents() {
   document.getElementById('voice-reply-toggle-btn')?.addEventListener('click', togglePrivateVoiceReply);
   document.getElementById('external-tools-toggle-btn')?.addEventListener('click', event => {
     event.stopPropagation();
+    closeChatModelPicker();
     toggleMcpPicker();
   });
   document.querySelector('[data-chat-info-toggle]')?.addEventListener('click', handleChatInfoToggle);
@@ -443,6 +451,13 @@ function bindGlobalEvents() {
     closeStickerPopover();
   });
   document.addEventListener('click', event => {
+    if (!state.chatModelPickerOpen) return;
+    const popover = document.getElementById('chat-model-popover');
+    const button = document.getElementById('chat-model-control-btn');
+    if (popover?.contains(event.target) || button?.contains(event.target)) return;
+    closeChatModelPicker();
+  });
+  document.addEventListener('click', event => {
     if (!state.mcpPickerOpen) return;
     const popover = document.getElementById('mcp-picker-popover');
     const button = document.getElementById('external-tools-toggle-btn');
@@ -459,6 +474,7 @@ function bindGlobalEvents() {
       closePluginSourceMenu();
       closeCustomSelects();
       closeMcpPicker();
+      closeChatModelPicker();
     }
   });
 
@@ -858,6 +874,7 @@ function bindComposer() {
   const send = document.getElementById('send-btn');
   const imageInput = document.getElementById('image-input');
   const fileInput = document.getElementById('file-input');
+  bindChatModelControl();
   send?.addEventListener('click', handleSend);
   input?.addEventListener('keydown', event => {
     if (handleMentionKeydown(event)) return;
@@ -924,6 +941,7 @@ async function handleSend() {
   if (!sent) return;
   clearComposerDraft(input);
   closeStickerPopover();
+  closeChatModelPicker();
 }
 
 function clearComposerDraft(input = document.getElementById('message-input')) {
@@ -1004,6 +1022,7 @@ function continueConversationAfterOutgoing(committed) {
   }
   const character = getCharacterById(store.characters, conversation.memberIds[0]);
   if (!character) return;
+  const chatRuntime = buildCharacterChatSettings(character.id);
   const selectedMcpClientIds = getSelectedMcpClientIds(conversation.id);
   if (selectedMcpClientIds.length) {
     const controller = new AbortController();
@@ -1021,6 +1040,8 @@ function continueConversationAfterOutgoing(committed) {
       text: message.text,
       userMessage: message,
       selectedClientIds: selectedMcpClientIds,
+      chatSettings: chatRuntime.settings,
+      reasoningEffort: chatRuntime.reasoningEffort,
       onStore: updateStoreFromToolReply,
       signal: controller.signal
     }).catch(error => {
@@ -1039,6 +1060,8 @@ function continueConversationAfterOutgoing(committed) {
     character,
     text: message.text,
     userMessage: message,
+    chatSettings: chatRuntime.settings,
+    reasoningEffort: chatRuntime.reasoningEffort,
     voiceReplyEnabled: conversation.voiceReplyEnabled === true,
     onVoiceNotice: showVoiceNotice,
     onStore: updateStore
@@ -1058,6 +1081,7 @@ async function sendSticker(sticker) {
 function bindStickers() {
   document.getElementById('sticker-toggle-btn')?.addEventListener('click', event => {
     event.stopPropagation();
+    closeChatModelPicker();
     state.stickerPopoverOpen = !state.stickerPopoverOpen;
     renderStickerPopover();
   });
@@ -1112,6 +1136,212 @@ function bindRoleMigrationControls() {
       renderRoleMigrationSurfaces();
     }
   });
+}
+
+function bindChatModelControl() {
+  const control = document.getElementById('chat-model-control-btn');
+  const modelTrigger = document.getElementById('chat-model-submenu-trigger');
+  const popover = document.getElementById('chat-model-popover');
+  control?.addEventListener('click', event => {
+    event.stopPropagation();
+    const conversation = getActiveConversation();
+    if (conversation?.type !== 'private') return;
+    state.chatModelPickerOpen = !state.chatModelPickerOpen;
+    if (state.chatModelPickerOpen) {
+      closeStickerPopover();
+      closeMcpPicker();
+    } else {
+      state.chatModelSubmenuOpen = false;
+    }
+    renderChatModelControl();
+  });
+  modelTrigger?.addEventListener('click', event => {
+    event.stopPropagation();
+    if (!state.chatModelPickerOpen) return;
+    state.chatModelSubmenuOpen = !state.chatModelSubmenuOpen;
+    renderChatModelControl();
+  });
+  popover?.addEventListener('click', event => event.stopPropagation());
+}
+
+function renderChatModelControl() {
+  const control = document.getElementById('chat-model-control-btn');
+  const progress = document.getElementById('chat-reasoning-progress');
+  const popover = document.getElementById('chat-model-popover');
+  const options = document.getElementById('chat-reasoning-options');
+  const modelName = document.getElementById('chat-model-current-name');
+  const modelTrigger = document.getElementById('chat-model-submenu-trigger');
+  const submenu = document.getElementById('chat-model-submenu');
+  if (!control || !progress || !popover || !options || !modelName || !modelTrigger || !submenu) return;
+
+  const conversation = getActiveConversation();
+  const character = conversation?.type === 'private'
+    ? getCharacterById(state.store.characters, conversation.memberIds[0])
+    : null;
+  const enabled = Boolean(character);
+  control.setAttribute('aria-disabled', String(!enabled));
+  if (!enabled) {
+    control.title = '模型切换仅适用于角色私聊';
+    control.setAttribute('aria-label', control.title);
+    progress.innerHTML = '';
+    progress.classList.add('hidden');
+    closeChatModelPicker({ render: false });
+    control.setAttribute('aria-expanded', 'false');
+    modelTrigger.setAttribute('aria-expanded', 'false');
+    popover.classList.add('hidden');
+    submenu.classList.add('hidden');
+    return;
+  }
+
+  const runtime = getCharacterChatRuntime(character.id);
+  const selectedIndex = Math.max(0, runtime.profile.options.findIndex(option => option.value === runtime.reasoningEffort));
+  progress.classList.remove('hidden');
+  progress.innerHTML = runtime.profile.options.map((option, index) => (
+    `<i class="chat-reasoning-progress__segment${index <= selectedIndex ? ' is-active' : ''}"></i>`
+  )).join('');
+  progress.setAttribute('aria-valuemin', '1');
+  progress.setAttribute('aria-valuemax', String(runtime.profile.options.length));
+  progress.setAttribute('aria-valuenow', String(selectedIndex + 1));
+  progress.setAttribute('aria-valuetext', runtime.profile.options[selectedIndex]?.label || '普通');
+  const effortLabel = runtime.profile.options[selectedIndex]?.label || '普通';
+  control.title = `${runtime.provider.model} · ${effortLabel}`;
+  control.setAttribute('aria-label', `模型与思考强度：${runtime.provider.model}，${effortLabel}`);
+  control.setAttribute('aria-expanded', String(state.chatModelPickerOpen));
+  popover.classList.toggle('hidden', !state.chatModelPickerOpen);
+  modelName.textContent = runtime.provider.model || runtime.provider.id;
+  modelName.title = runtime.provider.model || runtime.provider.id;
+  modelTrigger.setAttribute('aria-expanded', String(state.chatModelSubmenuOpen));
+  submenu.classList.toggle('hidden', !state.chatModelSubmenuOpen);
+  syncChatModelPickerLayout();
+  renderChatReasoningOptions(character.id, runtime, options);
+  renderChatModelSubmenu(character.id, runtime, submenu);
+}
+
+function renderChatReasoningOptions(characterId, runtime, container) {
+  container.innerHTML = '';
+  runtime.profile.options.forEach((option, optionIndex) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `chat-model-option${option.value === runtime.reasoningEffort ? ' is-selected' : ''}`;
+    button.setAttribute('role', 'menuitemradio');
+    button.setAttribute('aria-checked', String(option.value === runtime.reasoningEffort));
+    const icon = document.createElement('img');
+    icon.src = 'src/_logo/icons/brain.svg';
+    icon.alt = '';
+    const label = document.createElement('span');
+    label.textContent = option.label;
+    const segments = document.createElement('span');
+    segments.className = 'chat-model-option__segments';
+    segments.setAttribute('aria-hidden', 'true');
+    runtime.profile.options.forEach((_, segmentIndex) => {
+      const segment = document.createElement('i');
+      segment.classList.toggle('is-active', segmentIndex <= optionIndex);
+      segments.appendChild(segment);
+    });
+    button.append(icon, label, segments);
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      state.characterChatRuntime.set(characterId, {
+        providerId: runtime.provider.id,
+        reasoningEffort: option.value
+      });
+      renderChatModelControl();
+    });
+    container.appendChild(button);
+  });
+}
+
+function renderChatModelSubmenu(characterId, runtime, container) {
+  container.innerHTML = '';
+  for (const provider of runtime.settings.chatProviders) {
+    const button = document.createElement('button');
+    const selected = provider.id === runtime.provider.id;
+    button.type = 'button';
+    button.className = `chat-model-provider${selected ? ' is-selected' : ''}`;
+    button.setAttribute('role', 'menuitemradio');
+    button.setAttribute('aria-checked', String(selected));
+    const icon = document.createElement('img');
+    icon.src = 'src/_logo/icons/bot.svg';
+    icon.alt = '';
+    const text = document.createElement('span');
+    const model = document.createElement('strong');
+    model.textContent = provider.model || provider.id;
+    model.title = provider.model || provider.id;
+    const id = document.createElement('small');
+    id.textContent = provider.id;
+    text.append(model, id);
+    const mark = document.createElement('i');
+    mark.className = 'chat-model-provider__mark';
+    mark.setAttribute('aria-hidden', 'true');
+    button.append(icon, text, mark);
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      const profile = getModelReasoningProfile(provider);
+      state.characterChatRuntime.set(characterId, {
+        providerId: provider.id,
+        reasoningEffort: profile.defaultValue
+      });
+      state.chatModelSubmenuOpen = false;
+      renderChatModelControl();
+      document.getElementById('chat-model-submenu-trigger')?.focus();
+    });
+    container.appendChild(button);
+  }
+}
+
+function getCharacterChatRuntime(characterId) {
+  const settings = getSettings();
+  const saved = state.characterChatRuntime.get(characterId) || null;
+  const fallback = getDefaultChatProvider(settings) || settings.chatProviders[0];
+  const provider = settings.chatProviders.find(item => item.id === saved?.providerId) || fallback;
+  const profile = getModelReasoningProfile(provider);
+  const reasoningEffort = normalizeModelReasoningEffort(provider, saved?.reasoningEffort || profile.defaultValue);
+  return { settings, provider, profile, reasoningEffort };
+}
+
+function buildCharacterChatSettings(characterId) {
+  const runtime = getCharacterChatRuntime(characterId);
+  return {
+    settings: {
+      ...runtime.settings,
+      apiKey: runtime.provider.apiKey,
+      baseUrl: runtime.provider.baseUrl,
+      model: runtime.provider.model,
+      defaultChatProviderId: runtime.provider.id
+    },
+    reasoningEffort: runtime.reasoningEffort
+  };
+}
+
+function reconcileCharacterChatRuntime() {
+  const settings = getSettings();
+  const providers = new Map(settings.chatProviders.map(provider => [provider.id, provider]));
+  for (const [characterId, runtime] of state.characterChatRuntime) {
+    const provider = providers.get(runtime.providerId);
+    if (!provider) {
+      state.characterChatRuntime.delete(characterId);
+      continue;
+    }
+    state.characterChatRuntime.set(characterId, {
+      providerId: provider.id,
+      reasoningEffort: normalizeModelReasoningEffort(provider, runtime.reasoningEffort)
+    });
+  }
+}
+
+function syncChatModelPickerLayout() {
+  const popover = document.getElementById('chat-model-popover');
+  if (!popover) return;
+  popover.dataset.layout = window.matchMedia('(max-width: 760px), (orientation: portrait)').matches
+    ? 'mobile'
+    : 'desktop';
+}
+
+function closeChatModelPicker(options = {}) {
+  const wasOpen = state.chatModelPickerOpen || state.chatModelSubmenuOpen;
+  state.chatModelPickerOpen = false;
+  state.chatModelSubmenuOpen = false;
+  if (options.render !== false && wasOpen) renderChatModelControl();
 }
 
 function openRoleMigrationConfirm() {
@@ -3616,6 +3846,12 @@ function syncMobileBackAvailability() {
 
 function performMobileBackGesture() {
   let handled = false;
+  if (state.chatModelPickerOpen) {
+    closeChatModelPicker();
+    syncMobileBackAvailability();
+    clearMobileTouchActivationState();
+    return true;
+  }
   if (closeRoleMigrationSurface()) {
     syncMobileBackAvailability();
     clearMobileTouchActivationState();
@@ -3666,6 +3902,10 @@ function handleAndroidBackAction() {
 
 function closeTransientBackSurface() {
   if (closeRoleMigrationSurface()) return true;
+  if (state.chatModelPickerOpen) {
+    closeChatModelPicker();
+    return true;
+  }
   if (state.mainMenuOpen) {
     closeMainMenu();
     return true;
@@ -3753,6 +3993,7 @@ function clearMobileTouchActivationState() {
 function closeMobileChatPage() {
   closeMentionPicker();
   closeStickerPopover();
+  closeChatModelPicker();
   state.roundtableErrorPopoverOpen = false;
   state.voiceErrorPopoverOpen = false;
   renderRoundtableErrorIndicator();
@@ -3783,6 +4024,7 @@ function renderAll() {
   renderConversationList();
   renderMessages();
   renderDetail();
+  renderChatModelControl();
   renderGroupInfoPanel();
   renderMentionPicker();
   renderStickerPopover();
@@ -6001,6 +6243,7 @@ function selectConversation(id) {
   closeGroupInfoPanel();
   closeMentionPicker();
   closeStickerPopover();
+  closeChatModelPicker();
   updateStore(next);
   document.getElementById('app')?.classList.add('is-chat-open');
   syncMobileBackAvailability();

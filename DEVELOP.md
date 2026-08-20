@@ -1,5 +1,13 @@
 # DEVELOP
 
+## 2026-07-27 Per-character Chat Model / Reasoning Effort
+
+- 新增 `src/js/model_reasoning.js`，根据对话提供商的模型 ID / Base URL 返回可用档位、日常默认档和 OpenAI-compatible 请求字段。已明确映射 GPT-5 / o-series / gpt-oss、DeepSeek V4、Gemini 2.5 / 3.x 和可经网关转译的新版 Claude；未知或不支持控制的模型只提供不附加参数的“普通”档。
+- `src/js/ui.js` 用 `state.characterChatRuntime: Map` 按 `characterId` 保留会话期覆盖，不调用 `saveSettings()` / `saveAppStore()`，不新增任何存储键或迁移字段。提供商被删除或模型能力变化时会回退到当前默认对话模型和合法档位。
+- `src/js/chat_engine.js` 和 `src/js/tool_chat_engine.js` 都接收临时 `chatSettings + reasoningEffort`，确保日常私聊和 MCP agent loop 使用同一角色配置。`src/js/llm_request.js` 只对实际对话提供商追加思考参数；图片能力回退到默认图像转述提供商时不传递角色思考档。
+- `index.html` 新增紧凑的强度菜单、当前模型栏和右侧模型子菜单，复用已有 Lucide `mic / brain / bot / chevron-down` 图标。`chat-model-picker-desktop.css` 与 `chat-model-picker-mobile.css` 分别负责横屏和竖屏布局，进度条绝对定位在原按钮内，未修改 `.composer` 的尺寸、网格或内边距。
+- `sw.js` 缓存版本更新到 `fritia-next-chat-v31`，并将新 JS / 两份响应式 CSS 及必要图标加入离线核心资源。
+
 ## 2026-07-17 New User Onboarding / Quick API Setup
 
 - 新增 `src/js/onboarding.js`，复刻“芙提雅 ONLINE NEXT”的三步“获取 Key / 导入 / 检查”流程。DeepSeek 和 MiMo 官网均通过系统默认浏览器或新标签打开；从官网返回后保留当前步骤并高亮下一操作。

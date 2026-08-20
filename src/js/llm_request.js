@@ -1,8 +1,9 @@
 import { getDefaultChatProvider, getDefaultImageCaptionProvider, getSettings } from './settings.js';
+import { buildModelReasoningBody } from './model_reasoning.js';
 
 const IMAGE_UNSUPPORTED_RE = /(image|vision|multimodal|image_url|input image|图片|图像).*(unsupported|not supported|不支持|无法|不能)|unsupported.*(image|vision|multimodal|image_url)/i;
 
-export async function requestLlmCompletion({ settings = getSettings(), messages = [], body = {} } = {}) {
+export async function requestLlmCompletion({ settings = getSettings(), messages = [], body = {}, reasoningEffort = '' } = {}) {
   const requestMessages = Array.isArray(messages) && messages.length ? messages : (body.messages || []);
   const needsImages = messagesContainImages(requestMessages);
   const defaultProvider = getDefaultChatProvider(settings);
@@ -11,7 +12,13 @@ export async function requestLlmCompletion({ settings = getSettings(), messages 
   const primaryProvider = needsImages && imageSupport === false
     ? imageProvider
     : defaultProvider;
-  const primaryBody = buildProviderBody(primaryProvider, settings, body, requestMessages);
+  const primaryBody = buildProviderBody(
+    primaryProvider,
+    settings,
+    body,
+    requestMessages,
+    primaryProvider?.id === defaultProvider?.id ? reasoningEffort : ''
+  );
 
   try {
     return await fetchCompletion(primaryProvider, primaryBody);
@@ -57,7 +64,7 @@ function providerImageInputSupport(provider) {
   return null;
 }
 
-function buildProviderBody(provider, settings, body, messages) {
+function buildProviderBody(provider, settings, body, messages, reasoningEffort = '') {
   if (!provider?.apiKey || !provider?.baseUrl || !provider?.model) {
     throw new Error('模型连接配置不完整，请检查默认模型和默认图像转述模型设置。');
   }
@@ -66,7 +73,8 @@ function buildProviderBody(provider, settings, body, messages) {
     model: provider.model,
     messages,
     temperature: body.temperature ?? settings.temperature,
-    stream: body.stream ?? false
+    stream: body.stream ?? false,
+    ...buildModelReasoningBody(provider, reasoningEffort)
   };
 }
 

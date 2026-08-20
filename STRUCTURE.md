@@ -1,5 +1,15 @@
 # STRUCTURE
 
+## 2026-07-27 Per-character Model / Reasoning Mapping
+
+- 新增 `src/js/model_reasoning.js`：`getModelReasoningProfile(provider)` 返回模型对应的可用思考档位与日常默认值；`normalizeModelReasoningEffort(provider, effort)` 将失效选择回退到默认档；`buildModelReasoningBody(provider, effort)` 生成 `reasoning_effort` 或 DeepSeek `thinking` 字段。
+- `src/js/ui.js` 新增不持久化的 `characterChatRuntime` Map、`chatModelPickerOpen`、`chatModelSubmenuOpen`，以及 `bindChatModelControl()`、`renderChatModelControl()`、`renderChatReasoningOptions()`、`renderChatModelSubmenu()`、`getCharacterChatRuntime()`、`buildCharacterChatSettings()`、`reconcileCharacterChatRuntime()`、`closeChatModelPicker()`。
+- `src/js/chat_engine.js` 私聊请求和 `src/js/tool_chat_engine.js` MCP 工具循环新增临时 `chatSettings / reasoningEffort` 入参；不写入角色、会话、消息、存档或迁移结构。
+- `src/js/llm_request.js` 的 `requestLlmCompletion()` 新增 `reasoningEffort`，仅向当前对话提供商构造思考字段；转入默认图像转述提供商时保持原请求路由且不携带角色思考档。
+- 新增 DOM：`#chat-model-control-btn`、`#chat-reasoning-progress`、`#chat-model-popover`、`#chat-reasoning-options`、`#chat-model-submenu-trigger`、`#chat-model-current-name`、`#chat-model-submenu`。
+- 新增 `src/styles/chat-model-picker-desktop.css` / `chat-model-picker-mobile.css`：两套互斥 media query 分别定义横屏和竖屏浮层、右侧子菜单、状态动画和平行四边形 Segmented Progress Bar。
+- `sw.js` 离线缓存版本为 `fritia-next-chat-v31`，核心资源新增上述 JS / CSS 与复用图标。
+
 ## 2026-07-17 New User Onboarding Mapping
 
 - 新增模块 `src/js/onboarding.js`：导出 `initOnboarding(options)` 和 `buildImportedSettings(providerKey, apiKey, settings)`，负责欢迎窗、本地偏好、三步向导、剪贴板/手动 Key 导入、官方 API 检查、错误映射和提供商持久化。
@@ -337,6 +347,7 @@ fritia_online_next_chat/
     │   ├── onboarding_mobile.js
     │   ├── storage.js
     │   ├── settings.js
+    │   ├── model_reasoning.js
     │   ├── characters.js
     │   ├── knowledge_base.js
     │   ├── long_term_memory.js
@@ -352,7 +363,9 @@ fritia_online_next_chat/
         ├── app.css
         ├── onboarding.css
         ├── onboarding-desktop.css
-        └── onboarding-mobile.css
+        ├── onboarding-mobile.css
+        ├── chat-model-picker-desktop.css
+        └── chat-model-picker-mobile.css
 ```
 
 ## 页面元素映射
@@ -422,6 +435,9 @@ fritia_online_next_chat/
 - `#chat-info-btn`：右上角会话信息按钮。私聊时切换右侧角色卡片，群聊时打开群聊成员窗口。
 - `#voice-reply-toggle-btn`：私聊语音回复开关，群聊隐藏。
 - `#voice-error-btn` / `#voice-error-popover` / `#voice-error-detail`：私聊 TTS 生成或播放异常详情入口，显示脱敏后的原始错误日志。
+- `#chat-model-control-btn` / `#chat-reasoning-progress`：私聊模型菜单入口与当前思考档分段进度条；群聊中保留原按钮位置但禁用菜单。
+- `#chat-model-popover` / `#chat-reasoning-options`：当前模型可用思考档位主菜单。
+- `#chat-model-submenu-trigger` / `#chat-model-current-name` / `#chat-model-submenu`：当前模型栏和右侧“对话”提供商子菜单。
 
 ### 角色导入
 
@@ -630,7 +646,7 @@ fritia_online_next_chat/
 
 ### `sw.js`
 
-- `CACHE_NAME = 'fritia-next-chat-v29'`：更新离线缓存版本，旧缓存会在 activate 阶段删除。
+- `CACHE_NAME = 'fritia-next-chat-v31'`：更新离线缓存版本，旧缓存会在 activate 阶段删除。
 - `install` 阶段调用 `skipWaiting()`，`activate` 阶段调用 `clients.claim()`，让新缓存策略尽快接管页面。
 - HTML / JS / CSS / JSON 请求使用 network-first，避免前端更新后继续返回旧代码。
 - 图片、图标等静态资源优先走 cache-first，降低重复加载成本。
@@ -673,9 +689,15 @@ fritia_online_next_chat/
 - `buildAttachmentContentParts(attachments)`：把附件数组转换为 `image_url`、`input_audio`、文本或 `file_data` content parts。
 - `attachmentLabelText(attachments)`：生成稳定的附件摘要文本，用于列表摘要和纯附件触发。
 
+### `src/js/model_reasoning.js`
+
+- `getModelReasoningProfile(provider)`：按模型 ID / Base URL 推导可用思考档位、日常默认值和请求映射模式。
+- `normalizeModelReasoningEffort(provider, effort)`：将旧模型档位回退为新模型的合法默认档。
+- `buildModelReasoningBody(provider, effort)`：返回安全可合并到 Chat Completions 的思考参数；未知模型返回空对象。
+
 ### `src/js/llm_request.js`
 
-- `requestLlmCompletion({ settings, messages, body })`：统一发起 OpenAI-compatible chat completions 请求。图片请求会按默认对话模型能力单次路由到默认图像转述模型，或在默认模型返回图片不支持错误后回退。
+- `requestLlmCompletion({ settings, messages, body, reasoningEffort })`：统一发起 OpenAI-compatible chat completions 请求。思考档只应用于当前对话模型；图片请求会按对话模型能力单次路由到默认图像转述模型，或在模型返回图片不支持错误后回退。
 - `messagesContainImages(messages)`：检测 `image_url` content part，用于判断本次请求是否需要图像输入能力。
 - `providerSupportsImageInput(provider)`：根据模型名识别明确的多模态模型；内部请求路由对未知模型采用先试默认模型、失败再回退的策略。
 - Xiaomi MiMo 域名请求同时发送 `Authorization: Bearer` 与 `api-key`；`mimo-v2.5` 被识别为明确支持图片输入。
@@ -721,9 +743,9 @@ fritia_online_next_chat/
 
 ### `src/js/chat_engine.js`
 
-- `sendPrivateMessage({ store, conversation, character, text, attachments, voiceReplyEnabled, onVoiceNotice, onStore })`：私聊发送主流程，可透传语音回复开关。
-- `requestCharacterReply({ store, conversation, character, userText, mode, event, userMessage })`：构建上下文并调用 OpenAI 兼容接口，`userMessage.attachments` 会在请求前解析为真实模型输入。
-- `completePrivateMessageReply({ store, conversation, character, text, userMessage, voiceReplyEnabled, onVoiceNotice, onStore })`：私聊 bot 回复流程；语音模式下保存文字上下文并渲染持久化语音气泡。
+- `sendPrivateMessage({ store, conversation, character, text, attachments, chatSettings, reasoningEffort, voiceReplyEnabled, onVoiceNotice, onStore })`：私聊发送主流程，可透传当前角色的临时对话模型、思考档和语音回复开关。
+- `requestCharacterReply({ store, conversation, character, userText, mode, event, userMessage, chatSettings, reasoningEffort })`：构建上下文并调用 OpenAI 兼容接口，`userMessage.attachments` 会在请求前解析为真实模型输入。
+- `completePrivateMessageReply({ store, conversation, character, text, userMessage, chatSettings, reasoningEffort, voiceReplyEnabled, onVoiceNotice, onStore })`：私聊 bot 回复流程；语音模式下保存文字上下文并渲染持久化语音气泡。
 
 请求拼接顺序：
 
@@ -794,6 +816,8 @@ fritia_online_next_chat/
 - `src/styles/onboarding.css`：欢迎窗、向导、iOS 开关、进度、状态和按钮公共视觉。
 - `src/styles/onboarding-desktop.css`：`min-width: 761px + landscape` 双列操作、桌面窗口约束和横屏自绘滚动条。
 - `src/styles/onboarding-mobile.css`：`max-width: 760px 或 portrait` 单列操作、可视视口高度、安全区和竖屏自绘滚动条。
+- `src/styles/chat-model-picker-desktop.css`：桌面横屏强度菜单、右侧模型子菜单、hover / selected 状态和轻量进场动画。
+- `src/styles/chat-model-picker-mobile.css`：移动竖屏双窄栏浮层，按视口一半约束主菜单与右侧子菜单，避免横向溢出。
 
 ## 事件
 
