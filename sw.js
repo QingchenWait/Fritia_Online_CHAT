@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v31';
+const CACHE_NAME = 'fritia-next-chat-v33';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -34,6 +34,12 @@ const CORE_ASSETS = [
   './src/_logo/icons/ai-agent.svg',
   './src/_logo/icons/bot.svg',
   './src/_logo/icons/brain.svg',
+  './src/_logo/llms/mimo.svg',
+  './src/_logo/llms/qwen.svg',
+  './src/_logo/llms/deepseek.svg',
+  './src/_logo/llms/kimi.svg',
+  './src/_logo/llms/glm.svg',
+  './src/_logo/llms/openai.svg',
   './src/_logo/icons/chevron-down.svg',
   './src/_logo/icons/circle-alert.svg',
   './src/_logo/icons/download.svg',
@@ -57,7 +63,7 @@ const CORE_ASSETS = [
   './src/_logo/icons/tool-stdio.svg',
   './src/_logo/icons/x.svg',
   './src/_logo/emoji/speech_balloon_3d.png',
-  './src/_logo/emoji/robot_3d.png',
+  './src/_logo/emoji/chat.svg',
   './src/_logo/emoji/sparkles_3d.png'
 ];
 

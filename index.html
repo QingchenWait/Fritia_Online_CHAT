@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1677ff">
-  <title>Fritia Online NEXT Chat</title>
+  <title>海姆休息室 | AI Agent 聊天终端</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="src/styles/app.css">
   <link rel="stylesheet" href="src/styles/role-migration-desktop.css">
@@ -104,7 +104,7 @@
         <button class="icon-btn mobile-back" id="mobile-back-btn" type="button" title="返回">
           <span aria-hidden="true">‹</span>
         </button>
-        <img id="chat-avatar" src="src/_logo/emoji/robot_3d.png" alt="" class="chat-head__avatar">
+        <img id="chat-avatar" src="src/_logo/emoji/chat.svg" alt="" class="chat-head__avatar">
         <div class="chat-head__titles">
           <h1 id="chat-title">选择一个角色开始聊天</h1>
           <p id="chat-subtitle">导入角色后，会永久保存在角色列表中</p>
@@ -187,7 +187,7 @@
           </header>
           <div id="chat-reasoning-options" class="chat-reasoning-options"></div>
           <button id="chat-model-submenu-trigger" class="chat-model-current" type="button" role="menuitem" aria-haspopup="menu" aria-expanded="false">
-            <img src="src/_logo/icons/bot.svg" alt="">
+            <img id="chat-model-current-icon" src="src/_logo/icons/bot.svg" alt="">
             <span>
               <small>当前模型</small>
               <strong id="chat-model-current-name"></strong>
@@ -210,7 +210,7 @@
             <input id="file-input" type="file" hidden>
           </label>
           <button id="chat-model-control-btn" class="icon-btn chat-model-control" type="button" title="模型与思考强度" aria-label="模型与思考强度" aria-haspopup="menu" aria-expanded="false">
-            <img src="src/_logo/icons/mic.svg" alt="">
+            <img id="chat-model-control-icon" src="src/_logo/icons/bot.svg" alt="">
             <span id="chat-reasoning-progress" class="chat-reasoning-progress" role="progressbar" aria-label="当前思考强度"></span>
           </button>
         </div>
@@ -228,7 +228,7 @@
         <img src="src/_logo/icons/x.svg" alt="">
       </button>
       <section class="detail-card detail-profile">
-        <img id="detail-avatar" src="src/_logo/emoji/robot_3d.png" alt="" class="detail-profile__avatar">
+        <img id="detail-avatar" src="src/_logo/emoji/chat.svg" alt="" class="detail-profile__avatar">
         <h2 id="detail-name">NEXT Chat</h2>
         <p id="detail-description">跨平台角色扮演 AI 聊天客户端。</p>
         <div id="detail-tags" class="tag-row"></div>
@@ -377,7 +377,7 @@
                 </div>
                 <div class="character-avatar-row">
                   <span class="character-import-label">头像</span>
-                  <img id="char-avatar-preview" class="character-avatar-preview" src="src/_logo/emoji/robot_3d.png" alt="">
+                  <img id="char-avatar-preview" class="character-avatar-preview" src="src/_logo/emoji/chat.svg" alt="">
                   <label class="character-upload-tile character-avatar-upload" for="char-avatar-file">
                     <img src="src/_logo/icons/upload.svg" alt="">
                     <strong>上传头像</strong>
@@ -512,7 +512,7 @@
                 </div>
                 <div class="character-avatar-row">
                   <span class="character-import-label">头像</span>
-                  <img id="edit-char-avatar-preview" class="character-avatar-preview" src="src/_logo/emoji/robot_3d.png" alt="">
+                  <img id="edit-char-avatar-preview" class="character-avatar-preview" src="src/_logo/emoji/chat.svg" alt="">
                   <label class="character-upload-tile character-avatar-upload" for="edit-char-avatar-file">
                     <img src="src/_logo/icons/upload.svg" alt="">
                     <strong>替换头像</strong>
@@ -1399,8 +1399,8 @@
 
           <div class="settings-view" data-settings-view="about">
             <div class="about-panel">
-              <img src="src/_logo/emoji/robot_3d.png" alt="">
-              <h3>Fritia CHAT | 海姆达尔 AI 聊天终端</h3>
+              <img src="src/_logo/emoji/chat.svg" alt="">
+              <h3>海姆休息室 | 海姆达尔 AI Agent 聊天终端</h3>
               <p>Copyright © 2026 青尘工作室。本软件使用 GPLv3 许可证，开源免费。</p>
               <p>企划 | 制作：青尘工作室 <br /> 贴图：尘白禁区、浮游Lev、ShinoKo <br /> 文案：CyanDust_青尘、the-one-唯一 <br /> 知识库：海姆情报室 (BWiki)、萌娘百科 <br /> 美术资源：Lucide、Microsoft Fluent UI Emoji </p>
             </div>

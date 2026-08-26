@@ -1,5 +1,16 @@
 import { loadAppStore, saveAppStore, now, normalizeCharacterRecord, ensurePrivateConversation } from './storage.js';
 
+export const DEFAULT_CHARACTER_AVATAR = 'src/_logo/emoji/chat.svg';
+const LEGACY_DEFAULT_CHARACTER_AVATAR = 'src/_logo/emoji/robot_3d.png';
+
+export function normalizeCharacterAvatarSource(source, fallback = DEFAULT_CHARACTER_AVATAR) {
+  const value = String(source || fallback);
+  const normalizedPath = value.replace(/\\/g, '/').split(/[?#]/, 1)[0];
+  return normalizedPath.endsWith(LEGACY_DEFAULT_CHARACTER_AVATAR)
+    ? DEFAULT_CHARACTER_AVATAR
+    : value;
+}
+
 const PRESET_CHARACTER_SOURCES = [
   {
     id: 'fritia',
@@ -146,7 +157,7 @@ export function getCharacterById(characters, id) {
 }
 
 export function characterAvatar(character) {
-  return character?.avatar || 'src/_logo/emoji/robot_3d.png';
+  return normalizeCharacterAvatarSource(character?.avatar);
 }
 
 export function characterDisplayName(character) {

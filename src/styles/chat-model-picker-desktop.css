@@ -67,13 +67,17 @@
   }
 
   .chat-model-popover__head img,
-  .chat-model-option > img,
   .chat-model-current > img:first-child,
   .chat-model-provider > img {
     width: 1rem;
     height: 1rem;
+    object-fit: contain;
     flex: 0 0 auto;
     opacity: 0.7;
+  }
+
+  .chat-model-control > img:first-child {
+    object-fit: contain;
   }
 
   .chat-model-popover__head strong {
@@ -102,7 +106,7 @@
 
   .chat-model-option {
     min-height: 2.15rem;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.52rem;
     padding: 0.35rem 0.55rem;
     font-size: 0.76rem;

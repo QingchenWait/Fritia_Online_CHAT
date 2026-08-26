@@ -6,7 +6,7 @@ MCP (Model Context Protocol，模型上下文协议) 类似一种专门给大模
 
 ## 🌟 如何使用 MCP？
 
-Fritia Online CHAT 支持两种类型的 MCP 服务器：
+"海姆休息室" APP 支持两种类型的 MCP 服务器：
 
 - **Streamable HTTP**: 独立的 HTTP MCP 服务，更适合部署在线 MCP 服务器。
 - **Stdio MCP**: 本地控制能力更强，更适合部署本地电脑里的 MCP 服务 (如 VS Code、Blender)。

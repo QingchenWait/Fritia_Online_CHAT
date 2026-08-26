@@ -16,9 +16,25 @@ import {
   upsertCharacter,
   updateGroupConversation
 } from './storage.js';
-import { characterAvatar, getCharacterById } from './characters.js';
+import { characterAvatar, getCharacterById, normalizeCharacterAvatarSource } from './characters.js';
 import { getSettings, saveSettings, getAdvancedSettings, saveAdvancedSettings, isDeepSeekIntimateModeAvailable, getDefaultChatProvider } from './settings.js';
 import { getModelReasoningProfile, normalizeModelReasoningEffort } from './model_reasoning.js';
+
+const CHAT_MODEL_LOGO_PATHS = Object.freeze({
+  mimo: 'src/_logo/llms/mimo.svg',
+  qwen: 'src/_logo/llms/qwen.svg',
+  deepseek: 'src/_logo/llms/deepseek.svg',
+  kimi: 'src/_logo/llms/kimi.svg',
+  glm: 'src/_logo/llms/glm.svg',
+  gpt: 'src/_logo/llms/openai.svg',
+  default: 'src/_logo/icons/bot.svg'
+});
+
+function getChatModelLogoPath(model) {
+  const name = String(model || '').trim().toLowerCase();
+  const key = Object.keys(CHAT_MODEL_LOGO_PATHS).find(item => item !== 'default' && name.includes(item));
+  return CHAT_MODEL_LOGO_PATHS[key || 'default'];
+}
 import {
   createKnowledgeBase,
   deleteKnowledgeBase,
@@ -1172,6 +1188,8 @@ function renderChatModelControl() {
   const modelName = document.getElementById('chat-model-current-name');
   const modelTrigger = document.getElementById('chat-model-submenu-trigger');
   const submenu = document.getElementById('chat-model-submenu');
+  const controlIcon = document.getElementById('chat-model-control-icon');
+  const currentModelIcon = document.getElementById('chat-model-current-icon');
   if (!control || !progress || !popover || !options || !modelName || !modelTrigger || !submenu) return;
 
   const conversation = getActiveConversation();
@@ -1183,6 +1201,8 @@ function renderChatModelControl() {
   if (!enabled) {
     control.title = '模型切换仅适用于角色私聊';
     control.setAttribute('aria-label', control.title);
+    if (controlIcon) controlIcon.src = CHAT_MODEL_LOGO_PATHS.default;
+    if (currentModelIcon) currentModelIcon.src = CHAT_MODEL_LOGO_PATHS.default;
     progress.innerHTML = '';
     progress.classList.add('hidden');
     closeChatModelPicker({ render: false });
@@ -1204,6 +1224,9 @@ function renderChatModelControl() {
   progress.setAttribute('aria-valuenow', String(selectedIndex + 1));
   progress.setAttribute('aria-valuetext', runtime.profile.options[selectedIndex]?.label || '普通');
   const effortLabel = runtime.profile.options[selectedIndex]?.label || '普通';
+  const modelLogoPath = getChatModelLogoPath(runtime.provider.model);
+  if (controlIcon) controlIcon.src = modelLogoPath;
+  if (currentModelIcon) currentModelIcon.src = modelLogoPath;
   control.title = `${runtime.provider.model} · ${effortLabel}`;
   control.setAttribute('aria-label', `模型与思考强度：${runtime.provider.model}，${effortLabel}`);
   control.setAttribute('aria-expanded', String(state.chatModelPickerOpen));
@@ -1225,9 +1248,6 @@ function renderChatReasoningOptions(characterId, runtime, container) {
     button.className = `chat-model-option${option.value === runtime.reasoningEffort ? ' is-selected' : ''}`;
     button.setAttribute('role', 'menuitemradio');
     button.setAttribute('aria-checked', String(option.value === runtime.reasoningEffort));
-    const icon = document.createElement('img');
-    icon.src = 'src/_logo/icons/brain.svg';
-    icon.alt = '';
     const label = document.createElement('span');
     label.textContent = option.label;
     const segments = document.createElement('span');
@@ -1238,7 +1258,7 @@ function renderChatReasoningOptions(characterId, runtime, container) {
       segment.classList.toggle('is-active', segmentIndex <= optionIndex);
       segments.appendChild(segment);
     });
-    button.append(icon, label, segments);
+    button.append(label, segments);
     button.addEventListener('click', event => {
       event.stopPropagation();
       state.characterChatRuntime.set(characterId, {
@@ -1261,7 +1281,7 @@ function renderChatModelSubmenu(characterId, runtime, container) {
     button.setAttribute('role', 'menuitemradio');
     button.setAttribute('aria-checked', String(selected));
     const icon = document.createElement('img');
-    icon.src = 'src/_logo/icons/bot.svg';
+    icon.src = getChatModelLogoPath(provider.model);
     icon.alt = '';
     const text = document.createElement('span');
     const model = document.createElement('strong');
@@ -1545,7 +1565,7 @@ function bindCharacterForm() {
       description: document.getElementById('char-description').value.trim(),
       prompt: document.getElementById('char-prompt').value.trim(),
       examples: document.getElementById('char-examples').value.trim(),
-      avatar: avatarMedia ? avatarMedia.ref : 'src/_logo/emoji/robot_3d.png',
+      avatar: avatarMedia ? avatarMedia.ref : 'src/_logo/emoji/chat.svg',
       voiceSample: voiceMedia ? voiceMedia.ref : '',
       source: 'custom',
       tags: ['自定义'],
@@ -1576,7 +1596,7 @@ function updateCharacterAvatarPreview(file) {
   state.characterImport.avatarUrl = '';
   const preview = document.getElementById('char-avatar-preview');
   if (!file) {
-    if (preview) preview.src = 'src/_logo/emoji/robot_3d.png';
+    if (preview) preview.src = 'src/_logo/emoji/chat.svg';
     return;
   }
   state.characterImport.avatarUrl = URL.createObjectURL(file);
@@ -2563,7 +2583,7 @@ async function installRolePlugin(key) {
       description: item.description,
       prompt,
       examples,
-      avatar: avatarMedia ? avatarMedia.ref : 'src/_logo/emoji/robot_3d.png',
+      avatar: avatarMedia ? avatarMedia.ref : 'src/_logo/emoji/chat.svg',
       voiceSample: voiceMedia ? voiceMedia.ref : '',
       source: 'custom',
       tags: ['插件角色'],
@@ -4039,22 +4059,23 @@ function renderAll() {
   syncMobileBackAvailability();
 }
 
-function setImageSource(image, source, fallback = 'src/_logo/emoji/robot_3d.png') {
+function setImageSource(image, source, fallback = 'src/_logo/emoji/chat.svg') {
   if (!image) return;
-  const value = String(source || fallback);
+  const safeFallback = normalizeCharacterAvatarSource(fallback);
+  const value = normalizeCharacterAvatarSource(source, safeFallback);
   image.dataset.mediaSource = value;
-  image.src = fallback;
+  image.src = safeFallback;
   if (!isMediaRef(value)) {
-    image.src = value || fallback;
+    image.src = value || safeFallback;
     return;
   }
   getMediaDataUrl(value)
     .then(dataUrl => {
-      if (image.dataset.mediaSource === value) image.src = dataUrl || fallback;
+      if (image.dataset.mediaSource === value) image.src = dataUrl || safeFallback;
     })
     .catch(error => {
       console.warn('[ui] failed to load media image', error);
-      if (image.dataset.mediaSource === value) image.src = fallback;
+      if (image.dataset.mediaSource === value) image.src = safeFallback;
     });
 }
 
@@ -4348,7 +4369,7 @@ function renderToolOtherFilesPanel() {
   });
 }
 
-function setAttachmentImageSource(image, attachment = {}, fallback = 'src/_logo/emoji/robot_3d.png') {
+function setAttachmentImageSource(image, attachment = {}, fallback = 'src/_logo/emoji/chat.svg') {
   if (!image) return;
   const stableSource = attachment.dataRef || attachment.dataUrl || attachment.url || attachment.path || fallback;
   image.dataset.mediaSource = stableSource;
@@ -6329,7 +6350,7 @@ function conversationTitle(conversation) {
 }
 
 function conversationAvatar(conversation) {
-  if (!conversation) return 'src/_logo/emoji/robot_3d.png';
+  if (!conversation) return 'src/_logo/emoji/chat.svg';
   if (conversation.type === 'private') {
     return characterAvatar(getCharacterById(state.store.characters, conversation.memberIds[0]));
   }

@@ -28,6 +28,7 @@
   --sticker-thumb-size: clamp(64px, 5vw, 78px);
   --sticker-grid-gap: 12px;
   --sticker-popover-padding: 14px;
+  --friend-avatar-diameter: 50px;
   font-family: Inter, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
 }
 
@@ -58,6 +59,12 @@ button {
 img {
   display: block;
   max-width: 100%;
+}
+
+img[src$="/chat.svg"] {
+  max-width: var(--friend-avatar-diameter);
+  max-height: var(--friend-avatar-diameter);
+  object-fit: contain;
 }
 
 .hidden {
@@ -492,8 +499,8 @@ img {
 }
 
 .conversation-item__avatar {
-  width: 50px;
-  height: 50px;
+  width: var(--friend-avatar-diameter);
+  height: var(--friend-avatar-diameter);
   border-radius: 50%;
   object-fit: cover;
   background: #fff;

@@ -1,11 +1,22 @@
 # DEVELOP
 
+## 2026-08-21 Default Chat Avatar
+
+- HTML 初始图片、角色默认头像和 UI 图片失败回退均改用 `src/_logo/emoji/chat.svg`；旧存档中的 `robot_3d.png` 路径会在渲染时归一化，但不会改写存档。
+- `app.css` 新增 `--friend-avatar-diameter: 50px`，好友列表头像引用该变量，所有 `chat.svg` 图片通过 `max-width / max-height` 共用同一上限；`sw.js` 缓存更新为 `v33`。
+
+## 2026-08-20 Chat Model Logos
+
+- `src/js/ui.js` 的 `getChatModelLogoPath()` 按模型名称识别 `mimo / qwen / deepseek / kimi / glm / gpt`，入口按钮和当前模型栏同步显示对应 `src/_logo/llms` SVG，未知模型使用 `bot.svg`。
+- 思考强度选项移除大脑图标；标题保留 `brain.svg`，模型子菜单选项使用同一模型 Logo 映射，并通过 `object-fit: contain` 统一不同 SVG 画布比例。
+- `sw.js` 更新到 `fritia-next-chat-v32`，缓存新增六个模型 Logo。
+
 ## 2026-07-27 Per-character Chat Model / Reasoning Effort
 
 - 新增 `src/js/model_reasoning.js`，根据对话提供商的模型 ID / Base URL 返回可用档位、日常默认档和 OpenAI-compatible 请求字段。已明确映射 GPT-5 / o-series / gpt-oss、DeepSeek V4、Gemini 2.5 / 3.x 和可经网关转译的新版 Claude；未知或不支持控制的模型只提供不附加参数的“普通”档。
 - `src/js/ui.js` 用 `state.characterChatRuntime: Map` 按 `characterId` 保留会话期覆盖，不调用 `saveSettings()` / `saveAppStore()`，不新增任何存储键或迁移字段。提供商被删除或模型能力变化时会回退到当前默认对话模型和合法档位。
 - `src/js/chat_engine.js` 和 `src/js/tool_chat_engine.js` 都接收临时 `chatSettings + reasoningEffort`，确保日常私聊和 MCP agent loop 使用同一角色配置。`src/js/llm_request.js` 只对实际对话提供商追加思考参数；图片能力回退到默认图像转述提供商时不传递角色思考档。
-- `index.html` 新增紧凑的强度菜单、当前模型栏和右侧模型子菜单，复用已有 Lucide `mic / brain / bot / chevron-down` 图标。`chat-model-picker-desktop.css` 与 `chat-model-picker-mobile.css` 分别负责横屏和竖屏布局，进度条绝对定位在原按钮内，未修改 `.composer` 的尺寸、网格或内边距。
+- `index.html` 新增紧凑的强度菜单、当前模型栏和右侧模型子菜单，标题复用 `brain.svg`，入口与模型选项使用模型 Logo 映射。`chat-model-picker-desktop.css` 与 `chat-model-picker-mobile.css` 分别负责横屏和竖屏布局，进度条绝对定位在原按钮内，未修改 `.composer` 的尺寸、网格或内边距。
 - `sw.js` 缓存版本更新到 `fritia-next-chat-v31`，并将新 JS / 两份响应式 CSS 及必要图标加入离线核心资源。
 
 ## 2026-07-17 New User Onboarding / Quick API Setup

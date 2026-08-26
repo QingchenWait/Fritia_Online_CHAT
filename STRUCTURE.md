@@ -1,12 +1,23 @@
 # STRUCTURE
 
+## 2026-08-21 Default Chat Avatar
+
+- 所有界面默认头像与图片失败回退统一使用 `src/_logo/emoji/chat.svg`；`normalizeCharacterAvatarSource()` 兼容旧存档路径，`app.css` 以好友列表头像直径变量 `--friend-avatar-diameter: 50px` 同时约束该 SVG 的最大宽高。
+- `sw.js` 离线缓存版本更新为 `fritia-next-chat-v33`，核心资源由 `robot_3d.png` 改为 `chat.svg`。
+
+## 2026-08-20 Model Logo Mapping
+
+- `src/js/ui.js` 新增 `CHAT_MODEL_LOGO_PATHS` / `getChatModelLogoPath(model)`，将指定模型名称映射到 `src/_logo/llms`，未知模型使用 `src/_logo/icons/bot.svg`。
+- `#chat-model-control-icon`、`#chat-model-current-icon` 和 `#chat-model-submenu` 选项复用模型 Logo；`#chat-reasoning-options` 不再渲染选项级大脑图标，标题仍使用 `brain.svg`。
+- `sw.js` 离线缓存版本为 `fritia-next-chat-v32`，核心资源新增六个模型 Logo。
+
 ## 2026-07-27 Per-character Model / Reasoning Mapping
 
 - 新增 `src/js/model_reasoning.js`：`getModelReasoningProfile(provider)` 返回模型对应的可用思考档位与日常默认值；`normalizeModelReasoningEffort(provider, effort)` 将失效选择回退到默认档；`buildModelReasoningBody(provider, effort)` 生成 `reasoning_effort` 或 DeepSeek `thinking` 字段。
 - `src/js/ui.js` 新增不持久化的 `characterChatRuntime` Map、`chatModelPickerOpen`、`chatModelSubmenuOpen`，以及 `bindChatModelControl()`、`renderChatModelControl()`、`renderChatReasoningOptions()`、`renderChatModelSubmenu()`、`getCharacterChatRuntime()`、`buildCharacterChatSettings()`、`reconcileCharacterChatRuntime()`、`closeChatModelPicker()`。
 - `src/js/chat_engine.js` 私聊请求和 `src/js/tool_chat_engine.js` MCP 工具循环新增临时 `chatSettings / reasoningEffort` 入参；不写入角色、会话、消息、存档或迁移结构。
 - `src/js/llm_request.js` 的 `requestLlmCompletion()` 新增 `reasoningEffort`，仅向当前对话提供商构造思考字段；转入默认图像转述提供商时保持原请求路由且不携带角色思考档。
-- 新增 DOM：`#chat-model-control-btn`、`#chat-reasoning-progress`、`#chat-model-popover`、`#chat-reasoning-options`、`#chat-model-submenu-trigger`、`#chat-model-current-name`、`#chat-model-submenu`。
+- 新增 DOM：`#chat-model-control-btn`、`#chat-model-control-icon`、`#chat-reasoning-progress`、`#chat-model-popover`、`#chat-reasoning-options`、`#chat-model-submenu-trigger`、`#chat-model-current-icon`、`#chat-model-current-name`、`#chat-model-submenu`。
 - 新增 `src/styles/chat-model-picker-desktop.css` / `chat-model-picker-mobile.css`：两套互斥 media query 分别定义横屏和竖屏浮层、右侧子菜单、状态动画和平行四边形 Segmented Progress Bar。
 - `sw.js` 离线缓存版本为 `fritia-next-chat-v31`，核心资源新增上述 JS / CSS 与复用图标。
 
@@ -331,6 +342,7 @@ fritia_online_next_chat/
     │       └── char_cherno_prompt.txt
     ├── _logo/
     │   ├── emoji/
+    │   │   ├── chat.svg
     │   │   ├── robot_3d.png
     │   │   ├── sparkles_3d.png
     │   │   └── speech_balloon_3d.png
