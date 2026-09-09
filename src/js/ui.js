@@ -12,6 +12,7 @@ import {
   normalizeCharacterRecord,
   now,
   readFileAsText,
+  removeGroupConversation,
   saveAppStore,
   upsertCharacter,
   updateGroupConversation
@@ -19,6 +20,7 @@ import {
 import { characterAvatar, getCharacterById, normalizeCharacterAvatarSource } from './characters.js';
 import { getSettings, saveSettings, getAdvancedSettings, saveAdvancedSettings, isDeepSeekIntimateModeAvailable, getDefaultChatProvider } from './settings.js';
 import { getModelReasoningProfile, normalizeModelReasoningEffort } from './model_reasoning.js';
+import { getLmStudioReasoningProfile, isLmStudioProvider, testLmStudioConnection } from './lm_studio.js';
 
 const CHAT_MODEL_LOGO_PATHS = Object.freeze({
   mimo: 'src/_logo/llms/mimo.svg',
@@ -30,8 +32,11 @@ const CHAT_MODEL_LOGO_PATHS = Object.freeze({
   default: 'src/_logo/icons/bot.svg'
 });
 
-function getChatModelLogoPath(model) {
+const LM_STUDIO_LOGO_PATH = 'https://lmstudio.ai/assets/marketing/brand/download/logos/lm-studio-icon-color.svg';
+
+function getChatModelLogoPath(model, baseUrl = '') {
   const name = String(model || '').trim().toLowerCase();
+  if (/(?:lm[-_ ]?studio|localhost|127\.0\.0\.1|\[::1\])/.test(`${name} ${String(baseUrl || '').toLowerCase()}`)) return LM_STUDIO_LOGO_PATH;
   const key = Object.keys(CHAT_MODEL_LOGO_PATHS).find(item => item !== 'default' && name.includes(item));
   return CHAT_MODEL_LOGO_PATHS[key || 'default'];
 }
@@ -162,12 +167,18 @@ const state = {
   groupEditorMode: 'create',
   groupInfoEditing: false,
   groupInfoMemberSearch: '',
+  groupLeaveConversationId: '',
   modelProviderTab: 'chat',
   selectedChatProviderId: '',
   selectedTtsProviderId: '',
   characterChatRuntime: new Map(),
   chatModelPickerOpen: false,
   chatModelSubmenuOpen: false,
+  lmStudioConnection: {
+    providerId: '',
+    status: 'idle',
+    message: ''
+  },
   roundtableErrorPopoverOpen: false,
   voiceErrorPopoverOpen: false,
   voiceError: null,
@@ -485,6 +496,7 @@ function bindGlobalEvents() {
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
+      closeGroupLeaveConfirm();
       closeMainMenu();
       closeQuickCreateMenu();
       closePluginSourceMenu();
@@ -1177,6 +1189,26 @@ function bindChatModelControl() {
     state.chatModelSubmenuOpen = !state.chatModelSubmenuOpen;
     renderChatModelControl();
   });
+  document.getElementById('lm-studio-connect-btn')?.addEventListener('click', event => {
+    event.stopPropagation();
+    const character = getActivePrivateCharacter();
+    if (!character) return;
+    const runtime = getCharacterChatRuntime(character.id);
+    connectLmStudio(runtime);
+  });
+  document.getElementById('lm-studio-config-btn')?.addEventListener('click', event => {
+    event.stopPropagation();
+    const character = getActivePrivateCharacter();
+    const runtime = character ? getCharacterChatRuntime(character.id) : null;
+    if (runtime?.provider && isLmStudioProvider(runtime.provider)) {
+      state.selectedChatProviderId = runtime.provider.id;
+    }
+    closeChatModelPicker();
+    openPanel('settings-panel');
+    showSettingsSection('model');
+    showModelProviderTab('chat');
+    renderModelSettings(getSettings());
+  });
   popover?.addEventListener('click', event => event.stopPropagation());
 }
 
@@ -1190,6 +1222,7 @@ function renderChatModelControl() {
   const submenu = document.getElementById('chat-model-submenu');
   const controlIcon = document.getElementById('chat-model-control-icon');
   const currentModelIcon = document.getElementById('chat-model-current-icon');
+  const connection = document.getElementById('lm-studio-connection');
   if (!control || !progress || !popover || !options || !modelName || !modelTrigger || !submenu) return;
 
   const conversation = getActiveConversation();
@@ -1210,6 +1243,7 @@ function renderChatModelControl() {
     modelTrigger.setAttribute('aria-expanded', 'false');
     popover.classList.add('hidden');
     submenu.classList.add('hidden');
+    connection?.classList.add('hidden');
     return;
   }
 
@@ -1224,7 +1258,7 @@ function renderChatModelControl() {
   progress.setAttribute('aria-valuenow', String(selectedIndex + 1));
   progress.setAttribute('aria-valuetext', runtime.profile.options[selectedIndex]?.label || '普通');
   const effortLabel = runtime.profile.options[selectedIndex]?.label || '普通';
-  const modelLogoPath = getChatModelLogoPath(runtime.provider.model);
+  const modelLogoPath = getChatModelLogoPath(runtime.provider.model, runtime.provider.baseUrl);
   if (controlIcon) controlIcon.src = modelLogoPath;
   if (currentModelIcon) currentModelIcon.src = modelLogoPath;
   control.title = `${runtime.provider.model} · ${effortLabel}`;
@@ -1235,9 +1269,53 @@ function renderChatModelControl() {
   modelName.title = runtime.provider.model || runtime.provider.id;
   modelTrigger.setAttribute('aria-expanded', String(state.chatModelSubmenuOpen));
   submenu.classList.toggle('hidden', !state.chatModelSubmenuOpen);
+  renderLmStudioConnection(runtime);
   syncChatModelPickerLayout();
   renderChatReasoningOptions(character.id, runtime, options);
   renderChatModelSubmenu(character.id, runtime, submenu);
+}
+
+function renderLmStudioConnection(runtime) {
+  const container = document.getElementById('lm-studio-connection');
+  const connectButton = document.getElementById('lm-studio-connect-btn');
+  const status = document.getElementById('lm-studio-connection-status');
+  if (!container || !connectButton || !status) return;
+  const local = isLmStudioProvider(runtime?.provider);
+  container.classList.toggle('hidden', !local);
+  if (!local) return;
+  const connectionState = state.lmStudioConnection.providerId === runtime.provider.id
+    ? state.lmStudioConnection
+    : { status: 'idle', message: '' };
+  connectButton.disabled = connectionState.status === 'checking';
+  connectButton.textContent = connectionState.status === 'checking' ? '连接中…' : '连接';
+  status.textContent = connectionState.message || '如果浏览器左上角弹出“本地网络访问”提示，请点击【允许】。';
+  status.dataset.state = connectionState.status;
+}
+
+async function connectLmStudio(runtime) {
+  const provider = runtime?.provider;
+  if (!isLmStudioProvider(provider)) return;
+  state.lmStudioConnection = {
+    providerId: provider.id,
+    status: 'checking',
+    message: '正在请求本地网络访问权限。如果浏览器左上角弹出提示，请点击【允许】。'
+  };
+  renderLmStudioConnection(runtime);
+  try {
+    await testLmStudioConnection(provider);
+    state.lmStudioConnection = {
+      providerId: provider.id,
+      status: 'success',
+      message: '已成功连接 LM Studio 本地模型。'
+    };
+  } catch (error) {
+    state.lmStudioConnection = {
+      providerId: provider.id,
+      status: 'error',
+      message: `连接失败：${error?.message || '无法访问本地端点。'}`
+    };
+  }
+  renderLmStudioConnection(runtime);
 }
 
 function renderChatReasoningOptions(characterId, runtime, container) {
@@ -1281,7 +1359,7 @@ function renderChatModelSubmenu(characterId, runtime, container) {
     button.setAttribute('role', 'menuitemradio');
     button.setAttribute('aria-checked', String(selected));
     const icon = document.createElement('img');
-    icon.src = getChatModelLogoPath(provider.model);
+    icon.src = getChatModelLogoPath(provider.model, provider.baseUrl);
     icon.alt = '';
     const text = document.createElement('span');
     const model = document.createElement('strong');
@@ -1314,7 +1392,9 @@ function getCharacterChatRuntime(characterId) {
   const saved = state.characterChatRuntime.get(characterId) || null;
   const fallback = getDefaultChatProvider(settings) || settings.chatProviders[0];
   const provider = settings.chatProviders.find(item => item.id === saved?.providerId) || fallback;
-  const profile = getModelReasoningProfile(provider);
+  const profile = isLmStudioProvider(provider)
+    ? getLmStudioReasoningProfile(provider)
+    : getModelReasoningProfile(provider);
   const reasoningEffort = normalizeModelReasoningEffort(provider, saved?.reasoningEffort || profile.defaultValue);
   return { settings, provider, profile, reasoningEffort };
 }
@@ -1905,7 +1985,52 @@ function bindGroupInfoPanel() {
     openPanel('settings-panel');
     showSettingsSection('advanced');
   });
-  document.getElementById('group-info-leave')?.addEventListener('click', closeGroupInfoPanel);
+  document.getElementById('group-info-leave')?.addEventListener('click', openGroupLeaveConfirm);
+  document.getElementById('group-leave-cancel')?.addEventListener('click', closeGroupLeaveConfirm);
+  document.getElementById('group-leave-backdrop')?.addEventListener('click', closeGroupLeaveConfirm);
+  document.getElementById('group-leave-confirm')?.addEventListener('click', confirmGroupLeave);
+}
+
+function openGroupLeaveConfirm() {
+  const conversation = getActiveConversation();
+  if (!conversation || conversation.type !== 'group') return;
+  state.groupLeaveConversationId = conversation.id;
+  document.getElementById('group-leave-confirm-overlay')?.classList.remove('hidden');
+  syncMobileBackAvailability();
+}
+
+function closeGroupLeaveConfirm() {
+  state.groupLeaveConversationId = '';
+  document.getElementById('group-leave-confirm-overlay')?.classList.add('hidden');
+  syncMobileBackAvailability();
+}
+
+async function confirmGroupLeave() {
+  const conversationId = state.groupLeaveConversationId;
+  const conversation = state.store.conversations.find(item => item.id === conversationId && item.type === 'group');
+  if (!conversation) {
+    closeGroupLeaveConfirm();
+    return;
+  }
+  const confirmButton = document.getElementById('group-leave-confirm');
+  if (confirmButton) {
+    confirmButton.disabled = true;
+    confirmButton.setAttribute('aria-busy', 'true');
+  }
+  try {
+    const next = await removeGroupConversation(state.store, conversationId);
+    closeGroupLeaveConfirm();
+    closeGroupInfoPanel();
+    updateStore(next);
+    // On mobile, return to the conversation list after leaving the group.
+    document.getElementById('app')?.classList.remove('is-chat-open');
+    syncMobileBackAvailability();
+  } finally {
+    if (confirmButton) {
+      confirmButton.disabled = false;
+      confirmButton.removeAttribute('aria-busy');
+    }
+  }
 }
 
 function bindGroupSettingToggle(id, key) {
@@ -3849,11 +3974,14 @@ function hasMobileBackDestination() {
   const app = document.getElementById('app');
   const groupInfo = document.getElementById('group-info-panel');
   const groupInfoOpen = Boolean(groupInfo && !groupInfo.classList.contains('hidden'));
+  const groupLeaveConfirm = document.getElementById('group-leave-confirm-overlay');
+  const groupLeaveConfirmOpen = Boolean(groupLeaveConfirm && !groupLeaveConfirm.classList.contains('hidden'));
   return Boolean(
     state.roleMigration.confirmOpen
     || state.roleMigration.promptOpen
     || getTopOpenModalId()
     || groupInfoOpen
+    || groupLeaveConfirmOpen
     || app?.classList.contains('is-detail-open')
     || app?.classList.contains('is-chat-open')
   );
@@ -3866,6 +3994,12 @@ function syncMobileBackAvailability() {
 
 function performMobileBackGesture() {
   let handled = false;
+  const groupLeaveConfirm = document.getElementById('group-leave-confirm-overlay');
+  if (groupLeaveConfirm && !groupLeaveConfirm.classList.contains('hidden')) {
+    closeGroupLeaveConfirm();
+    clearMobileTouchActivationState();
+    return true;
+  }
   if (state.chatModelPickerOpen) {
     closeChatModelPicker();
     syncMobileBackAvailability();
@@ -3921,6 +4055,11 @@ function handleAndroidBackAction() {
 }
 
 function closeTransientBackSurface() {
+  const groupLeaveConfirm = document.getElementById('group-leave-confirm-overlay');
+  if (groupLeaveConfirm && !groupLeaveConfirm.classList.contains('hidden')) {
+    closeGroupLeaveConfirm();
+    return true;
+  }
   if (closeRoleMigrationSurface()) return true;
   if (state.chatModelPickerOpen) {
     closeChatModelPicker();
@@ -5886,6 +6025,12 @@ function renderModelProviderGroup(kind, providers, selectedId) {
   renderModelProviderList(kind, providers, provider?.id || '');
   fillProviderSelect(`model-${kind}-provider-select`, providers, provider?.id || '');
   fillModelProviderForm(kind, provider);
+  if (kind === 'chat') {
+    document.querySelector('[data-model-pane="chat"] .model-provider-title > img')?.setAttribute(
+      'src',
+      getChatModelLogoPath(provider?.model, provider?.baseUrl)
+    );
+  }
 }
 
 function renderModelProviderList(kind, providers, selectedId) {
@@ -5897,8 +6042,9 @@ function renderModelProviderList(kind, providers, selectedId) {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = `model-provider-item${provider.id === selectedId ? ' is-active' : ''}`;
+    const iconPath = kind === 'chat' ? getChatModelLogoPath(provider.model, provider.baseUrl) : `src/_logo/icons/${icon}`;
     item.innerHTML = `
-      <img src="src/_logo/icons/${icon}" alt="">
+      <img src="${escapeHtml(iconPath)}" alt="">
       <span><strong>${escapeHtml(provider.id)}</strong><small>${escapeHtml(provider.baseUrl)}</small></span>
     `;
     item.addEventListener('click', () => selectModelProvider(kind, provider.id));
@@ -6172,7 +6318,8 @@ function updateContextStatus() {
   const settings = getSettings();
   setText('rag-status', activeKb.length ? `${activeKb.length} 个已启用` : '未启用');
   setText('ltm-status', memory.enabled ? '启用' : '关闭');
-  setText('model-status', settings.apiKey ? settings.model : '未配置');
+  const localProvider = settings.chatProviders?.find(provider => provider.id === settings.defaultChatProviderId);
+  setText('model-status', settings.apiKey || isLmStudioProvider(localProvider) ? settings.model : '未配置');
 }
 
 function openPanel(id, options = {}) {

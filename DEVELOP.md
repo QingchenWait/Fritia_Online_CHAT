@@ -1,5 +1,21 @@
 # DEVELOP
 
+## 2026-09-09 Group Conversation Lifecycle
+
+- `src/js/storage.js`：新群聊不再使用成员/标题哈希作为会话 ID，而是生成独立 `id` 与 `unique_id`；旧群聊缺少该字段时归一化为原会话 ID，保证旧存档兼容。
+- `src/js/storage.js`：新增 `removeGroupConversation()`，按精确群聊 ID 删除会话和消息桶，并在确认未被其他会话、角色或表情包引用后删除对应 IndexedDB 媒体。
+- `src/js/ui.js` / `index.html` / `src/styles/app.css`：群聊退出改为自绘确认浮窗，支持确认、取消、Esc 与移动端返回手势；确认退出后返回会话列表。
+
+## 2026-09-09 LM Studio Local Transport
+
+- 新增 `src/js/lm_studio.js`，独立负责 localhost / 127.0.0.1 / `[::1]` 识别、Local Network Access fetch、连接检测、非流式和流式 OpenAI-compatible completion、tool call 增量解析。
+- `src/js/llm_request.js` 仅增加本地 provider 分流，原在线 provider 构造、请求头、图片回退和响应解析保持原实现；`chat_engine.js` 与 `tool_chat_engine.js` 仅放宽本地模型无 API Key 的占位判断，并将 MCP agent loop 委托给独立适配器。
+- `ui.js` 增加 LM Studio Logo 映射、连接状态和配置跳转；`index.html`、`chat-model-picker-desktop.css`、`chat-model-picker-mobile.css` 共同实现横屏/竖屏模型连接卡片，两枚操作按钮不使用 Logo，状态颜色遵循 Soft UI 规范。
+- Service Worker 缓存批次更新为 `v35` 并纳入 `lm_studio.js`。
+- 针对实际浏览器错误 `https://localhost:1234/v1/models`，`sw.js` 不再代理回环模型请求，确保页面上下文执行 Local Network Access；`lm_studio.js` 对误填的 HTTPS 回环地址增加 HTTP 兼容回退，并将 CORS/HTTP 配置错误转换为可操作提示。LM Studio Bionic 仍复用同一 OpenAI-compatible `/v1` 服务面。
+- 针对 Bionic 的 `System message must be at the beginning` 模板错误，`lm_studio.js` 在本地请求发送前将人格、知识库、长期记忆等多个 `system` 消息合并为一个首位系统块；在线模型收到的消息数组不变。
+- `roundtable.js` 的事件配置门槛现在复用 `isLmStudioSettings()`；本地 LM Studio/Bionic provider 可在 API Key 为空时进入圆桌请求，在线 provider 的 API Key 校验保持不变。
+
 ## 2026-08-21 Default Chat Avatar
 
 - HTML 初始图片、角色默认头像和 UI 图片失败回退均改用 `src/_logo/emoji/chat.svg`；旧存档中的 `robot_3d.png` 路径会在渲染时归一化，但不会改写存档。

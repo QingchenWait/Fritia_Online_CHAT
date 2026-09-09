@@ -1,5 +1,24 @@
 # STRUCTURE
 
+## 2026-09-09 Group Conversation Lifecycle
+
+- `src/js/storage.js`：`createGroupConversation()` 为每次新建群聊生成独立会话 ID/`unique_id`；`normalizeConversation()` 兼容旧群聊；`removeGroupConversation()` 精确删除单个群聊及其消息和安全可回收媒体引用。
+- `index.html`：新增 `#group-leave-confirm-overlay` 确认退出浮窗及确认/取消按钮。
+- `src/js/ui.js`：绑定群聊退出浮窗、删除完成后的状态切换，并将浮窗纳入移动端返回处理。
+- `src/styles/app.css`：新增群聊退出浮窗的 Soft UI 样式、动画和移动端安全区适配。
+- `sw.js`：缓存批次更新为 `fritia-next-chat-v36` 并加入退出确认浮窗使用的垃圾桶图标。
+
+## 2026-09-09 LM Studio Local Model
+
+- `src/js/lm_studio.js`：纯前端本地模型适配层。`isLmStudioProvider()` 按 Base URL 识别本地端点；`testLmStudioConnection()` 检查 `/models` 并触发浏览器 Local Network Access；`normalizeLmStudioMessages()` 将多个系统提示合并为 Bionic/Jinja 可接受的首位系统块；`requestLmStudioCompletion()` 处理聊天与 MCP tools 的 JSON/SSE 响应。
+- `src/js/roundtable.js`：圆桌事件进入请求前仅对 LM Studio/Bionic provider 放宽空 API Key 检查，在线 provider 仍要求 API Key。
+- `src/js/llm_request.js`：在默认 provider 请求前增加 LM Studio 分支，在线模型请求流程不变。
+- `src/js/chat_engine.js` / `src/js/tool_chat_engine.js`：允许本地 provider 使用空 API Key，并将普通私聊与 MCP agent loop 的请求交给 `lm_studio.js`。
+- `index.html`：`#lm-studio-connection`、`#lm-studio-connect-btn`、`#lm-studio-config-btn`、`#lm-studio-connection-status` 构成思考强度菜单顶部的连接卡片。
+- `src/js/ui.js`：识别并显示 LM Studio 图标，维护连接状态，连接按钮请求权限/检测端点，配置按钮跳转大模型设置。
+- `src/styles/chat-model-picker-desktop.css` / `chat-model-picker-mobile.css`：分别定义横屏与竖屏的模型连接标题、并列按钮、动态状态文本布局。
+- `sw.js`：通过回环地址判断跳过 Service Worker，避免本地模型请求被通用缓存策略接管；`lm_studio.js`：对 HTTPS 回环地址尝试 HTTP 兼容回退，并统一报告 CORS / Local API 配置提示。
+
 ## 2026-08-21 Default Chat Avatar
 
 - 所有界面默认头像与图片失败回退统一使用 `src/_logo/emoji/chat.svg`；`normalizeCharacterAvatarSource()` 兼容旧存档路径，`app.css` 以好友列表头像直径变量 `--friend-avatar-diameter: 50px` 同时约束该 SVG 的最大宽高。

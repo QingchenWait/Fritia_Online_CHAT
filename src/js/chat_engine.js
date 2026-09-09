@@ -8,6 +8,7 @@ import { attachmentLabelText, buildModelMessageContent } from './llm_media.js';
 import { requestLlmCompletion } from './llm_request.js';
 import { saveDataUrlAsMedia } from './media_store.js';
 import { getTtsErrorLog, synthesizeMimoVoiceClone } from './tts_engine.js';
+import { isLmStudioSettings } from './lm_studio.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -158,7 +159,7 @@ export async function completePrivateMessageReply({
 
 export async function requestCharacterReply({ store, conversation, character, userText, mode = 'private', event = null, userMessage = null, chatSettings = null, reasoningEffort = '' }) {
   const settings = chatSettings || getSettings();
-  if (!settings.apiKey) {
+  if (!settings.apiKey && !isLmStudioSettings(settings)) {
     return localFallbackReply(character, userText, mode);
   }
   const history = getConversationMessages(store, conversation.id)

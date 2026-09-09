@@ -4673,6 +4673,109 @@ select:focus {
   background: #fff1f0;
 }
 
+.group-leave-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 40px);
+}
+
+.group-leave-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(3px);
+}
+
+.group-leave-confirm-card {
+  position: relative;
+  z-index: 1;
+  width: min(400px, 100%);
+  padding: clamp(24px, 4vw, 34px);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: clamp(18px, 2vw, 24px);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--shadow-floating);
+  text-align: center;
+  animation: groupLeaveConfirmIn 160ms ease-out;
+}
+
+.group-leave-confirm-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(217, 58, 58, 0.1);
+}
+
+.group-leave-confirm-icon img {
+  width: 23px;
+  height: 23px;
+  filter: invert(31%) sepia(84%) saturate(1558%) hue-rotate(330deg) brightness(88%);
+}
+
+.group-leave-confirm-card h2 {
+  margin: 0;
+  font-size: clamp(18px, 2.4vw, 21px);
+}
+
+.group-leave-confirm-card p {
+  margin: 12px 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.group-leave-confirm-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.group-leave-confirm-actions button {
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 700;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.group-leave-cancel-btn {
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--text);
+}
+
+.group-leave-cancel-btn:hover {
+  background: var(--surface-soft);
+}
+
+.group-leave-confirm-btn {
+  border: 1px solid #d93a3a;
+  background: #d93a3a;
+  color: #fff;
+  box-shadow: 0 9px 18px rgba(217, 58, 58, 0.22);
+}
+
+.group-leave-confirm-btn:hover {
+  background: #c72f2f;
+  transform: translateY(-1px);
+}
+
+.group-leave-confirm-actions button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  transform: none;
+}
+
+@keyframes groupLeaveConfirmIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 .group-create-actions {
   border-top: 1px solid var(--line);
   padding-top: 14px;
@@ -7314,6 +7417,19 @@ select:focus {
     height: 100dvh;
     max-height: none;
     border-radius: 0;
+  }
+
+  .group-leave-confirm-overlay {
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+
+  .group-leave-confirm-card {
+    width: min(100%, 360px);
+    padding: 24px 18px 18px;
+  }
+
+  .group-leave-confirm-card p {
+    margin-bottom: 20px;
   }
 
   .archive-shell {

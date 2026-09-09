@@ -1,5 +1,20 @@
 # Fritia Online NEXT Chat
 
+## 2026-09-09 群聊创建与退出
+
+- 每次创建群聊都会生成独立的后台 `unique_id` 和会话 ID；即使成员完全相同，也会建立新的群聊与独立聊天记录，旧群聊存档保持兼容。
+- 点击“退出群聊”会打开确认浮窗。确认后仅删除目标群聊的会话、消息及不再被其他数据引用的媒体文件；私聊、其他群聊、角色头像、语音和表情包不会被删除。
+
+## 2026-09-09 LM Studio 本地模型
+
+- 在“设置 → 大模型 → 对话”中新增或编辑提供商；当 API Base URL 含 `localhost`、`127.0.0.1` 或 `[::1]` 时，自动使用独立的 LM Studio 浏览器端传输层。API Key 可留空，模型名称沿用 LM Studio 当前加载的模型 ID（默认端点通常为 `http://localhost:1234/v1`）。
+- 私聊和 MCP 工具私聊都会保留现有角色人格、历史、知识库/长期记忆提示词与 OpenAI-compatible tools，并将请求发送到 LM Studio 的 `/v1/chat/completions`。
+- 选择本地模型后，聊天输入框的模型按钮会显示 LM Studio 图标；思考强度浮层顶部提供“模型连接 / 连接 / 配置”。连接按钮会触发浏览器 Local Network Access 权限请求，并显示连接中、成功或失败状态；配置按钮直接打开大模型设置。
+- LM Studio 图标使用官方品牌资源地址；若客户端处于完全离线环境，模型功能仍可用，但图标会依赖浏览器缓存/网络加载。
+- 该能力纯前端实现，适用于 localhost 网页、打包客户端和 Page 网页（浏览器需允许访问本地网络；LM Studio 服务端需开启 CORS）。
+- LM Studio / Bionic 的本地 OpenAI-compatible 服务请使用 `http://localhost:1234/v1`（不要填写 `https://localhost:1234/v1`），并在 Local Server / Local Model API 中开启 CORS。localhost 页面访问 localhost 通常不会弹出 Local Network Access 确认框；Page 网页访问本地端点时才可能由浏览器显示权限提示。
+- Bionic 的部分聊天模板只接受一个位于首位的 `system` 消息；本地适配层会在发送前合并应用人格、知识库和记忆提示词，在线模型的原始消息流程不受影响。
+
 ## 2026-08-21 默认聊天头像
 
 - 原机器人默认图统一替换为 `src/_logo/emoji/chat.svg`；其展示宽高不会超过好友列表头像的 50px 直径，原本更小的头像位置保持原尺寸。

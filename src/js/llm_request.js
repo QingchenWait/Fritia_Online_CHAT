@@ -1,5 +1,6 @@
 import { getDefaultChatProvider, getDefaultImageCaptionProvider, getSettings } from './settings.js';
 import { buildModelReasoningBody } from './model_reasoning.js';
+import { isLmStudioProvider, requestLmStudioCompletion } from './lm_studio.js';
 
 const IMAGE_UNSUPPORTED_RE = /(image|vision|multimodal|image_url|input image|图片|图像).*(unsupported|not supported|不支持|无法|不能)|unsupported.*(image|vision|multimodal|image_url)/i;
 
@@ -12,6 +13,23 @@ export async function requestLlmCompletion({ settings = getSettings(), messages 
   const primaryProvider = needsImages && imageSupport === false
     ? imageProvider
     : defaultProvider;
+  if (isLmStudioProvider(primaryProvider)) {
+    try {
+      const result = await requestLmStudioCompletion({
+        provider: primaryProvider,
+        messages: requestMessages,
+        body: {
+          ...body,
+          model: primaryProvider.model,
+          temperature: body.temperature ?? settings.temperature,
+          stream: body.stream ?? false
+        }
+      });
+      return String(result?.content || '').trim() || JSON.stringify(result);
+    } catch (error) {
+      throw annotateProviderError(error, primaryProvider, needsImages);
+    }
+  }
   const primaryBody = buildProviderBody(
     primaryProvider,
     settings,

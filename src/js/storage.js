@@ -1,4 +1,4 @@
-import { saveDataUrlAsMedia } from './media_store.js';
+import { deleteMedia, isMediaRef, saveDataUrlAsMedia } from './media_store.js';
 
 export const STORAGE_KEYS = {
   settings: 'fritia-settings',
@@ -10,6 +10,7 @@ export const STORAGE_KEYS = {
 };
 
 const STORE_VERSION = 1;
+const MEDIA_REFERENCE_KEYS = new Set(['dataRef', 'mediaRef', 'avatar', 'voiceSample']);
 
 export function now() {
   return Date.now();
@@ -196,6 +197,9 @@ export function normalizeConversation(raw = {}) {
     title: clampText(raw.title, 100),
     avatar: clampText(raw.avatar, 3000000),
     memberIds,
+    // Group conversations created before unique IDs were introduced fall back
+    // to their persisted id so archive/record compatibility is preserved.
+    ...(type === 'group' ? { unique_id: clampText(raw.unique_id || raw.uniqueId || id, 120) } : {}),
     createdAt: Number(raw.createdAt) || now(),
     updatedAt: Number(raw.updatedAt) || now(),
     unread: Math.max(0, Math.floor(Number(raw.unread) || 0))
@@ -347,16 +351,29 @@ export function ensurePrivateConversation(store, character) {
 
 export function createGroupConversation(store, title, memberIds, characters = []) {
   const cleanMembers = [...new Set(memberIds.map(item => clampText(item, 80)).filter(Boolean))];
-  const id = `group:${hashString(`${title}|${cleanMembers.join(',')}`)}`;
-  const existing = store.conversations.find(item => item.id === id);
+  // Do not derive the conversation key from title/members: creating the same
+  // group twice must produce two independent histories.
+  const existingIds = new Set(store.conversations.map(item => item.id));
+  const existingUniqueIds = new Set(store.conversations.map(item => item.unique_id || item.uniqueId).filter(Boolean));
+  const idBase = `group:${createId('conversation')}`;
+  const uniqueBase = createId('group');
+  let id = idBase;
+  let unique_id = uniqueBase;
+  let suffix = 1;
+  while (existingIds.has(id) || existingUniqueIds.has(unique_id)) {
+    id = `${idBase}_${suffix}`;
+    unique_id = `${uniqueBase}_${suffix}`;
+    suffix += 1;
+  }
   const conversation = {
     id,
     type: 'group',
+    unique_id,
     title: clampText(title, 80) || '圆桌密语',
     avatar: 'src/_char/Profile_GroupChat.png',
     memberIds: cleanMembers,
-    groupSettings: normalizeGroupSettings(existing?.groupSettings),
-    createdAt: existing?.createdAt || now(),
+    groupSettings: normalizeGroupSettings(),
+    createdAt: now(),
     updatedAt: now()
   };
   const next = structuredCloneSafe(store);
@@ -367,6 +384,77 @@ export function createGroupConversation(store, title, memberIds, characters = []
   next.activeConversationId = id;
   const saved = saveAppStore(next);
   return saved.conversations.find(item => item.id === id) || normalizeConversation(conversation);
+}
+
+/**
+ * Remove exactly one group conversation and its message bucket.
+ * Private conversations and all other groups are left untouched.
+ */
+export async function removeGroupConversation(store, conversationId) {
+  const target = store?.conversations?.find(item => item.id === conversationId && item.type === 'group');
+  if (!target) return store;
+  const targetRefs = collectConversationMediaRefs(store, conversationId);
+  const protectedRefs = collectProtectedMediaRefs(store, conversationId);
+  const next = structuredCloneSafe(store);
+  next.conversations = next.conversations.filter(item => item.id !== conversationId);
+  if (next.messages && typeof next.messages === 'object') delete next.messages[conversationId];
+  if (next.activeConversationId === conversationId) {
+    next.activeConversationId = next.conversations[0]?.id || '';
+  }
+  const saved = saveAppStore(next);
+  const removableRefs = [...targetRefs].filter(ref => !protectedRefs.has(ref));
+  await Promise.all(removableRefs.map(ref => deleteMedia(ref).catch(error => {
+    console.warn('[storage] failed to remove group media', ref, error);
+  })));
+  return saved;
+}
+
+function collectConversationMediaRefs(store, conversationId) {
+  const refs = new Set();
+  const conversation = store?.conversations?.find(item => item.id === conversationId);
+  if (conversation) collectMediaRefsFromValue(conversation, refs);
+  const messages = Array.isArray(store?.messages?.[conversationId]) ? store.messages[conversationId] : [];
+  for (const message of messages) collectMediaRefsFromValue(message, refs);
+  return refs;
+}
+
+function collectProtectedMediaRefs(store, conversationId) {
+  const refs = new Set();
+  for (const [id, messages] of Object.entries(store?.messages || {})) {
+    if (id === conversationId) continue;
+    for (const message of Array.isArray(messages) ? messages : []) collectMediaRefsFromValue(message, refs);
+  }
+  for (const character of store?.characters || []) collectMediaRefsFromValue(character, refs);
+  for (const conversation of store?.conversations || []) {
+    if (conversation.id === conversationId) continue;
+    collectMediaRefsFromValue(conversation, refs);
+  }
+  // Sticker media lives in its own localStorage record and can be attached to
+  // a group message, so keep those references as well.
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const stickers = JSON.parse(localStorage.getItem('fritia_sticker_store') || '{}').stickers;
+      for (const sticker of Array.isArray(stickers) ? stickers : []) {
+        if (isMediaRef(sticker?.dataRef)) refs.add(sticker.dataRef);
+      }
+    } catch {
+      // Ignore malformed optional sticker data; deleting the conversation remains safe.
+    }
+  }
+  return refs;
+}
+
+function collectMediaRefsFromValue(value, refs, key = '') {
+  if (MEDIA_REFERENCE_KEYS.has(key) && isMediaRef(value)) {
+    refs.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach(item => collectMediaRefsFromValue(item, refs, key));
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  Object.entries(value).forEach(([childKey, childValue]) => collectMediaRefsFromValue(childValue, refs, childKey));
 }
 
 export function updateGroupConversation(store, conversationId, patch = {}) {

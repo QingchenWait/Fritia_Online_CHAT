@@ -181,6 +181,14 @@
           <div class="sticker-grid" id="sticker-popover-grid"></div>
         </section>
         <section id="chat-model-popover" class="chat-model-popover hidden" role="menu" aria-label="模型与思考强度">
+          <section id="lm-studio-connection" class="lm-studio-connection hidden" aria-label="模型连接">
+            <strong class="lm-studio-connection__title">模型连接</strong>
+            <div class="lm-studio-connection__actions">
+              <button id="lm-studio-connect-btn" type="button">连接</button>
+              <button id="lm-studio-config-btn" type="button">配置</button>
+            </div>
+            <p id="lm-studio-connection-status" class="lm-studio-connection__status" role="status"></p>
+          </section>
           <header class="chat-model-popover__head">
             <img src="src/_logo/icons/brain.svg" alt="">
             <strong>思考强度</strong>
@@ -343,6 +351,21 @@
       <button id="group-info-leave" class="group-leave-btn" type="button">退出群聊</button>
     </div>
   </aside>
+
+  <div id="group-leave-confirm-overlay" class="group-leave-confirm-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="group-leave-confirm-title">
+    <div id="group-leave-backdrop" class="group-leave-backdrop"></div>
+    <section class="group-leave-confirm-card">
+      <div class="group-leave-confirm-icon" aria-hidden="true">
+        <img src="src/_logo/icons/trash-2.svg" alt="">
+      </div>
+      <h2 id="group-leave-confirm-title">退出群聊</h2>
+      <p>退出群聊后，聊天记录将不再显示，并无法找回</p>
+      <div class="group-leave-confirm-actions">
+        <button id="group-leave-cancel" class="group-leave-cancel-btn" type="button">取消</button>
+        <button id="group-leave-confirm" class="group-leave-confirm-btn" type="button">确认退出</button>
+      </div>
+    </section>
+  </div>
 
   <div id="character-import-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="character-import-title">
     <div class="modal-shell character-import-shell">
@@ -1133,8 +1156,8 @@
                     </header>
                     <div class="model-provider-form">
                       <label><span>ID</span><small>提供商源唯一 ID</small><input id="chat-provider-id" autocomplete="off"></label>
-                      <label><span>API Key</span><small>OpenAI Compatible API 密钥</small><input id="chat-provider-api-key" type="password" autocomplete="off"></label>
-                      <label><span>API Base URL</span><small>自定义 API 端点 URL</small><input id="chat-provider-base-url" placeholder="https://api.openai.com/v1"></label>
+                      <label><span>API Key</span><small>OpenAI Compatible API 密钥；LM Studio 本地端点可留空</small><input id="chat-provider-api-key" type="password" autocomplete="off"></label>
+                      <label><span>API Base URL</span><small>含 localhost 或 127.0.0.1 时自动按 LM Studio 本地模型处理</small><input id="chat-provider-base-url" placeholder="https://api.openai.com/v1"></label>
                       <label><span>模型名称</span><small>OpenAI Compatible 模型 ID</small><input id="chat-provider-model" placeholder="gpt-5.4-mini"></label>
                     </div>
                   </section>

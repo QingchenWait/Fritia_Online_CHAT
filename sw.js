@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v33';
+const CACHE_NAME = 'fritia-next-chat-v36';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -22,6 +22,7 @@ const CORE_ASSETS = [
   './src/js/knowledge_base.js',
   './src/js/long_term_memory.js',
   './src/js/llm_request.js',
+  './src/js/lm_studio.js',
   './src/js/chat_engine.js',
   './src/js/roundtable.js',
   './src/js/archive_sync.js',
@@ -61,6 +62,7 @@ const CORE_ASSETS = [
   './src/_logo/icons/tool-skills.svg',
   './src/_logo/icons/tool-streamable-http.svg',
   './src/_logo/icons/tool-stdio.svg',
+  './src/_logo/icons/trash-2.svg',
   './src/_logo/icons/x.svg',
   './src/_logo/emoji/speech_balloon_3d.png',
   './src/_logo/emoji/chat.svg',
@@ -84,6 +86,10 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
+  // Never proxy loopback model requests through the app's Service Worker.
+  // Browsers must own this fetch so Local Network Access / localhost
+  // permission checks happen in the page context instead of inside SW.
+  if (isLoopbackModelRequest(url)) return;
   let pathname = url.pathname;
   try {
     pathname = decodeURIComponent(pathname);
@@ -111,3 +117,11 @@ self.addEventListener('fetch', event => {
       : caches.match(event.request).then(cached => cached || fetchAndCache())
   );
 });
+
+function isLoopbackModelRequest(url) {
+  const hostname = String(url?.hostname || '').toLowerCase();
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '[::1]'
+    || hostname === '::1';
+}

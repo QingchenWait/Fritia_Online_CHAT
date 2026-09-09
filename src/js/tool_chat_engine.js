@@ -12,6 +12,7 @@ import {
   formatMcpContentText,
   getMcpConfig
 } from './mcp_tools.js';
+import { isLmStudioSettings, isLmStudioProvider, requestLmStudioCompletion } from './lm_studio.js';
 
 const PLAYER_NAME = '分析员';
 const MAX_TOOL_AGENT_STEPS = 50;
@@ -68,7 +69,7 @@ export async function completeToolPrivateMessageReply({
   try {
     throwIfToolAborted(signal);
     const settings = chatSettings || getSettings();
-    if (!settings.apiKey) {
+    if (!settings.apiKey && !isLmStudioSettings(settings)) {
       trace = finishTrace(trace, '未配置模型，已切回本地占位回复。');
       const fallback = `${character.name}已经准备好调用工具了。配置默认模型后，我就能根据外部工具结果继续回复。`;
       commit({ text: fallback, status: 'sent', createdAt: now() });
@@ -401,7 +402,7 @@ async function requestToolAwareCompletion({
   signal = null
 }) {
   const provider = getDefaultChatProvider(settings);
-  if (!provider?.apiKey || !provider?.baseUrl || !provider?.model) {
+  if ((!provider?.apiKey && !isLmStudioProvider(provider)) || !provider?.baseUrl || !provider?.model) {
     throw new Error('模型连接配置不完整，请检查默认模型设置。');
   }
   const requestMessages = completeToolResultReply ? withCompleteToolResultPrompt(messages) : messages;
@@ -413,6 +414,15 @@ async function requestToolAwareCompletion({
     ...buildModelReasoningBody(provider, reasoningEffort),
     ...(tools.length ? { tools, tool_choice: toolChoice } : {})
   };
+  if (isLmStudioProvider(provider)) {
+    return requestLmStudioCompletion({
+      provider,
+      messages: requestMessages,
+      body,
+      signal,
+      onDelta
+    });
+  }
   const headers = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${provider.apiKey}`

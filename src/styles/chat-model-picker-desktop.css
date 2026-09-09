@@ -66,6 +66,52 @@
     color: #303751;
   }
 
+  .lm-studio-connection {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.15rem 0.55rem 0.55rem;
+    margin-bottom: 0.35rem;
+    border-bottom: 1px solid rgba(120, 140, 180, 0.16);
+  }
+
+  .lm-studio-connection.hidden { display: none; }
+
+  .lm-studio-connection__title {
+    color: #303751;
+    font-size: 0.72rem;
+  }
+
+  .lm-studio-connection__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .lm-studio-connection__actions button {
+    min-height: 1.75rem;
+    border: 1px solid rgba(120, 140, 180, 0.2);
+    border-radius: 0.55rem;
+    color: #4f63ff;
+    background: rgba(245, 247, 255, 0.9);
+    font: inherit;
+    font-size: 0.68rem;
+    cursor: pointer;
+    transition: background-color 160ms ease, border-color 160ms ease;
+  }
+
+  .lm-studio-connection__actions button:hover { background: rgba(230, 235, 255, 0.96); }
+  .lm-studio-connection__actions button:disabled { cursor: wait; opacity: 0.58; }
+
+  .lm-studio-connection__status {
+    margin: 0;
+    color: #7f879e;
+    font-size: 0.62rem;
+    line-height: 1.35;
+  }
+
+  .lm-studio-connection__status[data-state="success"] { color: #188b62; }
+  .lm-studio-connection__status[data-state="error"] { color: #c34658; }
+
   .chat-model-popover__head img,
   .chat-model-current > img:first-child,
   .chat-model-provider > img {

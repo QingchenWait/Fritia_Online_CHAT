@@ -5,6 +5,7 @@ import { getSettings, getAdvancedSettings } from './settings.js';
 import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
 import { attachmentLabelText, buildAttachmentContentParts } from './llm_media.js';
 import { requestLlmCompletion } from './llm_request.js';
+import { isLmStudioSettings } from './lm_studio.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -446,7 +447,8 @@ function canRunEvent(event, conversationId) {
 
   const settings = getSettings();
   const baseUrl = normalizeBaseUrl(settings.baseUrl);
-  if (!settings.apiKey || !baseUrl || !settings.model) {
+  const localLmStudio = isLmStudioSettings(settings);
+  if ((!settings.apiKey && !localLmStudio) || !baseUrl || !settings.model) {
     setRoundtableBug('missing-api-settings', '圆桌密语缺少大模型配置', {
       conversationId,
       event: describeEvent(event),
