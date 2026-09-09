@@ -1,5 +1,10 @@
 # STRUCTURE
 
+## 2026-09-09 Help Markdown Image URLs
+
+- `src/js/ui.js`：`fetchAppHelpMarkdown()` 返回 Markdown 与来源 URL；`renderMarkdownDocument(markdown, { baseUrl })` 将说明文档中的相对图片解析到对应文档目录，兼容 `imgs\\*.png` 和 `imgs/*.png` 写法。
+- `sw.js`：缓存批次更新为 `fritia-next-chat-v37`，并将 `src/docs/imgs` 图片加入核心资源。
+
 ## 2026-09-09 Group Conversation Lifecycle
 
 - `src/js/storage.js`：`createGroupConversation()` 为每次新建群聊生成独立会话 ID/`unique_id`；`normalizeConversation()` 兼容旧群聊；`removeGroupConversation()` 精确删除单个群聊及其消息和安全可回收媒体引用。

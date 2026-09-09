@@ -1,5 +1,11 @@
 # DEVELOP
 
+## 2026-09-09 Help Markdown Image URLs
+
+- `src/js/ui.js`：说明文档加载器将文档来源 URL 传入 Markdown 渲染器；图片的相对地址统一基于文档 URL 解析，并将反斜杠转换为 URL 斜杠，兼容本地、网页版、客户端和 GitHub 回退文档来源。
+- 保留原有绝对 URL、`src/`、根路径和 data 资源处理，不改变其他 Markdown 功能。
+- `sw.js`：缓存批次更新为 `v37`，并预缓存 `src/docs/imgs` 中说明文档使用的图片。
+
 ## 2026-09-09 Group Conversation Lifecycle
 
 - `src/js/storage.js`：新群聊不再使用成员/标题哈希作为会话 ID，而是生成独立 `id` 与 `unique_id`；旧群聊缺少该字段时归一化为原会话 ID，保证旧存档兼容。

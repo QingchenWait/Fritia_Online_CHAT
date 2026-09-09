@@ -737,9 +737,9 @@ async function loadAppHelpDocument(id, options = {}) {
   state.appHelp.contentHtml = '';
   renderAppHelpPanel();
   try {
-    const markdown = await fetchAppHelpMarkdown(doc);
+    const { markdown, sourceUrl } = await fetchAppHelpMarkdown(doc);
     if (state.appHelp.contentRequestId !== requestId) return;
-    state.appHelp.contentHtml = renderMarkdownDocument(markdown);
+    state.appHelp.contentHtml = renderMarkdownDocument(markdown, { baseUrl: sourceUrl });
     state.appHelp.contentLoading = false;
     renderAppHelpPanel();
   } catch (error) {
@@ -757,7 +757,7 @@ async function fetchAppHelpMarkdown(doc) {
     try {
       const response = await fetch(withNoCache(url), { cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.text();
+      return { markdown: await response.text(), sourceUrl: url };
     } catch (error) {
       lastError = error;
     }
@@ -3406,7 +3406,7 @@ async function renderMcpHelpPanel() {
     const response = await fetch('src/docs/mcp_help.md', { cache: 'no-cache' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const markdown = await response.text();
-    state.mcpHelpHtml = renderMarkdownDocument(markdown);
+    state.mcpHelpHtml = renderMarkdownDocument(markdown, { baseUrl: 'src/docs/mcp_help.md' });
     state.mcpHelpLoaded = true;
     container.innerHTML = state.mcpHelpHtml;
   } catch (error) {
@@ -3414,7 +3414,7 @@ async function renderMcpHelpPanel() {
   }
 }
 
-function renderMarkdownDocument(markdown = '') {
+function renderMarkdownDocument(markdown = '', options = {}) {
   const lines = String(markdown).replace(/\r\n?/g, '\n').split('\n');
   const html = [];
   let index = 0;
@@ -3456,7 +3456,7 @@ function renderMarkdownDocument(markdown = '') {
       continue;
     }
     if (/^\s*>\s?/.test(line)) {
-      const { blockquoteHtml, nextIndex } = renderMarkdownBlockquote(lines, index);
+      const { blockquoteHtml, nextIndex } = renderMarkdownBlockquote(lines, index, options);
       html.push(blockquoteHtml);
       index = nextIndex;
       continue;
@@ -3464,12 +3464,12 @@ function renderMarkdownDocument(markdown = '') {
     const heading = line.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
       const level = heading[1].length;
-      html.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
+      html.push(`<h${level}>${renderMarkdownInline(heading[2], options)}</h${level}>`);
       index += 1;
       continue;
     }
     if (isMarkdownTableStart(lines, index)) {
-      const { tableHtml, nextIndex } = renderMarkdownTable(lines, index);
+      const { tableHtml, nextIndex } = renderMarkdownTable(lines, index, options);
       html.push(tableHtml);
       index = nextIndex;
       continue;
@@ -3483,7 +3483,7 @@ function renderMarkdownDocument(markdown = '') {
       while (index < lines.length) {
         const item = lines[index].match(pattern);
         if (!item) break;
-        items.push(`<li>${renderMarkdownInline(item[1])}</li>`);
+        items.push(`<li>${renderMarkdownInline(item[1], options)}</li>`);
         index += 1;
       }
       html.push(`<${tag}>${items.join('')}</${tag}>`);
@@ -3495,7 +3495,7 @@ function renderMarkdownDocument(markdown = '') {
       paragraph.push(lines[index].trim());
       index += 1;
     }
-    html.push(`<p>${renderMarkdownInline(paragraph.join(' '))}</p>`);
+    html.push(`<p>${renderMarkdownInline(paragraph.join(' '), options)}</p>`);
   }
   return `<article class="markdown-body">${html.join('')}</article>`;
 }
@@ -3511,7 +3511,7 @@ function isMarkdownBlockStart(lines, index) {
     || isMarkdownTableStart(lines, index);
 }
 
-function renderMarkdownBlockquote(lines, startIndex) {
+function renderMarkdownBlockquote(lines, startIndex, options = {}) {
   const quote = [];
   let index = startIndex;
   while (index < lines.length) {
@@ -3521,7 +3521,7 @@ function renderMarkdownBlockquote(lines, startIndex) {
     quote.push(quoted[1] || '');
     index += 1;
   }
-  const inner = renderMarkdownDocument(quote.join('\n'))
+  const inner = renderMarkdownDocument(quote.join('\n'), options)
     .replace(/^<article class="markdown-body">/, '')
     .replace(/<\/article>$/, '');
   return { blockquoteHtml: `<blockquote>${inner}</blockquote>`, nextIndex: index };
@@ -3533,7 +3533,7 @@ function isMarkdownTableStart(lines, index) {
   return head.includes('|') && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(split);
 }
 
-function renderMarkdownTable(lines, startIndex) {
+function renderMarkdownTable(lines, startIndex, options = {}) {
   const rows = [];
   let index = startIndex;
   const headers = splitMarkdownTableRow(lines[index]);
@@ -3542,8 +3542,8 @@ function renderMarkdownTable(lines, startIndex) {
     rows.push(splitMarkdownTableRow(lines[index]));
     index += 1;
   }
-  const headHtml = `<thead><tr>${headers.map(cell => `<th>${renderMarkdownInline(cell)}</th>`).join('')}</tr></thead>`;
-  const bodyHtml = `<tbody>${rows.map(row => `<tr>${headers.map((_, cellIndex) => `<td>${renderMarkdownInline(row[cellIndex] || '')}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  const headHtml = `<thead><tr>${headers.map(cell => `<th>${renderMarkdownInline(cell, options)}</th>`).join('')}</tr></thead>`;
+  const bodyHtml = `<tbody>${rows.map(row => `<tr>${headers.map((_, cellIndex) => `<td>${renderMarkdownInline(row[cellIndex] || '', options)}</td>`).join('')}</tr>`).join('')}</tbody>`;
   return { tableHtml: `<div class="markdown-table-wrap"><table>${headHtml}${bodyHtml}</table></div>`, nextIndex: index };
 }
 
@@ -3551,7 +3551,7 @@ function splitMarkdownTableRow(row = '') {
   return row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
 }
 
-function renderMarkdownInline(text = '') {
+function renderMarkdownInline(text = '', options = {}) {
   const tokens = [];
   const remember = html => {
     const token = `\u0000${tokens.length}\u0000`;
@@ -3559,7 +3559,7 @@ function renderMarkdownInline(text = '') {
     return token;
   };
   let source = String(text)
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => remember(renderMarkdownImage(alt, url)))
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => remember(renderMarkdownImage(alt, url, options)))
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => remember(renderMarkdownLink(label, url)))
     .replace(/`([^`]+)`/g, (_, code) => remember(`<code>${escapeHtml(code)}</code>`))
     .replace(/\\\((.+?)\\\)/g, (_, formula) => remember(renderMarkdownInlineMath(formula)))
@@ -3575,15 +3575,23 @@ function renderMarkdownInline(text = '') {
   return tokens.reduce((result, html, index) => result.replace(new RegExp(`\\u0000${index}\\u0000`, 'g'), html), source);
 }
 
-function normalizeMarkdownUrl(url = '') {
-  const clean = String(url).trim().replace(/^<|>$/g, '').split(/\s+/)[0] || '';
+function normalizeMarkdownUrl(url = '', options = {}) {
+  const clean = String(url).trim().replace(/^<|>$/g, '').split(/\s+/)[0].replace(/\\/g, '/') || '';
   if (/^www\./i.test(clean)) return `https://${clean}`;
-  if (/^(https?:|data:image\/|\.{0,2}\/|src\/|\/)/i.test(clean)) return clean;
+  if (/^(?:https?:|data:image\/)/i.test(clean) || clean.startsWith('//') || clean.startsWith('/') || /^src\//i.test(clean)) return clean;
+  if (options.baseUrl && !/^[a-z][a-z\d+.-]*:/i.test(clean)) {
+    try {
+      return new URL(clean, new URL(options.baseUrl, document.baseURI)).toString();
+    } catch {
+      // Keep invalid or unavailable base URLs from breaking the whole document.
+    }
+  }
+  if (/^\.{0,2}\//.test(clean)) return clean;
   return '';
 }
 
-function renderMarkdownImage(alt, url) {
-  const src = normalizeMarkdownUrl(url);
+function renderMarkdownImage(alt, url, options = {}) {
+  const src = normalizeMarkdownUrl(url, options);
   if (!src) return escapeHtml(alt || '');
   return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt || '')}" loading="lazy">`;
 }

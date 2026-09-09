@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v36';
+const CACHE_NAME = 'fritia-next-chat-v37';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -32,6 +32,11 @@ const CORE_ASSETS = [
   './src/js/role_migration.js',
   './src/js/ui.js',
   './src/docs/mcp_help.md',
+  './src/docs/imgs/lm_config_heimchat.png',
+  './src/docs/imgs/lm_connect.png',
+  './src/docs/imgs/lm_download.png',
+  './src/docs/imgs/lm_local_server.png',
+  './src/docs/imgs/lm_model.png',
   './src/_logo/icons/ai-agent.svg',
   './src/_logo/icons/bot.svg',
   './src/_logo/icons/brain.svg',
