@@ -24,10 +24,11 @@
    |   供应商    |          Base URL 填写           |  模型名称  | 图片识别 |
    |-------------|---------------------------------|----------------------|-------------|
    |  Deepseek   |    https://api.deepseek.com/v1  |  deepseek-v4-flash   |   不支持   |
-   |  小米 MiMO  |  https://api.xiaomimimo.com/v1  |      mimo-v2.5       |    支持    |
+   |  Deepseek   |    https://api.deepseek.com/v1  |  deepseek-flash   |   支持   |
+   |  小米 MiMO  |  https://api.xiaomimimo.com/v1  |      mimo-v2.6-flash       |    支持    |
    |  硅基流动   |  https://api.siliconflow.cn/v1   |  deepseek-v4-flash   |   不支持   |
-   |  千问 Qwen  | https://dashscope.aliyuncs.com/compatible-mode/v1 | qwen3.6-flash |   支持   |
-   | GPT 示例中转 |   https://www.onetopai.com/v1    |    gpt-5.4-mini     |    支持    |
+   |  千问 Qwen  | https://dashscope.aliyuncs.com/compatible-mode/v1 | qwen3.7-flash |   支持   |
+   | GPT 示例中转 |   https://www.onetopai.com/v1    |    gpt-6-luna     |    支持    |
 
 填写完成以后，点击 `保存配置` 按钮 (**不是保存模型设置按钮**)，保存上述 API 配置。
 

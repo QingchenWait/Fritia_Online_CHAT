@@ -15,7 +15,7 @@ const PROVIDERS = Object.freeze({
     apiKeysUrl: 'https://platform.deepseek.com/api_keys',
     topUpUrl: 'https://platform.deepseek.com/top_up',
     baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-v4-flash',
+    model: 'deepseek-flash',
     chatProviderId: 'DeepSeek_Import',
     defaultsLabel: '默认对话模型',
     instructions: [
@@ -32,7 +32,7 @@ const PROVIDERS = Object.freeze({
     },
     buildCheckBody() {
       return {
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-flash',
         messages: [{ role: 'user', content: '只回复 OK' }],
         stream: false,
         max_tokens: 8,
@@ -48,7 +48,7 @@ const PROVIDERS = Object.freeze({
     apiKeysUrl: 'https://platform.xiaomimimo.com/console/api-keys',
     topUpUrl: 'https://platform.xiaomimimo.com/console/recharge',
     baseUrl: 'https://api.xiaomimimo.com/v1',
-    model: 'mimo-v2.5',
+    model: 'mimo-v2.6-flash',
     chatProviderId: 'MiMo_Import',
     ttsProviderId: 'MiMoTTS_Import',
     ttsModel: 'mimo-v2.5-tts-voiceclone',
@@ -68,7 +68,7 @@ const PROVIDERS = Object.freeze({
     },
     buildCheckBody() {
       return {
-        model: 'mimo-v2.5',
+        model: 'mimo-v2.6-flash',
         messages: [{ role: 'user', content: '只回复 OK' }],
         stream: false,
         max_completion_tokens: 8,

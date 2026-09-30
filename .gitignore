@@ -7,3 +7,4 @@ dist/
 .codex/
 long_term_memory_bak.js
 apk.keystore
+.VSCodeCounter/

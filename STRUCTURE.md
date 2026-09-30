@@ -53,10 +53,10 @@
 - 新增欢迎 DOM：`#onboarding-welcome-panel`、`#onboarding-dismiss-toggle`、`#onboarding-deepseek`、`#onboarding-help`、`#onboarding-mimo`、`#onboarding-close`。
 - 新增向导 DOM：`#quick-setup-panel`、`[data-quick-setup-progress]`、`[data-quick-setup-step]`、`[data-quick-setup-actions]`、`#quick-setup-key-input`、`#quick-setup-check`、`#quick-setup-top-up`、`#quick-setup-finish`、`#quick-setup-view-settings`。
 - 新增存储键 `localStorage.fritia_chat_onboarding_dismissed`。值为 `1` 时启动不显示欢迎窗；关闭开关会删除该键。模型配置继续保存到 `localStorage.fritia-settings`。
-- DeepSeek 导入映射：`DeepSeek_Import` / `https://api.deepseek.com` / `deepseek-v4-flash`，更新 `defaultChatProviderId`。
-- MiMo 导入映射：`MiMo_Import` / `https://api.xiaomimimo.com/v1` / `mimo-v2.5`，更新 `defaultChatProviderId` 与 `defaultImageCaptionProviderId`；`MiMoTTS_Import` / `mimo-v2.5-tts-voiceclone`，更新 `defaultTtsProviderId`。
+- DeepSeek 导入映射：`DeepSeek_Import` / `https://api.deepseek.com` / `deepseek-flash`，更新 `defaultChatProviderId`。
+- MiMo 导入映射：`MiMo_Import` / `https://api.xiaomimimo.com/v1` / `mimo-v2.6-flash`，更新 `defaultChatProviderId` 与 `defaultImageCaptionProviderId`；`MiMoTTS_Import` / `mimo-v2.5-tts-voiceclone`，更新 `defaultTtsProviderId`。
 - `src/js/ui.js` 监听 `fritia-ui-open-panel`，供欢迎窗打开帮助窗口或导入后的模型设置页；`src/js/main.js` 在 `initUi()` 后执行 `initOnboarding({ autoShow: true })`。
-- `src/js/llm_request.js`：`providerImageInputSupport()` 识别 `mimo-v2.5`；Xiaomi MiMo 请求增加 `api-key` 头。`sw.js` 缓存版本为 `fritia-next-chat-v29`，缓存新增三份 JS 与三份 CSS。
+- `src/js/llm_request.js`：`providerImageInputSupport()` 识别 `mimo-v2.6-flash`；Xiaomi MiMo 请求增加 `api-key` 头。`sw.js` 缓存版本为 `fritia-next-chat-v29`，缓存新增三份 JS 与三份 CSS。
 
 ## 2026-07-11 App Help Mapping
 
@@ -736,7 +736,7 @@ fritia_online_next_chat/
 - `requestLlmCompletion({ settings, messages, body, reasoningEffort })`：统一发起 OpenAI-compatible chat completions 请求。思考档只应用于当前对话模型；图片请求会按对话模型能力单次路由到默认图像转述模型，或在模型返回图片不支持错误后回退。
 - `messagesContainImages(messages)`：检测 `image_url` content part，用于判断本次请求是否需要图像输入能力。
 - `providerSupportsImageInput(provider)`：根据模型名识别明确的多模态模型；内部请求路由对未知模型采用先试默认模型、失败再回退的策略。
-- Xiaomi MiMo 域名请求同时发送 `Authorization: Bearer` 与 `api-key`；`mimo-v2.5` 被识别为明确支持图片输入。
+- Xiaomi MiMo 域名请求同时发送 `Authorization: Bearer` 与 `api-key`；`mimo-v2.6-flash` 被识别为明确支持图片输入。
 
 ### `src/js/characters.js`
 

@@ -6105,7 +6105,7 @@ function addModelProvider(kind) {
     saveSettings({
       chatProviders: [
         ...settings.chatProviders,
-        { id, apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.4-mini' }
+        { id, apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-luna' }
       ],
       ...defaults
     });
@@ -6129,7 +6129,7 @@ function deleteModelProvider(kind) {
   const selectedId = kind === 'chat' ? state.selectedChatProviderId : state.selectedTtsProviderId;
   const nextProviders = providers.filter(provider => provider.id !== selectedId);
   const fallback = nextProviders[0] || (kind === 'chat'
-    ? { id: 'openai', apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.4-mini' }
+    ? { id: 'openai', apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-luna' }
     : { id: 'mimo-tts', apiKey: '', baseUrl: 'https://api.xiaomimimo.com/v1', model: 'mimo-v2.5-tts-voiceclone', speed: 1 });
   if (!nextProviders.length) nextProviders.push(fallback);
   if (kind === 'chat') {
@@ -6231,7 +6231,7 @@ function readModelProviderForm(kind) {
       id: document.getElementById('chat-provider-id')?.value || state.selectedChatProviderId || 'openai',
       apiKey: document.getElementById('chat-provider-api-key')?.value || '',
       baseUrl: document.getElementById('chat-provider-base-url')?.value || 'https://api.openai.com/v1',
-      model: document.getElementById('chat-provider-model')?.value || 'gpt-5.4-mini'
+      model: document.getElementById('chat-provider-model')?.value || 'gpt-6-luna'
     };
   }
   return {
