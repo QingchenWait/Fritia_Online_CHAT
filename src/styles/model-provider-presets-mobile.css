@@ -1,0 +1,16 @@
+@media (max-width: 760px) {
+  .model-provider-form .chat-provider-key-field {
+    grid-template-columns: 1fr;
+  }
+  .model-provider-form .chat-provider-key-control {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .chat-provider-preset-menu {
+    width: min(11rem, calc(100vw - 16px));
+  }
+  .chat-provider-preset-option {
+    min-height: 36px;
+    font-size: 14px;
+  }
+}

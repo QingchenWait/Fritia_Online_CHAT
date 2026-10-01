@@ -22,9 +22,9 @@
 
    ![lm_local_server](imgs\lm_local_server.png)
 
-回到海姆休息室 APP，点击左下角的 `设置` 按钮，进入 `大模型` 选项卡，点击对话栏中的 `+ 新增` 按钮，新增一个用于 LM Studio 的配置项：
+回到 APP，点击左下角的 `设置` 按钮，进入 `大模型` 选项卡，点击对话栏中的 `+ 新增`，选择 `本地模型`。APP 会填写 `LM Studio` 和 `http://localhost:1234/v1`，模型名称保持留空；API Key 右侧“获取”图标可以打开 LM Studio 官网。
 
-   - ID：随意填写
+   - 配置名称：预填 `LM Studio`，可自行修改
    - API Key：留空
    - API Base URL：填写 LM Studio  `本地模型 API` 栏目中的基础 URL；
    - 模型名称：填写 LM Studio  `资源库` 栏目中的模型名称。

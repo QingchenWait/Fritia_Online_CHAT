@@ -1,5 +1,17 @@
 # DEVELOP
 
+## 2026-10-01 v1.0.0 Provider Presets / Key Acquisition
+
+- 遵循 `.agents/fritia_chat_dev_agent.md` 与 UI 规范，修改限定于模型设置表单、预设添加、密钥获取和 MiMO TTS 一次性同步。未改聊天引擎、思考参数、工具调用、存档或其他配置功能。
+- `model_provider_presets.js` 集中维护用户指定的七组配置、官网地址和“自定义”入口。Base URL 通过 `URL` 解析后按准确 hostname 匹配；不使用包含模型名的字符串猜测，未知网站禁用获取按钮。菜单及获取按钮统一复用既有 `ui.js:openExternalUrl()` 的 Tauri 命令 / 网页 `_blank` 分支。
+- `model_provider_presets_desktop.js` / `model_provider_presets_mobile.js` 及对应 CSS 分别定位桌面/手机菜单；手机使用 VisualViewport 边界。菜单挂载到 body，避免被设置滚动容器裁切，支持外部点击、Escape、方向键、Home/End，关闭设置或切换配置分组时关闭。
+- `ui.js` 的 `saveCurrentModelProvider('chat')` 调用 `buildMimoTtsSyncPatch()`，仅对显式保存的非空、新增/变更 MiMO 对话密钥执行复制；同一次 `saveSettings()` 保存对话和 TTS，避免跨次覆盖。TTS 可单独修改，不监听 TTS 变更反向同步对话，也不因无关保存再次覆盖 TTS。存在多个 TTS 时只更新默认 MiMO 或首个 MiMO 项，其余配置不变。
+- `settings.js` 保留本地空模型名以及 `LM Studio` / `LM Studio-2` 名称；现有其他名称的空白归一化规则和在线模型缺省值保持不变。
+- LM Studio Logo 原始下载地址：`https://lmstudio.ai/assets/marketing/brand/download/logos/lm-studio-icon-color.svg`；文件为 `src/_logo/llms/lm-studio.svg`，原样保存官方资源。其余 Logo 和“获取”下载图标复用项目资源。
+- 新模块、两套 CSS、LM Studio Logo 加入 Service Worker 核心资源，缓存批次升为 `fritia-next-chat-v40`。`package.json` 版本保持 `1.0.0`；未执行 build 或平台打包。
+- 验证：`npm run test:provider-presets` 的 6 项测试覆盖精确预设、域名匹配、防误匹配、本地名称/空模型归一化及 TTS 复制和独立性；`tools/provider_presets_browser.mjs` 在 1920×1080、1280×720、844×390、390×844、360×640 隔离 Chromium 上验证菜单/图标、每项预填、即时 URL、网页新标签参数、两种 Tauri invoke 桥、TTS 原行为、保存/刷新和无关会话存档不变。客户端桥使用 mock 验证调用参数，未运行原生 APP 实机或真实 API 请求。
+- 浏览器测试使用已有 `PLAYWRIGHT_MODULE`、`CHAT_TEST_BROWSER`、`CHAT_TEST_URL` 可选环境变量；启动 `npm run dev` 后运行 `npm run test:provider-presets:browser`，未新增生产依赖。
+
 ## 2026-10-01 v1.0.0 Reasoning / Tool State / Chat Viewport
 
 - 遵循 `.agents/fritia_chat_dev_agent.md`，仅修改本次三项问题的模型请求、消息展示及对应文档/验证。未修改存储版本、用户设置字段、角色、知识库、长期记忆或打包产物。

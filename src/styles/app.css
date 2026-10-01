@@ -3455,20 +3455,23 @@ select:focus {
   padding: 18px;
 }
 
-.model-provider-form label {
+.model-provider-form label,
+.model-provider-form .chat-provider-key-field {
   min-width: 0;
   grid-template-columns: minmax(8rem, 34%) minmax(0, 1fr);
   align-items: center;
   gap: 8px 16px;
 }
 
-.model-provider-form label > span {
+.model-provider-form label > span,
+.model-provider-form .chat-provider-key-field > label {
   color: var(--text);
   font-weight: 750;
   font-size: 13px;
 }
 
-.model-provider-form label > small {
+.model-provider-form label > small,
+.model-provider-form .chat-provider-key-field > small {
   grid-column: 1;
   color: var(--muted);
   font-size: 12px;
@@ -4671,6 +4674,79 @@ select:focus {
 
 .group-leave-btn:hover {
   background: #fff1f0;
+}
+
+.chat-provider-key-field {
+  display: grid;
+}
+
+.chat-provider-key-control {
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.chat-provider-key-control input {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-provider-key-control .model-icon-btn {
+  width: 38px;
+  padding: 0;
+  flex: 0 0 38px;
+}
+
+.chat-provider-key-control .model-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--muted);
+  background: var(--surface-soft);
+}
+
+.chat-provider-key-control .model-icon-btn:disabled img {
+  filter: grayscale(1);
+}
+
+.chat-provider-preset-menu {
+  position: fixed;
+  z-index: 10000;
+  padding: 4px;
+  border: 1px solid rgba(120, 140, 180, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--shadow-floating);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.chat-provider-preset-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.chat-provider-preset-option:hover,
+.chat-provider-preset-option:focus-visible {
+  background: var(--surface-soft);
+  color: var(--brand);
+}
+
+.chat-provider-preset-option img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 .group-leave-confirm-overlay {

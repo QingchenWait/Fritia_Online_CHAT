@@ -1,4 +1,5 @@
 import { STORAGE_KEYS, loadJson, saveJson } from './storage.js';
+import { getProviderPresetForUrl } from './model_provider_presets.js';
 
 export const DEFAULT_SETTINGS = {
   apiKey: '',
@@ -198,11 +199,12 @@ function normalizeProviderList(source, normalizer) {
 function normalizeChatProvider(raw = {}, index = 0) {
   const fallback = DEFAULT_SETTINGS.chatProviders[0];
   const id = normalizeProviderId(raw.id, index === 0 ? fallback.id : `openai-${index + 1}`);
+  const baseUrl = normalizeBaseUrl(raw.baseUrl || fallback.baseUrl);
   return {
     id,
     apiKey: String(raw.apiKey || '').trim(),
-    baseUrl: normalizeBaseUrl(raw.baseUrl || fallback.baseUrl),
-    model: String(raw.model || fallback.model).trim()
+    baseUrl,
+    model: String(raw.model || (getProviderPresetForUrl(baseUrl)?.key === 'local' ? '' : fallback.model)).trim()
   };
 }
 
@@ -219,7 +221,10 @@ function normalizeTtsProvider(raw = {}, index = 0) {
 }
 
 function normalizeProviderId(value, fallback) {
-  const id = String(value || '').trim().replace(/\s+/g, '-').slice(0, 80);
+  const name = String(value || '').trim();
+  // Keep the requested LM Studio preset name, including duplicate suffixes.
+  // Existing IDs retain their original whitespace normalization.
+  const id = (/^LM Studio(?:-\d+)?$/.test(name) ? name : name.replace(/\s+/g, '-')).slice(0, 80);
   return id || String(fallback || 'provider');
 }
 

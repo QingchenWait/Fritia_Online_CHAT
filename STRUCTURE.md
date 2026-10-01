@@ -1,5 +1,16 @@
 # STRUCTURE
 
+## 2026-10-01 Provider Presets Mapping
+
+- `src/js/model_provider_presets.js`：`CHAT_PROVIDER_PRESETS` 保存 DeepSeek / MiMO / Qwen / OpenAI / GLM / Kimi / 本地模型 / 自定义配置及 Logo、官网、hostname；`getProviderPresetForUrl(value)` 匹配当前输入；`buildMimoTtsSyncPatch(settings, previous, provider)` 返回对指定 TTS 密钥的非破坏性补丁；`initChatProviderPresets({ onSelect, openExternalUrl })` 返回 `close()` / `updateKeyButton()` 控制器。
+- `src/js/model_provider_presets_desktop.js` / `model_provider_presets_mobile.js`：分别导出 `positionProviderMenuDesktop()` / `positionProviderMenuMobile()`，将菜单置于对应“新增”按钮下方；后者使用 VisualViewport 计算可见范围。
+- `index.html`：新增 `#chat-provider-get-key`（API Key 输入框右侧图标按钮）、`.chat-provider-key-control`（输入与按钮组合）、`#chat-provider-preset-menu`（自绘菜单，初始化时移动至 body）；`#model-chat-add` 和 `#model-chat-add-mobile` 共享菜单。TTS 原添加按钮不变。
+- `src/js/ui.js`：`addModelProvider(kind, preset)` 使用选中预设并避免重名；`fillModelProviderForm()` 经 `updateModelDraftHeader()` 刷新获取按钮；保存对话提供商时应用 MiMO TTS 补丁。原 `openExternalUrl()` 负责网页/客户端跳转。
+- `src/js/settings.js`：本地空模型名和 `LM Studio` 显示/引用名称在保存、刷新及默认提供商选择中保持一致。没有新增设置存储键。
+- `src/styles/app.css`：菜单、菜单选项和密钥按钮公共样式；`model-provider-presets-desktop.css` / `model-provider-presets-mobile.css` 为互斥布局，桌面 32px、手机 36px 紧凑菜单项。
+- `src/_logo/llms/lm-studio.svg`：官方本地图标；获取按钮复用 `icons/download.svg`，自定义选项复用 `icons/settings.svg`。
+- `tools/provider_presets.test.mjs` / `tools/provider_presets_browser.mjs`：配置逻辑与完整浏览器表单交互回归。`sw.js` 缓存为 `v40`，新增上述三个 JS、两份 CSS、LM Studio SVG；版本保持 `1.0.0`。
+
 ## 2026-10-01 v1.0.0 Reasoning and Scroll Mapping
 
 - `src/js/model_reasoning.js`：新增 `loadModelReasoningProfile(provider)` 及厂商目录 URL / 内存缓存适配；`getModelReasoningProfile()` 先读 API 元数据再走已核实型号规则。`applyModelReasoningBody()` 组合请求参数；`getReasoningFields()` / `mergeReasoningDelta()` 原样保留并累积思考状态；`reasoningProviderKey()` 标识同端点和同模型。

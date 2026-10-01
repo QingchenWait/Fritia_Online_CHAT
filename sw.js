@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v39';
+const CACHE_NAME = 'fritia-next-chat-v40';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -12,6 +12,8 @@ const CORE_ASSETS = [
   './src/styles/role-migration-mobile.css',
   './src/styles/chat-model-picker-desktop.css',
   './src/styles/chat-model-picker-mobile.css',
+  './src/styles/model-provider-presets-desktop.css',
+  './src/styles/model-provider-presets-mobile.css',
   './src/js/main.js',
   './src/js/onboarding.js',
   './src/js/onboarding_desktop.js',
@@ -21,6 +23,9 @@ const CORE_ASSETS = [
   './src/js/characters.js',
   './src/js/settings.js',
   './src/js/model_reasoning.js',
+  './src/js/model_provider_presets.js',
+  './src/js/model_provider_presets_desktop.js',
+  './src/js/model_provider_presets_mobile.js',
   './src/js/openai_responses.js',
   './src/js/chat_scroll.js',
   './src/js/chat_scroll_desktop.js',
@@ -52,6 +57,7 @@ const CORE_ASSETS = [
   './src/_logo/llms/kimi.svg',
   './src/_logo/llms/glm.svg',
   './src/_logo/llms/openai.svg',
+  './src/_logo/llms/lm-studio.svg',
   './src/_logo/icons/chevron-down.svg',
   './src/_logo/icons/circle-alert.svg',
   './src/_logo/icons/download.svg',

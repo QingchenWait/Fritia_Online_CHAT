@@ -22,6 +22,9 @@ import { getSettings, saveSettings, getAdvancedSettings, saveAdvancedSettings, i
 import { getModelReasoningProfile, normalizeModelReasoningEffort, loadModelReasoningProfile } from './model_reasoning.js';
 import { createChatScrollController } from './chat_scroll.js';
 import { getLmStudioReasoningProfile, isLmStudioProvider, testLmStudioConnection } from './lm_studio.js';
+import { CHAT_PROVIDER_PRESETS, getProviderPresetForUrl, buildMimoTtsSyncPatch, initChatProviderPresets } from './model_provider_presets.js';
+
+let chatProviderPresets = null;
 
 const CHAT_MODEL_LOGO_PATHS = Object.freeze({
   mimo: 'src/_logo/llms/mimo.svg',
@@ -33,7 +36,7 @@ const CHAT_MODEL_LOGO_PATHS = Object.freeze({
   default: 'src/_logo/icons/bot.svg'
 });
 
-const LM_STUDIO_LOGO_PATH = 'https://lmstudio.ai/assets/marketing/brand/download/logos/lm-studio-icon-color.svg';
+const LM_STUDIO_LOGO_PATH = 'src/_logo/llms/lm-studio.svg';
 
 function getChatModelLogoPath(model, baseUrl = '') {
   const name = String(model || '').trim().toLowerCase();
@@ -3645,8 +3648,7 @@ function bindSettings() {
   document.querySelectorAll('[data-model-tab]').forEach(button => {
     button.addEventListener('click', () => showModelProviderTab(button.dataset.modelTab));
   });
-  document.getElementById('model-chat-add')?.addEventListener('click', () => addModelProvider('chat'));
-  document.getElementById('model-chat-add-mobile')?.addEventListener('click', () => addModelProvider('chat'));
+  chatProviderPresets = initChatProviderPresets({ onSelect: preset => addModelProvider('chat', preset), openExternalUrl });
   document.getElementById('model-tts-add')?.addEventListener('click', () => addModelProvider('tts'));
   document.getElementById('model-tts-add-mobile')?.addEventListener('click', () => addModelProvider('tts'));
   document.getElementById('model-chat-delete')?.addEventListener('click', () => deleteModelProvider('chat'));
@@ -6036,6 +6038,7 @@ function closeCustomSelects() {
 }
 
 function showModelProviderTab(tab = 'chat') {
+  chatProviderPresets?.close();
   const nextTab = ['chat', 'tts', 'defaults'].includes(tab) ? tab : 'chat';
   state.modelProviderTab = nextTab;
   document.querySelectorAll('[data-model-tab]').forEach(button => {
@@ -6127,6 +6130,12 @@ function updateModelDraftHeader(kind) {
   const prefix = kind === 'chat' ? 'chat' : 'tts';
   setText(`model-${kind}-title`, document.getElementById(`${prefix}-provider-id`)?.value || (kind === 'chat' ? 'openai' : 'mimo-tts'));
   setText(`model-${kind}-subtitle`, document.getElementById(`${prefix}-provider-base-url`)?.value || (kind === 'chat' ? 'https://api.openai.com/v1' : 'https://api.xiaomimimo.com/v1'));
+  if (kind === 'chat') {
+    chatProviderPresets?.updateKeyButton();
+    const modelInput = document.getElementById('chat-provider-model');
+    if (modelInput) modelInput.placeholder = getProviderPresetForUrl(document.getElementById('chat-provider-base-url')?.value)?.key === 'local'
+      ? '填写 LM Studio 中已加载的模型 ID' : 'gpt-6-luna';
+  }
 }
 
 function selectModelProvider(kind, id) {
@@ -6135,16 +6144,16 @@ function selectModelProvider(kind, id) {
   renderModelSettings(getSettings());
 }
 
-function addModelProvider(kind) {
+function addModelProvider(kind, preset = CHAT_PROVIDER_PRESETS.find(item => item.key === 'custom')) {
   const settings = getSettings();
   const defaults = normalizeDefaultModelSelection(readDefaultModelSelection(), settings);
   if (kind === 'chat') {
-    const id = createUniqueProviderId('openai', settings.chatProviders);
+    const id = createUniqueProviderId(preset.id, settings.chatProviders);
     state.selectedChatProviderId = id;
     saveSettings({
       chatProviders: [
         ...settings.chatProviders,
-        { id, apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-luna' }
+        { id, apiKey: '', baseUrl: preset.baseUrl, model: preset.model }
       ],
       ...defaults
     });
@@ -6199,6 +6208,7 @@ function saveCurrentModelProvider(kind, options = {}) {
   if (kind === 'chat') {
     const saved = saveSettings({
       chatProviders: replaceProvider(settings.chatProviders, selectedId, provider),
+      ...buildMimoTtsSyncPatch({ ...settings, ...defaults }, settings.chatProviders.find(item => item.id === selectedId), provider),
       ...defaults
     });
     state.selectedChatProviderId = provider.id;
@@ -6266,11 +6276,12 @@ function remapProviderDefaults(defaults, kind, previousId, nextId) {
 
 function readModelProviderForm(kind) {
   if (kind === 'chat') {
+    const baseUrl = document.getElementById('chat-provider-base-url')?.value || 'https://api.openai.com/v1';
     return {
       id: document.getElementById('chat-provider-id')?.value || state.selectedChatProviderId || 'openai',
       apiKey: document.getElementById('chat-provider-api-key')?.value || '',
-      baseUrl: document.getElementById('chat-provider-base-url')?.value || 'https://api.openai.com/v1',
-      model: document.getElementById('chat-provider-model')?.value || 'gpt-6-luna'
+      baseUrl,
+      model: document.getElementById('chat-provider-model')?.value || (getProviderPresetForUrl(baseUrl)?.key === 'local' ? '' : 'gpt-6-luna')
     };
   }
   return {
@@ -6405,6 +6416,7 @@ function openPanel(id, options = {}) {
 }
 
 function closePanel(id) {
+  if (id === 'settings-panel') chatProviderPresets?.close();
   if (id === 'memory-node-panel') {
     closeMemoryNodePanel();
     syncMobileBackAvailability();
@@ -6435,6 +6447,7 @@ function closePanel(id) {
 }
 
 function showSettingsSection(section) {
+  chatProviderPresets?.close();
   document.querySelectorAll('[data-settings-section]').forEach(button => {
     button.classList.toggle('is-active', button.dataset.settingsSection === section);
   });

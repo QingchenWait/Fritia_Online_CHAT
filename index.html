@@ -16,6 +16,8 @@
   <link rel="stylesheet" href="src/styles/onboarding-mobile.css">
   <link rel="stylesheet" href="src/styles/chat-model-picker-desktop.css">
   <link rel="stylesheet" href="src/styles/chat-model-picker-mobile.css">
+  <link rel="stylesheet" href="src/styles/model-provider-presets-desktop.css">
+  <link rel="stylesheet" href="src/styles/model-provider-presets-mobile.css">
 </head>
 <body>
   <div id="app" class="app-shell" data-view="chat">
@@ -1157,8 +1159,8 @@
                       </div>
                     </header>
                     <div class="model-provider-form">
-                      <label><span>ID</span><small>提供商源唯一 ID</small><input id="chat-provider-id" autocomplete="off"></label>
-                      <label><span>API Key</span><small>OpenAI Compatible API 密钥；LM Studio 本地端点可留空</small><input id="chat-provider-api-key" type="password" autocomplete="off"></label>
+                      <label><span>配置名称</span><small>提供商源唯一 ID</small><input id="chat-provider-id" autocomplete="off"></label>
+                      <div class="chat-provider-key-field"><label for="chat-provider-api-key">API Key</label><small>OpenAI Compatible API 密钥；LM Studio 本地端点可留空</small><div class="chat-provider-key-control"><input id="chat-provider-api-key" type="password" autocomplete="off"><button id="chat-provider-get-key" class="model-icon-btn" type="button" title="获取 API Key" aria-label="获取 API Key" disabled><img src="src/_logo/icons/download.svg" alt=""></button></div></div>
                       <label><span>API Base URL</span><small>含 localhost 或 127.0.0.1 时自动按 LM Studio 本地模型处理</small><input id="chat-provider-base-url" placeholder="https://api.openai.com/v1"></label>
                       <label><span>模型名称</span><small>OpenAI Compatible 模型 ID</small><input id="chat-provider-model" placeholder="gpt-6-luna"></label>
                     </div>
@@ -1166,6 +1168,7 @@
                 </div>
               </section>
 
+              <div id="chat-provider-preset-menu" class="chat-provider-preset-menu hidden" role="menu" aria-label="选择对话模型提供商"></div>
               <section class="model-provider-pane" data-model-pane="tts">
                 <div class="model-provider-workbench">
                   <aside class="model-provider-sidebar">
