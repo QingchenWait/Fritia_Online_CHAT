@@ -1,5 +1,32 @@
 # Fritia Online NEXT Chat
 
+## 2026-10-01 v1.0.0 思考档位、工具续轮和消息定位
+
+- 点击聊天输入栏的模型按钮选择思考强度。打开菜单或切换模型时，会向当前提供商查询模型能力；成功结果在内存缓存 5 分钟，请求失败不会阻塞聊天，也不会重置配置。未知能力显示“默认”，不再将“无法确认”误称为“非思考”。
+- DeepSeek Flash / V4 支持普通、轻度、深度、极限，并优先采用接口公布的实际档位；GPT-6 Sol / Luna 支持普通及 low 到 max，GPT-6 Astra / GPT-6.1 Sol 的最低档为 low；MiMo v2.5 / v2.6 支持普通与思考两档。Qwen、Kimi、GLM 根据服务商和已核实型号使用对应参数。
+- DeepSeek / MiMo 的思考与工具调用可同时使用：流式及 JSON 返回的完整思考内容随工具上下文回传，中断快照不截断思考内容或工具参数。已有存档不做删除、重置或伪造补写；历史中已丢失的思考内容无法逆向恢复。OpenAI 官方 GPT-6 的思考工具调用自动使用 Responses 协议。
+- 桌面和移动端都按悬浮输入栏的实际顶部预留间距。长图片加载、工具状态变化、回复增高、附件预览及输入框尺寸变化会自动校正；向上阅读时保留当前消息位置，发送消息或回到底部后继续跟随。移动端另适配键盘引起的 VisualViewport 变化。
+- 版本为 `1.0.0`，离线缓存为 `fritia-next-chat-v38`；本次仅修改源码，未打包。
+
+## 2026-10-01 Service Worker 网络失败处理
+
+- 修复 Service Worker 在静态资源网络失败且缓存未命中时产生 `Uncaught (in promise) TypeError: Failed to fetch` 的路径：现在会向页面返回标准网络错误响应，不再留下未处理的 SW Promise rejection。
+- `/models`、带 `Authorization` / `api-key` 的请求、`no-store` 请求、跨域请求、POST 请求和 localhost 模型请求不经过 Service Worker 缓存。这样模型能力查询不会被不同 API Key 或旧响应污染；聊天 API 原本就不由 Service Worker 接管。
+- 静态资源只缓存成功的完整响应，缓存写入挂到 `event.waitUntil()`；HTTP 错误、206 部分响应和 CacheStorage 失败不会覆盖已有缓存。
+
+### 能力发现的实际范围
+
+| 服务商 | 官方接口能提供什么 | 当前处理 |
+| --- | --- | --- |
+| [DeepSeek](https://api-docs.deepseek.com/api/list-models/) | `/models` 的 `effort.supported_levels`、`default_level` | 动态展示具体思考档位，保持聊天最低档作为默认选择 |
+| [OpenRouter](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens) | `/models` 的 `reasoning.supported_efforts`、`mandatory` 等 | 优先采用档位和是否强制思考信息，使用网关 `reasoning` 参数 |
+| [Kimi](https://platform.kimi.ai/docs/api/list-models) | `/models` 的 `supports_reasoning`，未公布完整档位和开关字段 | 已知型号按官方参数；未知型号若仅确认支持思考，则显示“思考（API 默认）”，不虚构关闭能力 |
+| [Qwen / 百炼](https://help.aliyun.com/zh/model-studio/list-models) | 专用 `/api/v1/models` 返回 `capabilities: [Reasoning]` 和 token 上限，未公布完整档位或关闭能力 | 国际、香港或显式工作空间域名使用专用查询；其他端点查询原 `/models`，并使用已核实型号适配。北京旧兼容域名缺少工作空间信息时不猜测工作空间 |
+| [GPT / OpenAI](https://developers.openai.com/api/reference/resources/models) | 普通模型对象未公开思考开关或完整 effort 元数据 | 按 [GPT-6 官方参数](https://developers.openai.com/api/docs/guides/latest-model) 适配已知型号 |
+| [MiMo](https://mimo.mi.com/docs/en-US/api/chat)、[GLM](https://docs.z.ai/guides/capabilities/thinking-mode) | 已核实思考请求协议，未找到足以实现自动发现全部档位的官方模型列表协议 | 按已核实型号配置开关或档位；不从 `reasoning_content` 或 token 预算推导虚假的强度 |
+
+因此不能承诺任意未知模型都能全自动发现档位。接口信息不足时保留厂商适配；CORS、代理或账户限制导致查询失败时使用已核实的回退规则。客户端不发送付费探测对话，也不把 HTTP 200 当作“参数生效”的证据。
+
 ## 2026-09-09 说明文档图片路径
 
 - 使用说明 Markdown 中的相对图片路径会以当前文档 URL 为基准解析，并兼容 Windows `\` 路径分隔符；本地开发服务器、网页版和客户端均可正确显示 `src/docs/imgs` 中的图片。

@@ -1,6 +1,6 @@
 import { appendMessage, createId, getConversationMessages, now, replaceMessage } from './storage.js';
 import { getDefaultChatProvider, getSettings, getAdvancedSettings } from './settings.js';
-import { buildModelReasoningBody } from './model_reasoning.js';
+import { applyModelReasoningBody, getReasoningFields, mergeReasoningDelta, reasoningProviderKey } from './model_reasoning.js';
 import { buildRagReferenceMessage } from './knowledge_base.js';
 import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_term_memory.js';
 import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
@@ -13,6 +13,7 @@ import {
   getMcpConfig
 } from './mcp_tools.js';
 import { isLmStudioSettings, isLmStudioProvider, requestLmStudioCompletion } from './lm_studio.js';
+import { needsOpenAIResponses, requestOpenAIResponses } from './openai_responses.js';
 
 const PLAYER_NAME = '分析员';
 const MAX_TOOL_AGENT_STEPS = 50;
@@ -112,6 +113,7 @@ export async function completeToolPrivateMessageReply({
       commit({ text: '', status: 'typing' });
     }
     let finalText = '';
+    let finalReasoning = {};
     let finalAttachments = [];
     let otherAttachments = [];
     const toolOutputAttachmentGroups = [];
@@ -157,6 +159,7 @@ export async function completeToolPrivateMessageReply({
         const assistantToolMessage = {
           role: 'assistant',
           content: assistantContent,
+          ...getReasoningFields(completion),
           tool_calls: toolCalls.map(call => ({
             id: call.id,
             type: 'function',
@@ -243,7 +246,7 @@ export async function completeToolPrivateMessageReply({
       }
 
       if (shouldContinueToolLoop(stepText, { availableToolCount: availableTools.length, toolCallCount })) {
-        agentMessages.push({ role: 'assistant', content: stepText || '' });
+        agentMessages.push({ role: 'assistant', content: stepText || '', ...getReasoningFields(completion) });
         agentMessages.push({
           role: 'system',
           content: buildToolContinuationInstruction(text, stepText)
@@ -262,6 +265,7 @@ export async function completeToolPrivateMessageReply({
       }
 
       finalText = stepText;
+      finalReasoning = getReasoningFields(completion);
       const splitAttachments = splitToolOutputAttachments(toolOutputAttachmentGroups);
       finalAttachments = mergeToolAttachments(completionAttachments, splitAttachments.final);
       otherAttachments = splitAttachments.other;
@@ -292,9 +296,11 @@ export async function completeToolPrivateMessageReply({
     commit({
       text: reply,
       attachments: finalAttachments.map(prepareToolAttachmentForPersistence),
-      meta: otherAttachments.length
-        ? { toolOtherAttachments: otherAttachments.map(prepareToolAttachmentForPersistence) }
-        : {},
+      meta: {
+        reasoning: finalReasoning,
+        reasoningProvider: reasoningProviderKey(getDefaultChatProvider(settings)),
+        ...(otherAttachments.length ? { toolOtherAttachments: otherAttachments.map(prepareToolAttachmentForPersistence) } : {})
+      },
       status: 'sent',
       createdAt: now()
     });
@@ -370,6 +376,8 @@ async function buildToolMessages({ store, conversation, character, userText, use
     .slice(-advanced.historyLimit)
     .map(async item => ({
       role: item.role === 'assistant' ? 'assistant' : item.role === 'system' ? 'system' : 'user',
+      ...(item.role === 'assistant' && item.meta?.reasoningProvider === reasoningProviderKey(getDefaultChatProvider(settings))
+        ? getReasoningFields(item.meta.reasoning) : {}),
       content: await buildModelMessageContent({
         speakerName: item.speakerName || (item.role === 'user' ? PLAYER_NAME : character.name),
         text: item.text || '',
@@ -406,14 +414,16 @@ async function requestToolAwareCompletion({
     throw new Error('模型连接配置不完整，请检查默认模型设置。');
   }
   const requestMessages = completeToolResultReply ? withCompleteToolResultPrompt(messages) : messages;
-  const body = {
+  if (needsOpenAIResponses(provider, reasoningEffort, tools)) {
+    return requestOpenAIResponses({ provider, messages: requestMessages, tools, toolChoice, reasoningEffort, onDelta, signal });
+  }
+  const body = applyModelReasoningBody(provider, reasoningEffort, {
     model: provider.model,
     messages: requestMessages,
     temperature: settings.temperature,
     stream: true,
-    ...buildModelReasoningBody(provider, reasoningEffort),
     ...(tools.length ? { tools, tool_choice: toolChoice } : {})
-  };
+  });
   if (isLmStudioProvider(provider)) {
     return requestLmStudioCompletion({
       provider,
@@ -493,21 +503,23 @@ async function readStreamingCompletion(response, onDelta, signal = null) {
   const decoder = new TextDecoder();
   let buffer = '';
   let content = '';
+  const reasoning = {};
   const toolCalls = [];
   while (true) {
     throwIfToolAborted(signal);
     const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    buffer += done ? decoder.decode() + '\n' : decoder.decode(value, { stream: true });
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() || '';
     for (const line of lines) {
       const clean = line.trim();
       if (!clean || clean === 'data: [DONE]') continue;
+      if (/^(?:event:|id:|retry:|:)/.test(clean)) continue;
       const payload = clean.startsWith('data:') ? clean.slice(5).trim() : clean;
       try {
         const json = JSON.parse(payload);
         const delta = json?.choices?.[0]?.delta || {};
+        mergeReasoningDelta(reasoning, delta);
         if (delta.content) {
           content += delta.content;
           onDelta?.(delta.content);
@@ -518,13 +530,15 @@ async function readStreamingCompletion(response, onDelta, signal = null) {
         onDelta?.(payload);
       }
     }
+    if (done) break;
   }
-  return { content, toolCalls, attachments: [] };
+  return { content, toolCalls, attachments: [], ...reasoning };
 }
 
 function extractJsonCompletion(json) {
   const message = json?.choices?.[0]?.message || {};
   return {
+    ...getReasoningFields(message),
     content: extractMessageText(message.content || json?.output_text || ''),
     toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : [],
     attachments: extractMessageAttachments(message, json)
@@ -1242,9 +1256,13 @@ function setTraceResumeState(trace, state = {}) {
 }
 
 function compactResumeMessages(messages = []) {
-  return messages.slice(-MAX_RESUME_MESSAGES).map(message => {
+  let start = Math.max(0, messages.length - MAX_RESUME_MESSAGES);
+  // Keep the calling assistant with its tool results at a snapshot boundary.
+  while (start > 0 && messages[start]?.role === 'tool') start -= 1;
+  return messages.slice(start).map(message => {
     const next = {
       role: message.role,
+      ...getReasoningFields(message),
       content: compactResumeContent(message.content)
     };
     if (message.tool_call_id) next.tool_call_id = message.tool_call_id;
@@ -1254,7 +1272,7 @@ function compactResumeMessages(messages = []) {
         type: call.type || 'function',
         function: {
           name: call.function?.name || call.name || '',
-          arguments: String(call.function?.arguments ?? call.arguments ?? '{}').slice(0, MAX_RESUME_CONTENT_CHARS)
+          arguments: String(call.function?.arguments ?? call.arguments ?? '{}')
         }
       }));
     }

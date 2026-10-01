@@ -19,7 +19,8 @@ import {
 } from './storage.js';
 import { characterAvatar, getCharacterById, normalizeCharacterAvatarSource } from './characters.js';
 import { getSettings, saveSettings, getAdvancedSettings, saveAdvancedSettings, isDeepSeekIntimateModeAvailable, getDefaultChatProvider } from './settings.js';
-import { getModelReasoningProfile, normalizeModelReasoningEffort } from './model_reasoning.js';
+import { getModelReasoningProfile, normalizeModelReasoningEffort, loadModelReasoningProfile } from './model_reasoning.js';
+import { createChatScrollController } from './chat_scroll.js';
 import { getLmStudioReasoningProfile, isLmStudioProvider, testLmStudioConnection } from './lm_studio.js';
 
 const CHAT_MODEL_LOGO_PATHS = Object.freeze({
@@ -1018,6 +1019,7 @@ function commitOutgoingMessage(text, attachments = []) {
     ...(toolMode ? { meta: { toolMode: true } } : {})
   };
   const store = appendMessage(state.store, conversation.id, message);
+  chatScrollController?.followLatest();
   updateStore(store);
   return {
     store,
@@ -1182,6 +1184,7 @@ function bindChatModelControl() {
       state.chatModelSubmenuOpen = false;
     }
     renderChatModelControl();
+    if (state.chatModelPickerOpen) refreshChatReasoningProfile();
   });
   modelTrigger?.addEventListener('click', event => {
     event.stopPropagation();
@@ -1210,6 +1213,15 @@ function bindChatModelControl() {
     renderModelSettings(getSettings());
   });
   popover?.addEventListener('click', event => event.stopPropagation());
+}
+
+async function refreshChatReasoningProfile() {
+  const character = getActivePrivateCharacter();
+  if (!character) return;
+  const { provider } = getCharacterChatRuntime(character.id);
+  if (isLmStudioProvider(provider)) return;
+  await loadModelReasoningProfile(provider);
+  renderChatModelControl();
 }
 
 function renderChatModelControl() {
@@ -1381,6 +1393,7 @@ function renderChatModelSubmenu(characterId, runtime, container) {
       });
       state.chatModelSubmenuOpen = false;
       renderChatModelControl();
+      refreshChatReasoningProfile();
       document.getElementById('chat-model-submenu-trigger')?.focus();
     });
     container.appendChild(button);
@@ -4286,12 +4299,19 @@ function getListItems(query) {
     });
 }
 
+let chatScrollController = null;
+const messageNodeCache = new Map();
+
 function renderMessages() {
   const container = document.getElementById('message-list');
   if (!container) return;
   const conversation = getActiveConversation();
+  chatScrollController ||= createChatScrollController(container, document.querySelector('.composer'));
+  chatScrollController.beforeRender(conversation?.id || '');
   if (!conversation) {
     container.innerHTML = `<div class="empty-state"><img src="src/_logo/emoji/sparkles_3d.png" alt=""><h2>NEXT Chat</h2><p>选择角色或群聊开始。</p></div>`;
+    messageNodeCache.clear();
+    chatScrollController.afterRender();
     return;
   }
   const messages = getConversationMessages(state.store, conversation.id);
@@ -4300,21 +4320,40 @@ function renderMessages() {
     if (state.voiceNotice?.conversationId === conversation.id) {
       container.appendChild(createVoiceNoticeNode(state.voiceNotice));
     }
+    messageNodeCache.clear();
+    chatScrollController.afterRender();
     return;
   }
-  container.innerHTML = '';
+  const nodes = [];
+  const activeIds = new Set();
   for (const message of messages) {
-    container.appendChild(createMessageNode(message));
+    activeIds.add(message.id);
+    const activeToolMessage = Boolean(isActiveToolMessage(message));
+    const signature = JSON.stringify([message, activeToolMessage, activeToolMessage && Boolean(state.activeToolRun?.stopping),
+      message.role === 'user' ? '' : characterAvatar(getCharacterById(state.store.characters, message.speakerId))]);
+    let cached = messageNodeCache.get(message.id);
+    if (!cached || cached.signature !== signature) {
+      cached = { signature, node: createMessageNode(message) };
+      messageNodeCache.set(message.id, cached);
+    }
+    nodes.push(cached.node);
   }
+  for (const id of messageNodeCache.keys()) if (!activeIds.has(id)) messageNodeCache.delete(id);
   if (state.voiceNotice?.conversationId === conversation.id) {
-    container.appendChild(createVoiceNoticeNode(state.voiceNotice));
+    nodes.push(createVoiceNoticeNode(state.voiceNotice));
   }
-  container.scrollTop = container.scrollHeight;
+  // Keep unchanged media mounted while tool status and replies update.
+  nodes.forEach((node, index) => {
+    if (container.children[index] !== node) container.insertBefore(node, container.children[index] || null);
+  });
+  while (container.children.length > nodes.length) container.lastElementChild.remove();
+  chatScrollController.afterRender();
 }
 
 function createMessageNode(message) {
   const row = document.createElement('article');
   row.className = `message-row${message.role === 'user' ? ' is-self' : ''}`;
+  row.dataset.messageId = message.id;
   const avatar = document.createElement('img');
   avatar.className = 'message-avatar';
   avatar.alt = message.speakerName || '';

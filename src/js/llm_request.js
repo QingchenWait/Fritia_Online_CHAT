@@ -1,10 +1,10 @@
 import { getDefaultChatProvider, getDefaultImageCaptionProvider, getSettings } from './settings.js';
-import { buildModelReasoningBody } from './model_reasoning.js';
+import { applyModelReasoningBody, mergeReasoningDelta } from './model_reasoning.js';
 import { isLmStudioProvider, requestLmStudioCompletion } from './lm_studio.js';
 
 const IMAGE_UNSUPPORTED_RE = /(image|vision|multimodal|image_url|input image|图片|图像).*(unsupported|not supported|不支持|无法|不能)|unsupported.*(image|vision|multimodal|image_url)/i;
 
-export async function requestLlmCompletion({ settings = getSettings(), messages = [], body = {}, reasoningEffort = '' } = {}) {
+export async function requestLlmCompletion({ settings = getSettings(), messages = [], body = {}, reasoningEffort = '', onCompletion } = {}) {
   const requestMessages = Array.isArray(messages) && messages.length ? messages : (body.messages || []);
   const needsImages = messagesContainImages(requestMessages);
   const defaultProvider = getDefaultChatProvider(settings);
@@ -25,6 +25,7 @@ export async function requestLlmCompletion({ settings = getSettings(), messages 
           stream: body.stream ?? false
         }
       });
+      onCompletion?.(result, primaryProvider);
       return String(result?.content || '').trim() || JSON.stringify(result);
     } catch (error) {
       throw annotateProviderError(error, primaryProvider, needsImages);
@@ -39,13 +40,13 @@ export async function requestLlmCompletion({ settings = getSettings(), messages 
   );
 
   try {
-    return await fetchCompletion(primaryProvider, primaryBody);
+    return await fetchCompletion(primaryProvider, primaryBody, onCompletion);
   } catch (error) {
     if (!needsImages || primaryProvider?.id === imageProvider?.id || !isImageUnsupportedError(error)) {
       throw annotateProviderError(error, primaryProvider, needsImages);
     }
     try {
-      return await fetchCompletion(imageProvider, buildProviderBody(imageProvider, settings, body, requestMessages));
+      return await fetchCompletion(imageProvider, buildProviderBody(imageProvider, settings, body, requestMessages), onCompletion);
     } catch (fallbackError) {
       fallbackError.message = `默认图像转述模型请求失败：${fallbackError.message || '未知错误'}`;
       fallbackError.cause = error;
@@ -86,17 +87,16 @@ function buildProviderBody(provider, settings, body, messages, reasoningEffort =
   if (!provider?.apiKey || !provider?.baseUrl || !provider?.model) {
     throw new Error('模型连接配置不完整，请检查默认模型和默认图像转述模型设置。');
   }
-  return {
+  return applyModelReasoningBody(provider, reasoningEffort, {
     ...body,
     model: provider.model,
     messages,
     temperature: body.temperature ?? settings.temperature,
-    stream: body.stream ?? false,
-    ...buildModelReasoningBody(provider, reasoningEffort)
-  };
+    stream: body.stream ?? false
+  });
 }
 
-async function fetchCompletion(provider, body) {
+async function fetchCompletion(provider, body, onCompletion) {
   const headers = {
     'Content-Type': 'application/json',
     Authorization: 'Bearer ' + provider.apiKey
@@ -118,10 +118,11 @@ async function fetchCompletion(provider, body) {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const json = await response.json();
+    onCompletion?.(json?.choices?.[0]?.message || {}, provider);
     return extractCompletionText(json).trim() || JSON.stringify(json);
   }
   if (!response.body) throw new Error('API 没有返回可读取内容');
-  return readCompletionStream(response);
+  return readCompletionStream(response, message => onCompletion?.(message, provider));
 }
 
 function flattenMessageContent(messages = []) {
@@ -141,28 +142,33 @@ function extractCompletionText(json) {
     || '';
 }
 
-async function readCompletionStream(response) {
+async function readCompletionStream(response, onCompletion) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   let output = '';
+  const reasoning = {};
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    buffer += done ? decoder.decode() + '\n' : decoder.decode(value, { stream: true });
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() || '';
     for (const line of lines) {
       const clean = line.trim();
       if (!clean || clean === 'data: [DONE]') continue;
+      if (/^(?:event:|id:|retry:|:)/.test(clean)) continue;
       const payload = clean.startsWith('data:') ? clean.slice(5).trim() : clean;
       try {
-        output += extractCompletionText(JSON.parse(payload));
+        const json = JSON.parse(payload);
+        output += extractCompletionText(json);
+        mergeReasoningDelta(reasoning, json?.choices?.[0]?.delta || {});
       } catch {
         output += payload;
       }
     }
+    if (done) break;
   }
+  onCompletion?.({ content: output, ...reasoning });
   return output.trim();
 }
 

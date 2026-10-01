@@ -1,0 +1,8 @@
+@media (min-width: 761px) {
+  .message-list {
+    --chat-composer-gap: 20px;
+    padding-bottom: var(--chat-bottom-clearance, 9.25rem);
+    scroll-padding-bottom: var(--chat-bottom-clearance, 9.25rem);
+    overflow-anchor: none;
+  }
+}

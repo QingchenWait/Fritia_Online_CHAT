@@ -1,0 +1,14 @@
+@media (max-width: 760px) {
+  .app-shell .chat-pane {
+    height: min(100dvh, var(--chat-viewport-height, 100dvh));
+  }
+  .composer textarea {
+    max-height: clamp(42px, calc(var(--chat-viewport-height, 100dvh) - 24rem), 128px);
+  }
+  .message-list {
+    --chat-composer-gap: 16px;
+    padding-bottom: var(--chat-bottom-clearance, 10rem);
+    scroll-padding-bottom: var(--chat-bottom-clearance, 10rem);
+    overflow-anchor: none;
+  }
+}

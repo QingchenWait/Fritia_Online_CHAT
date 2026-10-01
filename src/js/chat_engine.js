@@ -9,6 +9,7 @@ import { requestLlmCompletion } from './llm_request.js';
 import { saveDataUrlAsMedia } from './media_store.js';
 import { getTtsErrorLog, synthesizeMimoVoiceClone } from './tts_engine.js';
 import { isLmStudioSettings } from './lm_studio.js';
+import { getReasoningFields, reasoningProviderKey } from './model_reasoning.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -90,7 +91,8 @@ export async function completePrivateMessageReply({
     });
     const reply = typeof result === 'string' ? result : result.text;
     const baseMeta = {
-      deepseekIntimateMode: typeof result === 'object' && result?.deepseekIntimateMode === true
+      deepseekIntimateMode: typeof result === 'object' && result?.deepseekIntimateMode === true,
+      ...(result?.reasoning ? { reasoning: result.reasoning, reasoningProvider: result.reasoningProvider } : {})
     };
     if (voiceReplyEnabled) {
       try {
@@ -194,9 +196,10 @@ export async function requestCharacterReply({ store, conversation, character, us
     mode,
     event
   });
-  const responseText = await requestOpenAICompatible(settings, messages, reasoningEffort);
+  const response = await requestOpenAICompatible(settings, messages, reasoningEffort);
   return {
-    text: sanitizeReply(responseText, character.name),
+    ...response,
+    text: sanitizeReply(response.text, character.name),
     deepseekIntimateMode: Boolean(intimateMessage)
   };
 }
@@ -259,17 +262,23 @@ async function buildMessages({ character, history, userText, userMessage, ragMes
 }
 
 async function requestOpenAICompatible(settings, messages, reasoningEffort = '') {
+  let reasoning = {};
+  let reasoningProvider = '';
   const text = await requestLlmCompletion({
     settings,
     messages,
     reasoningEffort,
+    onCompletion: (message, provider) => {
+      reasoning = getReasoningFields(message);
+      reasoningProvider = reasoningProviderKey(provider);
+    },
     body: {
       temperature: settings.temperature,
       stream: false
     }
   });
   if (!text.trim()) throw new Error('模型返回为空');
-  return text;
+  return { text, reasoning, reasoningProvider };
 }
 
 function sanitizeReply(text = '', speakerName = '') {

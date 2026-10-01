@@ -1,8 +1,10 @@
-const CACHE_NAME = 'fritia-next-chat-v37';
+const CACHE_NAME = 'fritia-next-chat-v39';
 const CORE_ASSETS = [
   './',
   './index.html',
   './src/styles/app.css',
+  './src/styles/chat-scroll-desktop.css',
+  './src/styles/chat-scroll-mobile.css',
   './src/styles/onboarding.css',
   './src/styles/onboarding-desktop.css',
   './src/styles/onboarding-mobile.css',
@@ -19,6 +21,10 @@ const CORE_ASSETS = [
   './src/js/characters.js',
   './src/js/settings.js',
   './src/js/model_reasoning.js',
+  './src/js/openai_responses.js',
+  './src/js/chat_scroll.js',
+  './src/js/chat_scroll_desktop.js',
+  './src/js/chat_scroll_mobile.js',
   './src/js/knowledge_base.js',
   './src/js/long_term_memory.js',
   './src/js/llm_request.js',
@@ -95,6 +101,11 @@ self.addEventListener('fetch', event => {
   // Browsers must own this fetch so Local Network Access / localhost
   // permission checks happen in the page context instead of inside SW.
   if (isLoopbackModelRequest(url)) return;
+  // Runtime APIs (including model capability discovery) own their caching
+  // and failure handling. CacheStorage does not honor fetch's no-store flag.
+  if (url.origin !== location.origin
+    || event.request.cache === 'no-store'
+    || ['authorization', 'api-key', 'x-api-key'].some(name => event.request.headers.has(name))) return;
   let pathname = url.pathname;
   try {
     pathname = decodeURIComponent(pathname);
@@ -112,14 +123,21 @@ self.addEventListener('fetch', event => {
       || url.pathname.endsWith('.css')
       || url.pathname.endsWith('.json'));
   const fetchAndCache = () => fetch(event.request).then(response => {
-    const copy = response.clone();
-    caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
+    if (response.ok && response.status !== 206) {
+      const copy = response.clone();
+      event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {}));
+    }
     return response;
   });
+  const readCached = () => caches.open(CACHE_NAME)
+    .then(cache => cache.match(event.request)).catch(() => undefined);
   event.respondWith(
-    networkFirst
-      ? fetchAndCache().catch(() => caches.match(event.request))
-      : caches.match(event.request).then(cached => cached || fetchAndCache())
+    (networkFirst
+      ? fetchAndCache().catch(readCached)
+      : readCached().then(cached => cached || fetchAndCache()))
+      // Preserve a genuine network failure for the caller. Never return
+      // undefined, fake success, or leave a rejected SW response promise.
+      .then(response => response || Response.error(), () => Response.error())
   );
 });
 

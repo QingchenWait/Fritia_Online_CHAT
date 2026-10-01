@@ -1,5 +1,22 @@
 # STRUCTURE
 
+## 2026-10-01 v1.0.0 Reasoning and Scroll Mapping
+
+- `src/js/model_reasoning.js`：新增 `loadModelReasoningProfile(provider)` 及厂商目录 URL / 内存缓存适配；`getModelReasoningProfile()` 先读 API 元数据再走已核实型号规则。`applyModelReasoningBody()` 组合请求参数；`getReasoningFields()` / `mergeReasoningDelta()` 原样保留并累积思考状态；`reasoningProviderKey()` 标识同端点和同模型。
+- `src/js/openai_responses.js`：`needsOpenAIResponses()` 判定官方 GPT-6 工具协议，`requestOpenAIResponses()` 转换消息/工具 schema、处理事件流并保存 `responses_output`；该内部字段不直接发给 Chat Completions。
+- `src/js/llm_request.js`：`requestLlmCompletion()` 可选 `onCompletion(message, provider)` 回调，返回值仍为纯正文字符串；`chat_engine.js` 使用回调保存 assistant 的 `meta.reasoning` / `meta.reasoningProvider`。
+- `src/js/tool_chat_engine.js`：流式、JSON、工具 assistant、中间 assistant、历史同模型消息和续跑快照均保留思考数据。快照保留完整 JSON 工具参数及调用/结果边界；工具最终消息也保存原始推理元数据。
+- `src/js/chat_scroll.js`：`createChatScrollController(container, composer)` 返回 `beforeRender(conversationId)`、`afterRender()` 和 `followLatest()`；`.message-row[data-message-id]` 提供稳定锚点，`--chat-bottom-clearance` 是实测输入栏遮挡高度加间距。
+- `src/js/chat_scroll_desktop.js` / `chat_scroll_mobile.js`：分别绑定桌面窗口和手机 VisualViewport；移动布局设置 `--chat-viewport-height`。
+- `src/styles/chat-scroll-desktop.css` / `chat-scroll-mobile.css`：独立断点，桌面预留 20px、手机预留 16px 最小间距；移动短视口约束输入框高度。`index.html` 加载两份样式。
+- `src/js/ui.js`：`refreshChatReasoningProfile()` 在打开思考菜单和切换模型时更新能力；`renderMessages()` 缓存未变消息 DOM，发送时恢复底部跟随。
+- `tools/reasoning_regression.test.mjs` / `tools/chat_scroll_regression.mjs`：协议回归与隔离浏览器布局回归入口。`package.json` 为 `1.0.0`，Service Worker 为 `fritia-next-chat-v38`。
+
+## 2026-10-01 Service Worker Fetch Mapping
+
+- `sw.js`：`isRuntimeRequest()` 等价判断内联在 fetch 入口，跳过跨域、认证、`no-store`、非 GET 和 loopback 请求；`fetchAndCache()` 只缓存完整成功静态响应，网络和缓存异常最终返回 `Response.error()`。
+- `tools/service_worker_regression.test.mjs`：使用 Node VM 验证 Service Worker 分支；真实浏览器隔离验证记录在 DEVELOP，覆盖动态模型目录、离线资源及 unhandled rejection。
+
 ## 2026-09-09 Help Markdown Image URLs
 
 - `src/js/ui.js`：`fetchAppHelpMarkdown()` 返回 Markdown 与来源 URL；`renderMarkdownDocument(markdown, { baseUrl })` 将说明文档中的相对图片解析到对应文档目录，兼容 `imgs\\*.png` 和 `imgs/*.png` 写法。

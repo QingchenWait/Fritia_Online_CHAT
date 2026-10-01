@@ -1,5 +1,32 @@
 # DEVELOP
 
+## 2026-10-01 v1.0.0 Reasoning / Tool State / Chat Viewport
+
+- 遵循 `.agents/fritia_chat_dev_agent.md`，仅修改本次三项问题的模型请求、消息展示及对应文档/验证。未修改存储版本、用户设置字段、角色、知识库、长期记忆或打包产物。
+- `model_reasoning.js`：厂商能力适配优先于既有模型名回退；DeepSeek 读取 `effort.supported_levels`，OpenRouter 读取 `reasoning`，Kimi 读取 `supports_reasoning`，百炼读取 `output.models`。缓存按目录 URL / API Key 隔离，成功 5 分钟、失败 30 秒；同端点请求合并，5 秒超时，失败保留旧成功结果。API Key 不写入新存储、不记录日志、不发送给第三方目录。
+- 百炼的思考开关是顶层 `enable_thinking`；MiMo / DeepSeek / Kimi / GLM 原生接口按各自 `thinking` 或 `reasoning_effort` 协议。支持思考、允许关闭、effort 档位和 token 预算不是同一个概念。能力不明确时不伪造二档；保持原先从最低合法档开始的交互习惯。参考 README 中的官方能力表以及 [百炼参数](https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions)、[Kimi 参数](https://platform.kimi.ai/docs/guide/reasoning-effort)。
+- DeepSeek 400 根因：工具 completion 解码器只读取正文和工具调用，assistant 续轮及恢复快照也丢掉了 `reasoning_content`。现在整个链路保留字符串及结构化 reasoning，非工具的中间 assistant 回复也回传；普通聊天和工具最终回复在 `meta.reasoning` 保存原始内容，通过 `meta.reasoningProvider` 限定同端点/同模型的历史回传。没有关闭思考、禁止工具或用空字符串伪造模型推理。
+- `openai_responses.js` 仅适配 OpenAI 官方 GPT-6 思考工具组合，完整保留有序 output 和加密 reasoning；兼容网关继续走原 Chat Completions。GPT-6 思考请求去掉官方不支持的采样参数。
+- `chat_scroll.js`：按 composer 顶部测量动态留白；ResizeObserver 观察消息和输入栏，图片/媒体加载后校正；用户阅读时按消息 ID 和偏移保持位置。`ui.js` 复用内容未变化的消息节点，避免每次状态刷新重载历史长图。关闭浏览器自动 scroll anchoring，避免与程序校正竞争。
+- 横屏和手机分别使用 `chat_scroll_desktop.js` / `chat_scroll_mobile.js` 与对应两份 CSS；共用消息锚点算法。移动端额外处理 VisualViewport 键盘变化和短视口输入框最大高度。
+- `package.json` 版本 `1.0.0`；`sw.js` 缓存 `v38`，新增模块和 CSS 进入离线核心资源。未运行 build 或任何平台打包。
+
+### 验证
+
+- `npm run check`：全部源文件语法检查。
+- `npm test`：能力目录、厂商请求字段、流式分片/尾帧、JSON 响应、完整工具循环、中间回复、续跑快照、普通聊天思考保存、GPT-6 Responses 加密状态回传回归。测试使用模拟服务，不消耗真实 API 额度。
+- `tools/chat_scroll_regression.mjs`：真实 Chromium 隔离上下文，测试 1920×1080、2560×1440、3840×2160、1280×720、844×390、390×844、360×640；覆盖延迟加载 6000px 长图、后续 MCP/输入中气泡、超长回复、输入栏/附件增高、上滑阅读、视口缩小、移动 VisualViewport 键盘开合、桌面 1.25/1.5 page scale。page scale 模拟不等同于原生浏览器 Ctrl+ 缩放。
+- 浏览器测试需先 `npm run dev`，再 `npm run test:chat-scroll`；可用 `PLAYWRIGHT_MODULE` 指向已安装 Playwright 的 ESM 入口，`CHAT_TEST_BROWSER` 指定浏览器可执行文件，`CHAT_TEST_URL` 指定开发地址。未向生产依赖添加 Playwright。
+- 未做真实付费 API 请求、Android/iOS 实机或原生 APP 壳层测试；未验证所有第三方网关的私有参数。
+
+## 2026-10-01 Service Worker Fetch Error
+
+- `sw.js`：缓存批次更新到 `fritia-next-chat-v39`。Service Worker 只接管同源静态 GET；跨域、认证、`no-store`、POST 和 loopback 模型请求直接交还页面。
+- `fetchAndCache()` 仅缓存 `response.ok` 且非 206 的完整响应，使用 `event.waitUntil()` 等待缓存写入；读取缓存和缓存写入失败均不覆盖主网络结果。
+- 所有失败分支最终返回 `Response.error()`，保证 `FetchEvent.respondWith()` 收到 Response，而不是 `undefined` 或 rejected Promise。
+- `tools/service_worker_regression.test.mjs` 覆盖账户隔离、动态 API 不缓存、离线静态资源、缺失资源、HTTP 错误、部分响应和缓存异常。
+- 真实隔离 Chromium Service Worker 测试确认：模型目录两次请求对应两个 API Key，缓存不共享；静态 fixture 可离线读取；缺失资源返回页面 TypeError，Service Worker 未产生 unhandled rejection。
+
 ## 2026-09-09 Help Markdown Image URLs
 
 - `src/js/ui.js`：说明文档加载器将文档来源 URL 传入 Markdown 渲染器；图片的相对地址统一基于文档 URL 解析，并将反斜杠转换为 URL 斜杠，兼容本地、网页版、客户端和 GitHub 回退文档来源。

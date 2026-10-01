@@ -7,6 +7,8 @@
  * 127.0.0.1 (including IPv6 loopback).
  */
 
+import { getReasoningFields, mergeReasoningDelta } from './model_reasoning.js';
+
 const LOCAL_HOST_RE = /localhost|127\.0\.0\.1|\[::1\]/i;
 const MODEL_CATALOG_CACHE = new Map();
 
@@ -203,6 +205,7 @@ async function readStreamingCompletion(response, onDelta, signal = null) {
   const decoder = new TextDecoder();
   let buffer = '';
   let content = '';
+  const reasoning = {};
   const toolCalls = [];
   while (true) {
     if (signal?.aborted) throw abortError();
@@ -214,9 +217,11 @@ async function readStreamingCompletion(response, onDelta, signal = null) {
     for (const line of lines) {
       const clean = line.trim();
       if (!clean || clean === 'data: [DONE]') continue;
+      if (/^(?:event:|id:|retry:|:)/.test(clean)) continue;
       const payload = clean.startsWith('data:') ? clean.slice(5).trim() : clean;
       try {
         const delta = JSON.parse(payload)?.choices?.[0]?.delta || {};
+        mergeReasoningDelta(reasoning, delta);
         if (delta.content) {
           content += delta.content;
           onDelta?.(delta.content);
@@ -233,6 +238,7 @@ async function readStreamingCompletion(response, onDelta, signal = null) {
     const payload = tail.startsWith('data:') ? tail.slice(5).trim() : tail;
     try {
       const delta = JSON.parse(payload)?.choices?.[0]?.delta || {};
+      mergeReasoningDelta(reasoning, delta);
       if (delta.content) {
         content += delta.content;
         onDelta?.(delta.content);
@@ -243,12 +249,13 @@ async function readStreamingCompletion(response, onDelta, signal = null) {
       onDelta?.(payload);
     }
   }
-  return { content, toolCalls, attachments: [] };
+  return { content, toolCalls, attachments: [], ...reasoning };
 }
 
 function extractJsonCompletion(json = {}) {
   const message = json?.choices?.[0]?.message || {};
   return {
+    ...getReasoningFields(message),
     content: extractMessageText(message.content || json?.output_text || ''),
     toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : [],
     attachments: []
