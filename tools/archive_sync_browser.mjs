@@ -44,7 +44,7 @@ try {
       window.edit = (id, text) => { const app = JSON.parse(data.localStorage.fritia_next_chat_store); const item = app.messages.chat.find(item => item.id === id); if (item) item.text = text; else app.messages.chat.push({ id, text, role: 'user', createdAt: Date.now() }); data.localStorage.fritia_next_chat_store = JSON.stringify(app); };
       window.sync = choices => runIncrementalSync({
         config: { url: origin + '/dav', path: '/chat', username: 'test' }, request: (config, url, init) => fetch(url, init),
-        snapshot: async () => structuredClone(data), apply: async value => { window.data = value; }, status: () => {},
+        snapshot: async () => structuredClone(data), apply: async value => { window.data = value; }, status: (phase, label, progress, detail) => { (window.progressSteps ||= []).push({ phase, label, progress, detail }); },
         conflict: value => { window.conflict = value; }, complete: async () => {}, ensureDirectory: async () => {}, readLegacy: async () => null
       }, choices);
     }, { id, origin });
@@ -56,6 +56,12 @@ try {
   await sync(a); await sync(b); await sync(a);
   assert.deepEqual(await texts(a), ['message-A', 'message-B']);
   assert.deepEqual(await texts(b), ['message-A', 'message-B']);
+  for (const page of [a,b]) {
+    const details = await page.evaluate(() => progressSteps.filter(item => item.detail));
+    assert.ok(details.some(item => item.label === '正在上传增量文件'));
+    assert.ok(details.some(item => item.label === '正在读取云端数据文件'));
+    assert.ok(details.every(({detail}) => detail.current && detail.completed >= 0 && detail.completed <= detail.total));
+  }
   const before = calls.length; await sync(a);
   assert.deepEqual(calls.slice(before).map(item => item.method), ['PROPFIND']);
   console.log('PASS two-device message union, unchanged sync = one request, no upload');
@@ -64,6 +70,13 @@ try {
   await sync(a);
   const result = await sync(b); assert.equal(result.conflict, true);
   assert.ok(await b.evaluate(() => conflict.files.some(item => item.path.includes('messages/chat/A'))));
+  await b.evaluate(async () => {
+    const { deleteRecovery, archiveState } = await import('/src/js/archive_state.js');
+    const oldId = conflict.recoveryId;
+    await deleteRecovery(oldId);
+    await sync();
+    if (oldId === conflict.recoveryId || !await archiveState(conflict.recoveryId)) throw Error('Pending conflict reused a deleted recovery');
+  });
   const historyBefore = files.size;
   await b.evaluate(() => sync(Object.fromEntries(conflict.files.map(item => [item.choiceKey, 'remote']))));
   assert.deepEqual(await texts(b), ['edit-A', 'message-B']);

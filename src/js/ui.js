@@ -25,7 +25,7 @@ import { getLmStudioReasoningProfile, isLmStudioProvider, testLmStudioConnection
 import { CHAT_PROVIDER_PRESETS, getProviderPresetForUrl, buildMimoTtsSyncPatch, initChatProviderPresets } from './model_provider_presets.js';
 import { readClipboardText } from './archive_io.js';
 import { showSettingsNotice } from './settings_notice.js';
-import { listArchiveRecoveries, getArchiveRecoveryAvailability, exportArchiveRecovery } from './archive_sync.js';
+import { listArchiveRecoveries, getArchiveRecoveryAvailability, exportArchiveRecovery, deleteArchiveRecovery } from './archive_sync.js';
 import { bindExternalLinks } from './external_links.js';
 
 let chatProviderPresets = null;
@@ -163,6 +163,8 @@ let voicePlaybackTimer = 0;
 let pluginStoreSearchTimer = 0;
 let modelScopeLoginPollTimer = 0;
 let modelScopeLoginPollEndsAt = 0;
+let pendingPluginInstall = null;
+let pluginInstallChecking = false;
 
 const state = {
   store: loadAppStore(),
@@ -2143,6 +2145,19 @@ function bindArchivePanel() {
   document.getElementById('archive-conflict-later')?.addEventListener('click', () => { state.archiveConflict = null; renderArchiveConflict(); });
   document.getElementById('archive-recovery-refresh')?.addEventListener('click', () => runArchiveAction(refreshArchiveRecoveries));
   document.getElementById('archive-recovery-list')?.addEventListener('change', updateArchiveRecoveryButtons);
+  document.addEventListener('fritia-archive-recoveries-updated', () => refreshArchiveRecoveries().catch(console.warn));
+  const deleteDialog = document.getElementById('archive-recovery-delete-dialog');
+  document.getElementById('archive-recovery-delete-cancel')?.addEventListener('click', () => deleteDialog.close());
+  deleteDialog?.addEventListener('close', () => { recoveryToDelete = null; });
+  document.getElementById('archive-recovery-delete-confirm')?.addEventListener('click', async () => {
+    const id = recoveryToDelete;
+    if (!id || archiveActionsBusy) return;
+    await runArchiveAction(async () => {
+      await deleteArchiveRecovery(id);
+      deleteDialog.close();
+      await refreshArchiveRecoveries();
+    });
+  });
   for (const side of ['local', 'remote']) document.getElementById(`archive-recovery-${side}`)?.addEventListener('click', () => {
     const id = document.getElementById('archive-recovery-list')?.value;
     if (id) runArchiveAction(() => exportArchiveRecovery(id, side));
@@ -2152,6 +2167,15 @@ function bindArchivePanel() {
 
 let archiveActionsBusy = false;
 let recoveryButtonsRequest = 0;
+let recoveryToDelete = null;
+
+function confirmRecoveryDeletion(id, description) {
+  if (archiveActionsBusy) return;
+  recoveryToDelete = id;
+  setText('archive-recovery-delete-description', description);
+  document.getElementById('archive-recovery-delete-dialog')?.showModal();
+  document.getElementById('archive-recovery-delete-cancel')?.focus();
+}
 
 async function refreshArchiveRecoveries() {
   const list = await listArchiveRecoveries();
@@ -2249,12 +2273,21 @@ async function renderArchivePanel() {
 function renderArchiveProgress() {
   const progress = state.archiveProgress || {};
   const percent = `${Math.round((Number(progress.progress) || 0) * 100)}%`;
-  setText('archive-progress-label', progress.label || '等待操作');
-  setText('archive-config-progress-label', progress.label || '等待操作');
-  document.getElementById('archive-progress-fill')?.style.setProperty('--progress', percent);
-  document.getElementById('archive-config-progress-fill')?.style.setProperty('--progress', percent);
-  document.getElementById('archive-progress')?.classList.toggle('is-error', progress.phase === 'error');
-  document.getElementById('archive-config-progress')?.classList.toggle('is-error', progress.phase === 'error');
+  const detail = progress.detail;
+  for (const prefix of ['archive-progress', 'archive-config-progress', 'archive-conflict-progress']) {
+    setText(`${prefix}-label`, progress.label || '等待操作');
+    document.getElementById(`${prefix}-fill`)?.style.setProperty('--progress', percent);
+    document.getElementById(prefix)?.classList.toggle('is-error', progress.phase === 'error');
+    const element = document.getElementById(`${prefix}-detail`);
+    if (!element) continue;
+    element.replaceChildren();
+    if (detail) {
+      const file = document.createElement('span'); file.className = 'archive-progress-current'; file.textContent = detail.current;
+      const count = document.createElement('span'); count.textContent = ` (${detail.completed} / ${detail.total})`;
+      element.append(file, count);
+    }
+    element.title = element.textContent;
+  }
 }
 
 function renderArchiveConflict() {
@@ -2880,12 +2913,12 @@ function closePluginSourceMenu() {
   renderPluginSourceMenu();
 }
 
-async function openModelScopeLoginPanel() {
+async function openModelScopeLoginPanel({ checkImmediately = true } = {}) {
   if (await openModelScopeDesktopWindow()) {
     state.pluginStore.modelScopeMessage = '已打开魔搭社区窗口，请在窗口中完成登录。';
     renderPluginSourceMenu();
     startModelScopeLoginPoll();
-    checkModelScopeLoginStatus({ refreshList: true, closeDesktopLogin: true, quiet: true });
+    if (checkImmediately) checkModelScopeLoginStatus({ refreshList: true, closeDesktopLogin: true, quiet: true });
     return;
   }
   const frame = document.getElementById('modelscope-login-frame');
@@ -2893,7 +2926,8 @@ async function openModelScopeLoginPanel() {
     frame.setAttribute('src', MODELSCOPE_LOGIN_URL);
   }
   openPanel('plugin-source-login-panel');
-  checkModelScopeLoginStatus();
+  startModelScopeLoginPoll();
+  if (checkImmediately) checkModelScopeLoginStatus();
 }
 
 function getTauriInvoke() {
@@ -2993,6 +3027,9 @@ async function checkModelScopeLoginStatus(options = {}) {
       closePanel('plugin-source-login-panel');
       if (options.closeDesktopLogin) closeModelScopeDesktopWindow();
       await loadPluginStorePage();
+      const pending = pendingPluginInstall;
+      pendingPluginInstall = null;
+      if (pending && !document.getElementById('plugin-store-panel')?.classList.contains('hidden')) await openPluginDetail(pending);
     }
   } catch (error) {
     if (!quiet) {
@@ -3075,6 +3112,7 @@ function renderPluginStoreGrid() {
   grid.querySelectorAll('[data-plugin-mcp-id]').forEach(card => {
     card.addEventListener('click', () => openPluginDetailById(card.dataset.pluginMcpId));
     card.addEventListener('keydown', event => {
+      if (event.target !== card) return;
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
       openPluginDetailById(card.dataset.pluginMcpId);
@@ -3083,7 +3121,7 @@ function renderPluginStoreGrid() {
   grid.querySelectorAll('[data-plugin-install-id]').forEach(button => {
     button.addEventListener('click', event => {
       event.stopPropagation();
-      openPluginDetailById(button.dataset.pluginInstallId);
+      requestPluginInstall(button.dataset.pluginInstallId);
     });
   });
   if (status && state.pluginStore.loginChecking) status.textContent = '正在检测魔搭登录状态...';
@@ -3149,6 +3187,30 @@ function openPluginDetailById(id) {
   const item = state.pluginStore.items.find(server => server.id === id);
   if (!item) return;
   openPluginDetail(item);
+}
+
+async function requestPluginInstall(id) {
+  const item = state.pluginStore.items.find(server => server.id === id);
+  if (!item || pluginInstallChecking) return;
+  pluginInstallChecking = true;
+  pendingPluginInstall = null;
+  setText('plugin-store-status', '正在检测魔搭登录状态...');
+  try {
+    // Always check the current cookie session, even if the last check succeeded.
+    const result = await checkModelScopeLogin();
+    state.pluginStore.modelScopeConnected = result.connected;
+    if (result.connected) await openPluginDetail(item);
+    else {
+      pendingPluginInstall = item;
+      await openModelScopeLoginPanel({ checkImmediately: false });
+    }
+  } catch (error) {
+    state.pluginStore.modelScopeMessage = error?.message || '无法检测登录状态，请重试。';
+    setText('plugin-store-status', state.pluginStore.modelScopeMessage);
+  } finally {
+    pluginInstallChecking = false;
+    renderPluginSourceMenu();
+  }
 }
 
 async function openPluginDetail(server) {
@@ -4454,6 +4516,13 @@ function createMessageNode(message) {
   const text = message.text || '';
   const attachments = message.attachments || [];
   const hasGeneratedToolContent = Boolean(message.meta?.toolMode && (text.trim() || attachments.length));
+  let attachmentNotice = null;
+  if (message.meta?.attachmentInputError) bubble.classList.add('is-attachment-error');
+  if (message.meta?.attachmentIssues?.length) {
+    const notice = document.createElement('div'); notice.className = 'message-attachment-notice';
+    notice.textContent = '以下附件未参与本轮请求（原文件仍保留）：\n' + message.meta.attachmentIssues.map(item => `${item.name || '附件'}：${item.reason}`).join('\n');
+    attachmentNotice = notice;
+  }
   if (message.status === 'typing' && !hasGeneratedToolContent) {
     content.innerHTML = '<span class="typing-indicator"><span></span><span></span><span></span></span>';
   } else if (isVoiceReplyMessage(message)) {
@@ -4463,6 +4532,12 @@ function createMessageNode(message) {
     const stickerOnly = isStickerOnlyMessage(text, attachments);
     if (stickerOnly) content.classList.add('message-content--sticker-only');
     if (text.trim()) renderMessageText(content, text);
+    if (message.meta?.attachmentApiError && !text.includes(message.meta.attachmentApiError)) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary'); summary.textContent = '模型接口原始错误（完整内容）';
+      const raw = document.createElement('pre'); raw.textContent = message.meta.attachmentApiError;
+      details.append(summary, raw); content.appendChild(details);
+    }
     for (const [index, attachment] of attachments.entries()) {
       const node = createMessageAttachmentNode(message, attachment, index);
       if (!node) continue;
@@ -4480,6 +4555,7 @@ function createMessageNode(message) {
   meta.textContent = `${formatMessageTime(message.createdAt)}${message.status === 'error' ? ' · 失败' : ''}`;
   const stopButton = isActiveToolMessage(message) ? createToolStopButton() : null;
   bubble.append(name);
+  if (attachmentNotice) bubble.appendChild(attachmentNotice);
   if (message.meta?.toolTrace) {
     bubble.appendChild(createToolTraceNode(message.meta.toolTrace));
   }
@@ -6103,7 +6179,21 @@ function updateCustomSelect(select) {
       select.dispatchEvent(new Event('change', { bubbles: true }));
       closeCustomSelects();
     });
-    menu.appendChild(item);
+    if (select.id === 'archive-recovery-list') {
+      // Sibling buttons avoid nesting an action inside a selectable option.
+      const row = document.createElement('div'); row.className = 'archive-recovery-option';
+      const remove = document.createElement('button'); remove.type = 'button';
+      remove.className = 'archive-recovery-delete'; remove.dataset.archiveAction = '';
+      remove.disabled = archiveActionsBusy;
+      remove.setAttribute('aria-label', `删除恢复副本：${option.textContent}`);
+      remove.title = '删除此恢复副本';
+      remove.innerHTML = '<img src="src/_logo/icons/trash-2.svg" alt="">';
+      remove.addEventListener('click', event => {
+        event.stopPropagation(); closeCustomSelects();
+        confirmRecoveryDeletion(option.value, option.textContent);
+      });
+      row.append(item, remove); menu.appendChild(row);
+    } else menu.appendChild(item);
   });
 }
 

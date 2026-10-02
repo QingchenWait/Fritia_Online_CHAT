@@ -1,4 +1,9 @@
 @media (max-width: 760px) {
+  .archive-progress-line { gap: 0.4rem; }
+  .archive-progress-line > span { max-width: 48%; }
+  .archive-progress-line small { font-size: 0.65rem; }
+  .archive-recovery-tools .custom-select { width: 100%; }
+  .archive-recovery-delete-dialog { width: calc(100vw - 24px); max-height: 85dvh; padding: 18px; }
   .archive-conflict-card { width: calc(100vw - 24px); max-height: 90dvh; overflow: auto; }
   .archive-conflict-compare { grid-template-columns: 1fr; gap: 4px; }
   .archive-recovery-tools { margin: 12px; }

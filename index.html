@@ -20,6 +20,8 @@
   <link rel="stylesheet" href="src/styles/model-provider-presets-mobile.css">
   <link rel="stylesheet" href="src/styles/archive-sync-desktop.css">
   <link rel="stylesheet" href="src/styles/archive-sync-mobile.css">
+  <link rel="stylesheet" href="src/styles/attachment-input-desktop.css">
+  <link rel="stylesheet" href="src/styles/attachment-input-mobile.css">
 </head>
 <body>
   <div id="app" class="app-shell" data-view="chat">
@@ -774,7 +776,7 @@
                 <div><span>同步时间间隔</span><strong id="archive-webdav-interval">每 30 分钟</strong></div>
               </div>
               <div id="archive-progress" class="archive-progress">
-                <span id="archive-progress-label">等待操作</span>
+                <div class="archive-progress-line"><span id="archive-progress-label">等待操作</span><small id="archive-progress-detail"></small></div>
                 <i><b id="archive-progress-fill"></b></i>
               </div>
               <div class="archive-webdav-actions">
@@ -825,7 +827,7 @@
       <label><span>同步时间间隔（分钟）</span><input id="archive-config-interval" type="number" min="5" max="1440" step="5"></label>
       <p class="archive-webdav-note">坚果云对 WebDAV 请求频率和目录列举有限制，难以实时多端同步。建议主要作为备份使用，避免频繁同步。</p>
       <div id="archive-config-progress" class="archive-progress">
-        <span id="archive-config-progress-label">等待操作</span>
+        <div class="archive-progress-line"><span id="archive-config-progress-label">等待操作</span><small id="archive-config-progress-detail"></small></div>
         <i><b id="archive-config-progress-fill"></b></i>
       </div>
       <div class="archive-config-actions">
@@ -835,6 +837,16 @@
       </div>
     </aside>
   </div>
+
+  <dialog id="archive-recovery-delete-dialog" class="archive-recovery-delete-dialog" aria-labelledby="archive-recovery-delete-title">
+    <h3 id="archive-recovery-delete-title">永久删除此恢复副本？</h3>
+    <p id="archive-recovery-delete-description"></p>
+    <p>该恢复记录及其中的本地、云端快照将从本机永久删除，无法撤销。如仍需保留，请先取消并导出副本。当前聊天数据、其他恢复副本和服务器上的数据不受影响。</p>
+    <div class="form-actions">
+      <button id="archive-recovery-delete-cancel" class="btn" type="button" autofocus><img src="src/_logo/icons/x.svg" alt="">取消</button>
+      <button id="archive-recovery-delete-confirm" class="btn btn-danger" type="button" data-archive-action><img src="src/_logo/icons/trash-2.svg" alt="">永久删除</button>
+    </div>
+  </dialog>
 
   <div id="role-migration-confirm" class="role-migration-confirm hidden" role="dialog" aria-modal="true" aria-labelledby="role-migration-confirm-title">
     <section class="role-migration-confirm-card">
@@ -928,6 +940,10 @@
           <span>数据大小：<b id="archive-conflict-remote-size">0 B</b></span>
           <button id="archive-conflict-remote" class="btn" type="button" data-archive-action><img src="src/_logo/icons/download.svg" alt="">冲突项全部保留云端</button>
         </article>
+      </div>
+      <div id="archive-conflict-progress" class="archive-progress">
+        <div class="archive-progress-line"><span id="archive-conflict-progress-label">等待操作</span><small id="archive-conflict-progress-detail"></small></div>
+        <i><b id="archive-conflict-progress-fill"></b></i>
       </div>
       <div id="archive-conflict-files" class="archive-conflict-files"></div>
       <button id="archive-conflict-apply" class="btn btn-primary" type="button" data-archive-action><img src="src/_logo/icons/save-config.svg" alt="">应用逐项选择并合并</button>

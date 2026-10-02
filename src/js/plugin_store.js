@@ -1,6 +1,6 @@
 export const MODELSCOPE_ORIGIN = 'https://www.modelscope.cn';
 export const MODELSCOPE_MCP_PAGE_URL = `${MODELSCOPE_ORIGIN}/mcp?hosted=1`;
-export const MODELSCOPE_LOGIN_URL = `${MODELSCOPE_ORIGIN}/mcp?hosted=1`;
+export const MODELSCOPE_LOGIN_URL = `${MODELSCOPE_ORIGIN}/login`;
 export const MODELSCOPE_MCP_ICON = 'src/_logo/icons/network.svg';
 
 const MODELSCOPE_API_PREFIX = `${MODELSCOPE_ORIGIN}/api/v1`;

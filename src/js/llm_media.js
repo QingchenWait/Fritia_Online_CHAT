@@ -1,7 +1,9 @@
 import { getMediaDataUrl, isMediaRef } from './media_store.js';
+import { fileAttachmentParts, attachmentSource } from './attachment_inputs.js';
+import { attachmentKey, blockedAttachment, AttachmentInputError } from './attachment_state.js';
+import { dataUrlBytes } from './attachment_documents.js';
 
-const DATA_URL_RE = /^data:([^;,]+)?(;base64)?,/i;
-const TEXT_MIME_RE = /^(text\/|application\/(?:json|xml|javascript|x-javascript|ld\+json|csv))/i;
+const DATA_URL_RE = /^data:([^;,]*)(?:;[^,]*)?,/i;
 
 export async function resolveMediaDataUrl(source) {
   const value = normalizeMediaSource(source);
@@ -11,7 +13,7 @@ export async function resolveMediaDataUrl(source) {
   return fetchPathAsDataUrl(value);
 }
 
-export async function buildModelMessageContent({ speakerName = '', text = '', attachments = [] } = {}) {
+export async function buildModelMessageContent({ speakerName = '', text = '', attachments = [], historical = false, attachmentIssues = [] } = {}) {
   const cleanText = String(text || '').trim();
   const normalizedAttachments = Array.isArray(attachments) ? attachments.filter(Boolean) : [];
   const prefix = speakerName ? `${speakerName}：` : '';
@@ -19,23 +21,27 @@ export async function buildModelMessageContent({ speakerName = '', text = '', at
   const textContent = `${prefix}${bodyText}`.trim();
   if (!normalizedAttachments.length) return textContent || `${prefix}`.trim();
 
+  const parts = [], readable = [];
+  for (const attachment of normalizedAttachments) {
+    const converted = await attachmentToContentParts(attachment, { historical, issues: attachmentIssues });
+    if (converted.length) { readable.push(attachment); parts.push(...converted); }
+  }
+  if (!readable.length) return cleanText ? `${prefix}${cleanText}` : '';
   const content = [{
     type: 'text',
     text: [
       textContent || `${prefix}发送了以下附件。`.trim(),
-      attachmentLabelText(normalizedAttachments)
+      attachmentLabelText(readable)
     ].filter(Boolean).join('\n')
   }];
-  for (const attachment of normalizedAttachments) {
-    content.push(...await attachmentToContentParts(attachment));
-  }
+  content.push(...parts);
   return content;
 }
 
-export async function buildAttachmentContentParts(attachments = []) {
+export async function buildAttachmentContentParts(attachments = [], options = {}) {
   const content = [];
   for (const attachment of Array.isArray(attachments) ? attachments : []) {
-    content.push(...await attachmentToContentParts(attachment));
+    content.push(...await attachmentToContentParts(attachment, options));
   }
   return content;
 }
@@ -63,18 +69,32 @@ export function dataUrlPayload(dataUrl) {
   return String(dataUrl || '').split(',')[1] || '';
 }
 
-async function attachmentToContentParts(attachment = {}) {
-  const source = attachment.dataRef || attachment.dataUrl || attachment.fileData || attachment.url || attachment.path || '';
-  const dataUrl = await resolveMediaDataUrl(source);
+async function attachmentToContentParts(attachment = {}, options = {}) {
+  const source = attachmentSource(attachment);
+  const key = await attachmentKey(source || attachment.id || attachment.name || 'missing');
+  const blocked = await blockedAttachment([key]);
+  if (blocked) {
+    if (options.historical) return [];
+    throw new AttachmentInputError([{ ...blocked, keys: [key] }]);
+  }
+  let dataUrl;
+  try { dataUrl = await resolveMediaDataUrl(source); }
+  catch (error) {
+    // Temporary fetch/IDB errors are not proof that a format is unsupported.
+    if (options.historical) { options.issues?.push({name:attachment.name,reason:error.message}); return []; }
+    throw error;
+  }
   if (!dataUrl) {
     throw new Error(`无法读取附件数据：${attachment.name || attachment.mime || attachment.id || '未命名附件'}`);
   }
   const mime = attachment.mime || inferMimeFromDataUrl(dataUrl) || 'application/octet-stream';
   const name = attachment.name || attachment.fileName || 'attachment';
+  const provenance = async () => ({ name, keys: [key, await attachmentKey(dataUrlBytes(dataUrl))], current: !options.historical });
 
-  if (mime.startsWith('image/') || attachment.type === 'image') {
+  if ((mime.startsWith('image/') || attachment.type === 'image') && mime !== 'image/svg+xml') {
     return [{
       type: 'image_url',
+      _fritiaAttachment: await provenance(),
       image_url: {
         url: dataUrl,
         detail: 'auto'
@@ -85,6 +105,7 @@ async function attachmentToContentParts(attachment = {}) {
   if (mime.startsWith('audio/') || attachment.type === 'audio') {
     return [{
       type: 'input_audio',
+      _fritiaAttachment: await provenance(),
       input_audio: {
         data: dataUrlPayload(dataUrl),
         format: audioFormatFromMime(mime, name)
@@ -92,23 +113,7 @@ async function attachmentToContentParts(attachment = {}) {
     }];
   }
 
-  if (TEXT_MIME_RE.test(mime) || /\.(?:txt|md|markdown|json|csv|xml|log|js|ts|css|html)$/i.test(name)) {
-    return [{
-      type: 'text',
-      text: [
-        `附件 ${name} 的文本内容：`,
-        decodeDataUrlText(dataUrl)
-      ].join('\n')
-    }];
-  }
-
-  return [{
-    type: 'file',
-    file: {
-      filename: name,
-      file_data: dataUrl
-    }
-  }];
+  return fileAttachmentParts({ ...attachment, name, mime }, dataUrl, options);
 }
 
 async function getRequiredMediaDataUrl(ref) {
@@ -175,18 +180,4 @@ function inferMimeFromPath(path = '') {
   if (clean.endsWith('.webp')) return 'image/webp';
   if (clean.endsWith('.gif')) return 'image/gif';
   return '';
-}
-
-function decodeDataUrlText(dataUrl) {
-  const source = String(dataUrl || '');
-  const comma = source.indexOf(',');
-  if (comma < 0) return '';
-  const header = source.slice(0, comma);
-  const payload = source.slice(comma + 1);
-  if (/;base64/i.test(header)) {
-    const binary = atob(payload);
-    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
-    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-  }
-  return decodeURIComponent(payload);
 }

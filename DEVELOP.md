@@ -1,5 +1,26 @@
 # DEVELOP
 
+## 2026-10-02 v1.0.2 附件输入与上下文隔离修复
+
+- 根因：llm_media 只识别少量文本扩展名，其余统一生成嵌套 `file.file_data`；DeepSeek 文件内容块的字段在顶层，MiMO 不接受这类通用文件项，OpenAI 也不会把 octet-stream 当成任意可理解文件。每次重建历史和工具 resume 都再次发送该项，形成连续失败。部分兼容接口以 HTTP 200 返回 error，旧逻辑还会把 JSON 当作正常回复。
+- 先解码脚本/代码/配置正文，未知扩展名也可按可读 UTF-8 内容识别；UTF-16 BOM/明显字节特征及已识别文本的 GB18030、Windows-1252 回退都采用严格解码，不静默替换坏字节。没有执行附件代码。PDF.js legacy / fflate 按需本地加载，读取 PDF 文字及现代 Office XML；XLSX 保留工作表名称/单元格地址/值/公式，PPTX 按关系清单排序。图像排版与嵌入对象不假装已读取。PDF 官方 OpenAI 用户内容保留规范 application/pdf 文件输入，Responses 显式映射 input_file，不再丢成空 input_text。
+- attachment_state 使用独立 fritia_attachment_inputs/blocked IndexedDB，以附件来源/字节 SHA-256 保存拒绝标记。原媒体与聊天不删除、不改写；当前不支持文件立即提示，历史不支持文件跳过并显示本轮说明。附件错误消息不会进入后续历史/RAG 查询/长期记忆采集；兼容旧 status=sent 的 JSON error。仅实际携带附件并返回 400/415/422 的明确文件错误才隔离，401/429/5xx、模型参数错误保留原路径。能定位 message/content 索引时只隔离该项；未指明具体项时隔离本次候选文件输入，文件仍可下载。
+- error.meta.attachmentQuarantine 及 attachmentIssues 带恢复所需哈希；正常聊天存档/同步自然携带这些字段。上下文读取时先重建本地隔离，再处理旧消息；不新增同步协议或自动清理数据。完整原始 API error 保存为 attachmentApiError，超过摘要显示长度时以 details/pre 展开，不被存储层 12000 字符正文限制截断。
+- 普通、工具和群聊共用请求预处理；_fritiaAttachment 仅留在本地快照，发给 Chat Completions/Responses/LM Studio 前剥离。旧 raw file 续跑项也重新转换。附件正文在 MCP 快照中保持完整；其他原有上下文压缩策略不变。Responses 不支持的音频适配现在明确提示，避免默默变成空文本。图片接口错误延迟到既有转述回退结束后再隔离，防止误伤回退路径。
+- 版本保持 1.0.2，SW 缓存 v44。新模块、两套提示样式、解析器脚本进入离线核心资源；字体/CMaps 随客户端内置，网页使用后缓存。没有新增服务器或改变模型配置、同步规则、角色与 MCP 权限。
+- 已阅读官方 [OpenAI 文件输入](https://developers.openai.com/api/docs/guides/file-inputs)、[DeepSeek Chat API](https://api-docs.deepseek.com/api/create-chat-completion)、[Open WebUI 解析路由](https://github.com/open-webui/open-webui/blob/main/backend/open_webui/retrieval/loaders/main.py) 与 [Mozilla PDF.js](https://github.com/mozilla/pdf.js)。MiMO 文档入口返回站点壳，未据此虚构通用文件支持；采用可验证的正文传输。
+- 测试入口：test:attachments（编码/伪装二进制/三类报错/配置区别/SSE）、test:attachments:browser（两种尺寸，每端 51 个运行用例，加真实文件上传、完整错误 UI、刷新及无原隔离缓存的恢复）。所有模型响应均为受控夹具，没有调用真实付费 API；正式 Windows/Android 运行结果、APK 证书和包体校验见外部 chat_v1.0.2 本批 BUILD_PROCESS/validation 报告。
+
+## 2026-10-02 v1.0.2 同步进度、恢复副本删除与安装登录检查
+
+- 同步状态事件新增可选 `detail: { current, completed, total }`，存档页、配置浮层和冲突窗口在状态同行显示小字详情。计数属于当前阶段（版本清单、数据文件、记录校验、增量文件、数据库应用），并非估算全程文件数；长路径省略但计数始终可见，完整内容通过 title 查看。旧版迁移也报告文件进度。上传仍按原先约 512 KiB 分组，没有新增 WebDAV 请求。
+- `deleteRecovery(id)` 只接受恢复键格式，并在同一个 IndexedDB readwrite 事务里检查索引唯一成员、快照 id/时间一致性，再删除该键并更新索引；任何失败均回滚。不删除 live LocalStorage/媒体库、基线、缓存、设备标识或远端文件。异常/缺失索引采取保守拒绝。记录数据内嵌于快照，删除一键即释放其本地快照数据；无共享媒体级联删除。
+- 下拉行使用独立的选择按钮和垃圾桶按钮，行高维持 32px；原生 HTML dialog 以自绘样式展示确认浮窗，默认焦点为取消。确认锁定点击时的 id，不读取后来改变的选择值。若用户删除正在等待决策的冲突副本，下次比较会检查存在性并重建恢复点。
+- MCP 卡片安装通过 `requestPluginInstall()` 重新调用 `/users/login/info`，不使用旧登录标记替代检查。未登录则复用原生浏览器及轮询，地址改为 `/login`；验证成功后继续该插件详情，不直接代替用户部署。网络错误中止并显示原因。原生隐藏 API 浏览器继续使用 MCP 首页，只有可见登录窗口导航到登录页。
+- 桌面/手机布局分存于 archive-sync-desktop.css / archive-sync-mobile.css；未改变合并决策、删除传播、聊天、模型或工具请求参数。复用已有 trash-2 图标、IndexedDB 事务与登录桥，未添加运行依赖。联网检索工具当时返回 503，无法取得新的开源页面，未把未读取资料作为实现证据。
+- 版本 1.0.2，SW 缓存 v43。原生源码与包只写入获授权的外部 chat_v1.0.2；沿用原包名、Android 签名证书和 Windows 数据目录，旧目录不改动。
+- 验证命令：`npm run check`、既有 Node 回归、`test:archive-sync`、`test:v102`。新浏览器测试覆盖精确删除/取消/切换选择/事务回滚/并发新增/非法键与错配、32px 行高、长路径计数、四种登录状态；同步测试覆盖阶段计数及删除冲突副本后重建。成品运行环境、结果和签名哈希记录在 chat_v1.0.2 两端 BUILD_PROCESS.md 与 validation 报告中。 已在正式 Windows EXE 和 Android API 35 模拟器的签名 APK 上通过 20 个成品场景，包括真实 WsgiDAV 双端合并、冲突进度、精确副本删除和两端真实内置 /login 窗口；登录账号接口使用受控响应，未验证真实账号登录和远端部署。Windows 打包保留原生壳的 Service Worker 禁用守卫，避免静态缓存介入客户端更新。
+
 ## 2026-10-02 v1.0.1 Cloud Sync Compatibility Patch
 
 - 普通 Markdown/帮助文档 `<a target="_blank">` 之前没有连接壳层 `open_external_url`，与官网按钮的路径不同。`external_links.js` 在文档 click / auxclick 上委托处理外链，动态气泡同样生效；仅原生环境调用现有系统浏览器命令，跳过站内链接、非 HTTP(S) 和 download 链接。

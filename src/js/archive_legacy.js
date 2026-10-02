@@ -41,7 +41,7 @@ export function decodeLegacyFile(path, text) {
   return value;
 }
 
-export async function readLegacyArchive({ read, cache = {} }) {
+export async function readLegacyArchive({ read, cache = {}, onProgress = () => {} }) {
   async function get(path) {
     const previous = cache[path];
     const response = await read(path, previous?.etag ? { 'If-None-Match': previous.etag } : {});
@@ -55,6 +55,7 @@ export async function readLegacyArchive({ read, cache = {} }) {
     if (response.status === 304 && original.etag) return;
     if (!response.ok || await response.text() !== original.text) throw new Error(`旧存档正在变化：${path}，请旧设备同步完成后重试。`);
   }
+  onProgress({ current: 'manifest.json', completed: 0, total: 1 });
   const manifestFile = await get('manifest.json');
   if (!manifestFile) return null;
   const manifest = parse(manifestFile.text, 'manifest.json');
@@ -65,6 +66,7 @@ export async function readLegacyArchive({ read, cache = {} }) {
     const path = entry?.path;
     if (typeof path !== 'string' || !/^(?:localStorage\/[^/]+|indexeddb\/(?:fritia_media_store|fritia_knowledge_base_db)\/[^/]+)\.json$/.test(path)
       || path.includes('..') || Object.hasOwn(files, path)) throw new Error('旧存档路径无效或重复');
+    onProgress({ current: path, completed: Object.keys(files).length, total: manifest.entries.length });
     const file = await get(path);
     const value = decodeLegacyFile(path, file.text);
     const hashes = [legacyHash(file.text), legacyHash(JSON.stringify(value))];
@@ -81,6 +83,7 @@ export async function readLegacyArchive({ read, cache = {} }) {
       snapshot.indexedDb[db] ||= {};
       snapshot.indexedDb[db][filename.slice(0,-5)] = value;
     }
+    onProgress({ current: path, completed: Object.keys(files).length, total: manifest.entries.length });
   }
   await checkUnchanged('manifest.json', manifestFile);
   snapshot.legacySource = { manifest: manifestFile.text, files, mismatches };

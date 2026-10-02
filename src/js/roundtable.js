@@ -6,6 +6,7 @@ import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMo
 import { attachmentLabelText, buildAttachmentContentParts } from './llm_media.js';
 import { requestLlmCompletion } from './llm_request.js';
 import { isLmStudioSettings } from './lm_studio.js';
+import { filterAttachmentHistory } from './attachment_inputs.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -285,11 +286,11 @@ async function runSpeakerReply({
   onStore?.(nextStore);
 
   const currentSettings = getSettings();
-  const history = getConversationMessages(nextStore, conversation.id)
+  let history = getConversationMessages(nextStore, conversation.id)
     .filter(item => item.status !== 'typing')
     .filter(shouldKeepMessageForDailyToolContext)
     .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, currentSettings));
-  const requestEvent = buildRequestEvent(event, {
+  let requestEvent = buildRequestEvent(event, {
     triggerText,
     eventType,
     target,
@@ -304,13 +305,20 @@ async function runSpeakerReply({
   let finalText;
   let status = 'sent';
   let intimateMessage = null;
+  const attachmentIssues = [];
+  let attachmentInputError = false;
+  let attachmentApiError = '';
+  let attachmentQuarantine = [];
   try {
+    history = await filterAttachmentHistory(history);
+    requestEvent = buildRequestEvent(event, { triggerText, eventType, target, interBotDebt, botChainLimit, participants, history, conversationId: conversation.id });
     const settings = currentSettings;
     const speakerForRequest = normalizeSpeakerForRoundtable(speaker);
+    const currentUserId = ['player','mention'].includes(eventType) ? history.findLast(item => item.role === 'user')?.id : '';
+    const mediaContentParts = await buildRoundtableMediaContentParts(history, attachmentIssues, currentUserId);
     const ragMessage = await buildRoundtableRagMessage(requestEvent, history);
     const memoryMessage = await buildRoundtableMemoryMessage(requestEvent, speakerForRequest, history);
     intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
-    const mediaContentParts = await buildRoundtableMediaContentParts(history);
     const estimatedTokens = estimateRequestTokens(speakerForRequest, requestEvent, ragMessage, memoryMessage, intimateMessage, settings, history);
     const budgetBeforeRequest = getBudgetState();
     const tokenHardLimit = getRoundtableTokenHardLimit();
@@ -329,7 +337,7 @@ async function runSpeakerReply({
     }
 
     const body = buildRequestBody(settings, speakerForRequest, requestEvent, ragMessage, memoryMessage, intimateMessage, mediaContentParts);
-    const rawReply = await requestRoundtableCompletion({ settings, body });
+    const rawReply = await requestRoundtableCompletion({ settings, body, attachmentIssues });
     recordCall(requestEvent.type, estimatedTokens + estimateTokens(rawReply));
     const parsed = parseRoundtableJson(rawReply);
     payload = normalizeBotPayload(parsed, speakerForRequest, requestEvent, participants);
@@ -343,7 +351,11 @@ async function runSpeakerReply({
     const replyTarget = target?.id && target.id !== speaker.id
       ? target
       : { id: PLAYER_ID, name: PLAYER_NAME };
-    handleRoundtableError(err, speaker, requestEvent, conversation.id);
+    attachmentInputError = err?.kind === 'attachment-input';
+    attachmentApiError = attachmentInputError ? err.body || '' : '';
+    attachmentQuarantine = attachmentInputError ? err.issues : [];
+    if (attachmentInputError) setRoundtableBug('attachment-input', '附件读取失败', { message: err.message, conversationId: conversation.id });
+    else handleRoundtableError(err, speaker, requestEvent, conversation.id);
     payload = {
       target: replyTarget,
       targetId: replyTarget.id,
@@ -354,7 +366,7 @@ async function runSpeakerReply({
       topicHint: '',
       fallback: true
     };
-    finalText = ensureTargetPrefix(randomItem(SAFE_FALLBACKS.error), replyTarget);
+    finalText = attachmentInputError ? err.message : ensureTargetPrefix(randomItem(SAFE_FALLBACKS.error), replyTarget);
     status = 'error';
   }
   const payloadTarget = payload?.target?.id
@@ -376,7 +388,9 @@ async function runSpeakerReply({
       wantsFollowUp: payload.wantsFollowUp,
       suggestedFollowUpTargetId: payload.suggestedFollowUpTargetId,
       fallback: payload.fallback === true,
-      deepseekIntimateMode: Boolean(intimateMessage)
+      deepseekIntimateMode: Boolean(intimateMessage),
+      ...(attachmentInputError ? { attachmentInputError: true, attachmentApiError, attachmentQuarantine } : {}),
+      ...(attachmentIssues.length ? { attachmentIssues } : {})
     }
   });
   if (status === 'sent') {
@@ -474,11 +488,12 @@ function canRunEvent(event, conversationId) {
   return true;
 }
 
-async function requestRoundtableCompletion({ settings, body }) {
+async function requestRoundtableCompletion({ settings, body, attachmentIssues }) {
   return requestLlmCompletion({
     settings,
     messages: body.messages,
-    body
+    body,
+    attachmentIssues
   });
 }
 
@@ -520,18 +535,20 @@ async function buildRoundtableMemoryMessage(event, speaker, history) {
   return null;
 }
 
-async function buildRoundtableMediaContentParts(history = []) {
+async function buildRoundtableMediaContentParts(history = [], issues = [], currentUserId = '') {
   const mediaMessages = history
     .filter(item => item && item.status !== 'typing' && Array.isArray(item.attachments) && item.attachments.length)
     .slice(-4);
   const parts = [];
   for (const message of mediaMessages) {
+    const converted = await buildAttachmentContentParts(message.attachments, { historical: message.id !== currentUserId, issues });
+    if (!converted.length) continue;
     const speakerName = message.speakerName || (message.role === 'user' ? PLAYER_NAME : '角色');
     parts.push({
       type: 'text',
       text: `${speakerName}发送的媒体内容：${attachmentLabelText(message.attachments)}`
     });
-    parts.push(...await buildAttachmentContentParts(message.attachments));
+    parts.push(...converted);
   }
   return parts;
 }
@@ -887,7 +904,9 @@ function handleRoundtableError(err, speaker, event, conversationId) {
 function formatRoundtableBugDetails(kind, details = {}) {
   const lines = [];
   const advanced = getRoundtableAdvancedSettings();
-  if (kind === 'api-error') {
+  if (kind === 'attachment-input') {
+    lines.push(details.message || '附件读取失败，已从后续模型请求隔离。');
+  } else if (kind === 'api-error') {
     lines.push('API 请求失败。');
     if (details.status) lines.push(`HTTP 状态：${details.status} ${details.statusText || ''}`.trim());
     if (details.message) lines.push(`错误信息：${details.message}`);

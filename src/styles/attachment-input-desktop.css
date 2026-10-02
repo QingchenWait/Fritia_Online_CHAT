@@ -1,0 +1,4 @@
+.message-attachment-notice { white-space: pre-wrap; overflow-wrap: anywhere; color: #855a16; background: rgba(240, 174, 62, 0.1); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
+.message-bubble.is-attachment-error > .message-content { border: 1px solid rgba(213, 148, 38, 0.45); }
+.message-bubble.is-attachment-error pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow: auto; }
+@media (min-width: 761px) { .message-attachment-notice { font-size: 12px; line-height: 1.55; } }

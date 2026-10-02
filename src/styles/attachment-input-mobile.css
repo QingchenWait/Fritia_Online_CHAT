@@ -1,0 +1,4 @@
+@media (max-width: 760px) {
+  .message-attachment-notice { font-size: 12px; line-height: 1.6; padding: 7px 9px; max-width: 100%; }
+  .message-bubble.is-attachment-error .message-content { overflow-wrap: anywhere; }
+}

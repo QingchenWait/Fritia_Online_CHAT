@@ -10,6 +10,8 @@ import { saveDataUrlAsMedia } from './media_store.js';
 import { getTtsErrorLog, synthesizeMimoVoiceClone } from './tts_engine.js';
 import { isLmStudioSettings } from './lm_studio.js';
 import { getReasoningFields, reasoningProviderKey } from './model_reasoning.js';
+import { filterAttachmentHistory } from './attachment_inputs.js';
+import { AttachmentInputError } from './attachment_state.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -91,6 +93,7 @@ export async function completePrivateMessageReply({
     });
     const reply = typeof result === 'string' ? result : result.text;
     const baseMeta = {
+      ...(result?.attachmentIssues?.length ? { attachmentIssues: result.attachmentIssues } : {}),
       deepseekIntimateMode: typeof result === 'object' && result?.deepseekIntimateMode === true,
       ...(result?.reasoning ? { reasoning: result.reasoning, reasoningProvider: result.reasoningProvider } : {})
     };
@@ -152,6 +155,7 @@ export async function completePrivateMessageReply({
     nextStore = replaceMessage(nextStore, conversation.id, typingId, {
       text: fallback,
       status: 'error',
+      ...(err?.kind === 'attachment-input' ? { meta: { attachmentInputError: true, attachmentApiError: err.body || '', attachmentQuarantine: err.issues } } : {}),
       createdAt: now()
     });
     onStore?.(nextStore);
@@ -164,10 +168,12 @@ export async function requestCharacterReply({ store, conversation, character, us
   if (!settings.apiKey && !isLmStudioSettings(settings)) {
     return localFallbackReply(character, userText, mode);
   }
-  const history = getConversationMessages(store, conversation.id)
+  const history = await filterAttachmentHistory(getConversationMessages(store, conversation.id)
     .filter(item => item.status !== 'typing')
     .filter(shouldKeepMessageForDailyToolContext)
-    .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, settings));
+    .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, settings)));
+  const attachmentIssues = [];
+  const currentUserContent = await buildModelMessageContent({ speakerName: PLAYER_NAME, text: userText, attachments: userMessage?.attachments || [], attachmentIssues });
   const advanced = getAdvancedSettings();
   const intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
   const ragMessage = await buildRagReferenceMessage({
@@ -194,12 +200,15 @@ export async function requestCharacterReply({ store, conversation, character, us
     intimateMessage,
     historyLimit: advanced.historyLimit,
     mode,
-    event
+    event,
+    attachmentIssues,
+    currentUserContent
   });
-  const response = await requestOpenAICompatible(settings, messages, reasoningEffort);
+  const response = await requestOpenAICompatible(settings, messages, reasoningEffort, attachmentIssues);
   return {
     ...response,
     text: sanitizeReply(response.text, character.name),
+    attachmentIssues,
     deepseekIntimateMode: Boolean(intimateMessage)
   };
 }
@@ -219,7 +228,7 @@ function shouldIsolateToolContextFromDailyChat() {
   }
 }
 
-async function buildMessages({ character, history, userText, userMessage, ragMessage, memoryMessage, intimateMessage, historyLimit, mode, event }) {
+async function buildMessages({ character, history, userText, userMessage, ragMessage, memoryMessage, intimateMessage, historyLimit, mode, event, attachmentIssues, currentUserContent }) {
   const system = [
     `你正在一个 QQ / Telegram 风格的角色扮演聊天软件中发言。`,
     `本次你只扮演：${character.name}。不要代替用户或其他角色发言。`,
@@ -243,31 +252,28 @@ async function buildMessages({ character, history, userText, userMessage, ragMes
       content: await buildModelMessageContent({
         speakerName: item.speakerName || (item.role === 'user' ? PLAYER_NAME : character.name),
         text: item.text || '',
+        historical: true, attachmentIssues,
         attachments: item.meta?.voiceReply === true ? [] : (item.attachments || [])
       })
     })));
-  const currentUserContent = await buildModelMessageContent({
-    speakerName: PLAYER_NAME,
-    text: userText,
-    attachments: userMessage?.attachments || []
-  });
   return [
     { role: 'system', content: system },
     ...(ragMessage ? [ragMessage] : []),
     ...(memoryMessage ? [memoryMessage] : []),
     ...(intimateMessage ? [intimateMessage] : []),
-    ...recent,
+    ...recent.filter(message => message.content?.length),
     { role: 'user', content: currentUserContent }
   ];
 }
 
-async function requestOpenAICompatible(settings, messages, reasoningEffort = '') {
+async function requestOpenAICompatible(settings, messages, reasoningEffort = '', attachmentIssues = []) {
   let reasoning = {};
   let reasoningProvider = '';
   const text = await requestLlmCompletion({
     settings,
     messages,
     reasoningEffort,
+    attachmentIssues,
     onCompletion: (message, provider) => {
       reasoning = getReasoningFields(message);
       reasoningProvider = reasoningProviderKey(provider);
@@ -302,6 +308,7 @@ function localFallbackReply(character, userText, mode) {
 
 function friendlyError(err) {
   console.warn('[chat] request failed', err);
+  if (err instanceof AttachmentInputError || err?.kind === 'attachment-input') return err.message;
   return `模型请求失败：${err?.message || '未知错误'}\n请在设置里检查 API Key、Base URL 和模型名称。`;
 }
 

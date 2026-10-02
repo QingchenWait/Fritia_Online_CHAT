@@ -21,3 +21,13 @@ Android 依赖来自 Maven Central 原始 JAR，不修改库源码：
 校验见 `android/SHA256SUMS.txt`。许可证保存于 `android/licenses/`，原 JAR 内的附带 NOTICE 保持原样；发布时应保留这些文件。静态站点构建不会把此目录纳入网页资源，Android 脚本将 JAR 交给 javac/D8。
 
 验证范围：Android Activity 与桥接源码经 Java 编译；Windows 模块以现有 Tauri/base64 元数据进行 Rust 类型检查；JS 有原生回调模拟与隔离浏览器测试。未执行 APK/D8/EXE 生成，也没有真机 WebDAV/系统保存窗口验收。
+
+
+## v1.0.2 构建入口
+
+最新授权输出为 `D:\Models\vibe_coding\fritia_online_next_desktop\chat_v1.0.2`。`prepare_v102_sources.py` 从 v1.0.1 原生壳和当前前端创建独立源码树，更新版本与可见 ModelScope 登录地址；不执行旧 prepare_v101_sources.py。Windows / Android 构建流程、成品测试及实际限制以新目录 BUILD_PROCESS.md 为准。Android 签名口令仅使用临时进程环境变量，不写入源码、日志或发布包。
+
+
+### v1.0.2 附件修复再打包
+
+沿用本目录暂存流程与外部 v1.0.2 原生壳，版本、包名、签名证书不变。PDF.js / fflate、字体及 CMaps 随 src 复制到实际 EXE/APK；JavaScript 发行文件以 .js 扩展名适配已有原生 MIME 映射。专用验证使用 tools/attachment_runtime_cases.mjs 在实际 release WebView 执行；测试驱动和受控模型响应不进入发布资源。以外部 BUILD_PROCESS.md 最新的“附件修复”记录为本批校验结果。

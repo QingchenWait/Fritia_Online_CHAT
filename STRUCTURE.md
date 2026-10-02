@@ -1,5 +1,22 @@
 # STRUCTURE
 
+## v1.0.2 附件输入映射（缓存 v44）
+
+| 文件 / API | 职责 |
+| --- | --- |
+| attachment_documents.js / dataUrlBytes、decodeAttachmentText、extractDocumentText | 按字节与格式读取文本；PDF / Office 本地解析，不执行附件 |
+| attachment_state.js / blockedAttachment、quarantineAttachment、AttachmentInputError、assertModelResponse | 独立隔离数据库、错误类型、HTTP 200/SSE error 校验 |
+| attachment_inputs.js / filterAttachmentHistory、fileAttachmentParts、prepareAttachmentRequest、requestWithAttachments、classifyAttachmentApiError | 原始附件、历史、旧工具快照和各协议共享的转换/隔离边界 |
+| llm_media.js | 附件转为可读文本/支持的媒体块，携带本地来源哈希；未知文件不直接上传 octet-stream |
+| chat_engine.js、tool_chat_engine.js、roundtable.js | 发送前预检、过滤历史、附件专用错误与持久化元数据；失败不采集记忆 |
+| llm_request.js、openai_responses.js | 每次最终请求清理私有字段；保留有效原生 PDF，拒绝项携带完整 API error |
+| ui.js / .message-attachment-notice / .is-attachment-error | 显示本轮跳过说明与附件错误外观；长原始 error 用 details/pre 完整展开 |
+| attachment-input-desktop.css / attachment-input-mobile.css | 独立桌面与手机提示样式；长错误可换行、滚动 |
+| src/vendor/pdfjs / src/vendor/fflate | 固定发行文件、标准字体、CMaps、原许可证、README 与 SHA256SUMS |
+| tools/attachment_*.mjs | 可供浏览器和正式原生 WebView 共用的附件夹具、运行用例及单元回归 |
+
+私有内容块字段 `_fritiaAttachment: {name,keys,current}` 不发给模型。消息元数据 `attachmentInputError` 标识附件错误，`attachmentApiError` 保存完整原始错误，`attachmentQuarantine` / `attachmentIssues` 保存可重建隔离的哈希/原因。独立 IDB 不额外上传；恢复依赖聊天元数据与原文件，不改变存档版本。
+
 ## 2026-10-02 v1.0.1 Cloud Fix Mapping
 
 - `src/js/external_links.js`：`bindExternalLinks()` 委托普通外链至既有 `open_external_url`；由 `ui.js:bindGlobalEvents()` 注册一次。
@@ -971,3 +988,21 @@ fritia_online_next_chat/
   - `#role-migration-failure`：失败恢复悬浮窗口及 ZIP 文件选择器。
 - `#detail-role-migration-action`：角色资料卡“快速操作”中的迁移入口，仅对存在同名内置目标的自定义角色显示。
 - `src/styles/role-migration-desktop.css` / `src/styles/role-migration-mobile.css`：横屏桌面和竖屏移动端独立布局、进度状态与响应式窗口样式。
+
+## v1.0.2 内部 API 与页面映射
+
+| 文件 / 入口 | 作用 |
+| --- | --- |
+| archive_state.js / deleteRecovery(id) | 单事务校验、删除一份快照与一条索引；返回是否删除，拒绝错配和非恢复键 |
+| archive_sync.js / deleteArchiveRecovery(id) | 状态层删除入口；发出 fritia-archive-recoveries-updated 通知刷新列表 |
+| archive_sync_v2.js / report、readLocal、publish | 阶段内文件/记录处理计数；复用现有状态事件，不增加远程请求 |
+| archive_legacy.js / readLegacyArchive({onProgress}) | 可选旧版文件迁移进度回调 |
+| ui.js / confirmRecoveryDeletion、requestPluginInstall | 固定目标的确认浮窗；卡片安装即时查登录并保留待开详情 |
+| archive-progress-detail、archive-config-progress-detail、archive-conflict-progress-detail | 状态同行的小字文件路径与已完成/总数；路径可省略，计数保留 |
+| archive-recovery-delete-dialog、-description、-cancel、-confirm | 独立自绘删除确认，取消/关闭不写入数据 |
+| .archive-recovery-option / .archive-recovery-delete | 下拉项右端的同高垃圾桶操作；与选择按钮互为同级 |
+| archive-sync-desktop.css / archive-sync-mobile.css | 两端各自的进度宽度、恢复下拉和确认浮窗尺寸 |
+| tools/v102_native_checks.mjs | 正式 EXE/APK 隔离运行时的进度、精确删除和真实登录窗口检查；账号接口用受控响应 |
+| tools/v102_browser.mjs | 独立浏览器数据验证删除边界、进度可见性、MCP 登录分支 |
+
+原生配套位于外部 chat_v1.0.2：Windows src-tauri/src/main.rs 的可见 ModelScope source window 打开 /login；Android MainActivity 将 HOME_URL 和 LOGIN_URL 分开，显示登录窗时加载 LOGIN_URL。隐藏请求桥保留原 MCP 首页和 Cookie 会话。打包/验证脚本与输出映射见该目录各端 BUILD_PROCESS.md。

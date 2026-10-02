@@ -9,6 +9,24 @@
 .archive-recovery-tools .btn:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(1); }
 .archive-recovery-tools select { min-width: 0; max-width: 100%; }
 .archive-recovery-tools p, .archive-webdav-note { width: 100%; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.archive-progress-line { display: flex; align-items: baseline; gap: 0.65rem; min-width: 0; }
+.archive-progress-line > span { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.archive-progress-line small { display: flex; justify-content: flex-end; flex: 1 1 45%; min-width: 0; font-size: 0.7rem; white-space: nowrap; }
+.archive-progress-current { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.archive-progress-line small > span:last-child { flex-shrink: 0; }
+.archive-recovery-tools .custom-select { min-width: 0; max-width: 100%; }
+.archive-recovery-option { display: grid; grid-template-columns: minmax(0, 1fr) 30px; align-items: center; }
+.archive-recovery-option .custom-select-option { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; height: 32px; }
+.archive-recovery-option .custom-select-option::after { content: none; }
+.archive-recovery-delete { width: 30px; height: 30px; padding: 7px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.archive-recovery-delete img { display: block; width: 16px; height: 16px; }
+.archive-recovery-delete:hover { background: rgba(220, 50, 60, 0.1); }
+.archive-recovery-delete:disabled { opacity: 0.4; cursor: not-allowed; }
+.archive-recovery-delete-dialog { border: 1px solid var(--line); border-radius: 20px; background: var(--surface, #fff); color: var(--text); box-shadow: var(--shadow-floating); padding: 24px; }
+.archive-recovery-delete-dialog::backdrop { background: rgba(30, 35, 60, 0.35); backdrop-filter: blur(4px); }
+.archive-recovery-delete-dialog p { line-height: 1.6; overflow-wrap: anywhere; color: var(--muted); }
+.archive-recovery-delete-dialog .btn { display: inline-flex; gap: 6px; align-items: center; }
+.archive-recovery-delete-dialog .btn img { width: 18px; height: 18px; }
 .archive-conflict-files { overflow: auto; min-height: 0; }
 .archive-conflict-files article { margin: 12px 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
 .archive-conflict-files strong, .archive-conflict-files small { display: block; overflow-wrap: anywhere; }
@@ -17,6 +35,7 @@
 .archive-conflict-card button.btn img { width: 18px; height: 18px; }
 .archive-conflict-compare pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; max-height: 180px; padding: 8px; background: var(--surface-soft); }
 @media (min-width: 761px) {
+  .archive-recovery-delete-dialog { width: min(480px, 80vw); max-height: 85dvh; }
   .archive-conflict-card { width: min(960px, 90vw); max-height: 88dvh; overflow: auto; }
   .archive-conflict-compare { grid-template-columns: 1fr 1fr; }
 }

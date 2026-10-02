@@ -5,6 +5,8 @@ import { buildRagReferenceMessage } from './knowledge_base.js';
 import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_term_memory.js';
 import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
 import { buildModelMessageContent } from './llm_media.js';
+import { filterAttachmentHistory, requestWithAttachments } from './attachment_inputs.js';
+import { isAttachmentErrorMessage, assertModelResponse } from './attachment_state.js';
 import { saveDataUrlAsMedia } from './media_store.js';
 import {
   callMcpToolByRegistryEntry,
@@ -63,6 +65,7 @@ export async function completeToolPrivateMessageReply({
     onStore?.(nextStore, { source: 'tool', status: patch.status || 'typing', messageId: typingId });
   };
   let agentMessagesForResume = [];
+  const attachmentIssues = [];
   let previousStepCount = Number(resumeState?.stepCount) || 0;
   let stepCount = 0;
   let toolCallCount = Number(resumeState?.toolCallCount) || 0;
@@ -99,7 +102,8 @@ export async function completeToolPrivateMessageReply({
       userText: text,
       userMessage,
       toolSummary,
-      settings
+      settings,
+      attachmentIssues
     });
     const agentMessages = resumeState?.messages?.length
       ? cloneResumeMessages(resumeState.messages)
@@ -144,6 +148,8 @@ export async function completeToolPrivateMessageReply({
         toolChoice: availableTools.length ? 'auto' : 'none',
         completeToolResultReply: completeToolResultReply !== false,
         reasoningEffort,
+        attachmentIssues,
+        historicalAttachments: Boolean(resumeState),
         signal,
         onDelta: delta => {
           stepText += delta;
@@ -297,6 +303,7 @@ export async function completeToolPrivateMessageReply({
       text: reply,
       attachments: finalAttachments.map(prepareToolAttachmentForPersistence),
       meta: {
+        ...(attachmentIssues.length ? { attachmentIssues } : {}),
         reasoning: finalReasoning,
         reasoningProvider: reasoningProviderKey(getDefaultChatProvider(settings)),
         ...(otherAttachments.length ? { toolOtherAttachments: otherAttachments.map(prepareToolAttachmentForPersistence) } : {})
@@ -332,17 +339,24 @@ export async function completeToolPrivateMessageReply({
       appendThought(trace, stoppedByUser ? '用户已停止工具调用。' : (error?.message || '工具对话失败'), 'error'),
       stoppedByUser ? '本轮工具对话已停止，可发送“继续”从中断点续跑。' : '本轮工具对话异常中断，可发送“继续”从中断点续跑。'
     );
-    const fallback = stoppedByUser ? '工具调用已停止。' : `工具调用流程失败：${error?.message || '未知错误'}`;
-    commit({ text: fallback, status: 'error', createdAt: now() });
+    const attachmentFailure = error?.kind === 'attachment-input';
+    if (attachmentFailure) {
+      // This failed input must not become an automatically resumable request.
+      const { resumeState, interrupted, ...clean } = trace;
+      trace = finishTrace(clean, '附件输入已隔离，后续对话可以继续。');
+    }
+    const fallback = stoppedByUser ? '工具调用已停止。' : attachmentFailure ? error.message : `工具调用流程失败：${error?.message || '未知错误'}`;
+    commit({ text: fallback, status: 'error', createdAt: now(), ...(attachmentFailure ? { meta: { attachmentInputError: true, attachmentApiError: error.body || '', attachmentQuarantine: error.issues } } : {}) });
     return fallback;
   }
 }
 
-async function buildToolMessages({ store, conversation, character, userText, userMessage, toolSummary, settings = getSettings() }) {
+async function buildToolMessages({ store, conversation, character, userText, userMessage, toolSummary, settings = getSettings(), attachmentIssues = [] }) {
   const advanced = getAdvancedSettings();
-  const history = getConversationMessages(store, conversation.id)
+  const currentUserContent = await buildModelMessageContent({ speakerName: PLAYER_NAME, text: userText, attachments: userMessage?.attachments || [], attachmentIssues });
+  const history = await filterAttachmentHistory(getConversationMessages(store, conversation.id)
     .filter(item => item.status !== 'typing')
-    .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, settings));
+    .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, settings)));
   const intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
   const ragMessage = await buildRagReferenceMessage({
     mode: 'private',
@@ -381,20 +395,16 @@ async function buildToolMessages({ store, conversation, character, userText, use
       content: await buildModelMessageContent({
         speakerName: item.speakerName || (item.role === 'user' ? PLAYER_NAME : character.name),
         text: item.text || '',
+        historical: true, attachmentIssues,
         attachments: item.meta?.voiceReply === true || item.meta?.toolMode === true ? [] : (item.attachments || [])
       })
     })));
-  const currentUserContent = await buildModelMessageContent({
-    speakerName: PLAYER_NAME,
-    text: userText,
-    attachments: userMessage?.attachments || []
-  });
   return [
     { role: 'system', content: system },
     ...(ragMessage ? [ragMessage] : []),
     ...(memoryMessage ? [memoryMessage] : []),
     ...(intimateMessage ? [intimateMessage] : []),
-    ...recent,
+    ...recent.filter(message => message.content?.length),
     { role: 'user', content: currentUserContent }
   ];
 }
@@ -407,7 +417,9 @@ async function requestToolAwareCompletion({
   completeToolResultReply = true,
   reasoningEffort = '',
   onDelta,
-  signal = null
+  signal = null,
+  attachmentIssues = [],
+  historicalAttachments = false
 }) {
   const provider = getDefaultChatProvider(settings);
   if ((!provider?.apiKey && !isLmStudioProvider(provider)) || !provider?.baseUrl || !provider?.model) {
@@ -415,11 +427,12 @@ async function requestToolAwareCompletion({
   }
   const requestMessages = completeToolResultReply ? withCompleteToolResultPrompt(messages) : messages;
   if (needsOpenAIResponses(provider, reasoningEffort, tools)) {
-    return requestOpenAIResponses({ provider, messages: requestMessages, tools, toolChoice, reasoningEffort, onDelta, signal });
+    return requestOpenAIResponses({ provider, messages: requestMessages, tools, toolChoice, reasoningEffort, onDelta, signal, attachmentIssues, historicalAttachments });
   }
+  return requestWithAttachments(requestMessages, provider, { issues: attachmentIssues, historical: historicalAttachments }, async preparedMessages => {
   const body = applyModelReasoningBody(provider, reasoningEffort, {
     model: provider.model,
-    messages: requestMessages,
+    messages: preparedMessages,
     temperature: settings.temperature,
     stream: true,
     ...(tools.length ? { tools, tool_choice: toolChoice } : {})
@@ -427,7 +440,7 @@ async function requestToolAwareCompletion({
   if (isLmStudioProvider(provider)) {
     return requestLmStudioCompletion({
       provider,
-      messages: requestMessages,
+      messages: preparedMessages,
       body,
       signal,
       onDelta
@@ -446,7 +459,8 @@ async function requestToolAwareCompletion({
   });
   if (!response.ok) {
     const errorBody = await response.text().catch(() => '');
-    throw new Error(`API 请求失败 (${response.status}): ${errorBody || response.statusText}`);
+    const error = new Error(`API 请求失败 (${response.status}): ${errorBody || response.statusText}`);
+    error.status = response.status; error.body = errorBody; throw error;
   }
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json') || !response.body) {
@@ -454,6 +468,7 @@ async function requestToolAwareCompletion({
     return extractJsonCompletion(json);
   }
   return readStreamingCompletion(response, onDelta, signal);
+  });
 }
 
 function withCompleteToolResultPrompt(messages = []) {
@@ -518,6 +533,7 @@ async function readStreamingCompletion(response, onDelta, signal = null) {
       const payload = clean.startsWith('data:') ? clean.slice(5).trim() : clean;
       try {
         const json = JSON.parse(payload);
+        assertModelResponse(json, payload);
         const delta = json?.choices?.[0]?.delta || {};
         mergeReasoningDelta(reasoning, delta);
         if (delta.content) {
@@ -525,7 +541,8 @@ async function readStreamingCompletion(response, onDelta, signal = null) {
           onDelta?.(delta.content);
         }
         if (Array.isArray(delta.tool_calls)) mergeToolCallDeltas(toolCalls, delta.tool_calls);
-      } catch {
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
         content += payload;
         onDelta?.(payload);
       }
@@ -536,6 +553,7 @@ async function readStreamingCompletion(response, onDelta, signal = null) {
 }
 
 function extractJsonCompletion(json) {
+  assertModelResponse(json);
   const message = json?.choices?.[0]?.message || {};
   return {
     ...getReasoningFields(message),
@@ -1216,6 +1234,7 @@ function getResumableToolState(store, conversationId, text, selectedClientIds = 
   if (!RESUME_TEXT_RE.test(String(text || '').trim())) return null;
   const messages = getConversationMessages(store, conversationId);
   for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (isAttachmentErrorMessage(messages[index])) return null;
     const trace = messages[index]?.meta?.toolTrace;
     if (!trace?.interrupted || !trace.resumeState?.messages?.length) continue;
     const state = trace.resumeState;
@@ -1284,6 +1303,7 @@ function compactResumeContent(content) {
   if (Array.isArray(content)) {
     return content.slice(0, 12).map(part => {
       if (!part || typeof part !== 'object') return part;
+      if (part._fritiaAttachment) return part;
       if (part.text) return { ...part, text: String(part.text).slice(0, MAX_RESUME_CONTENT_CHARS) };
       if (part.image_url?.url?.startsWith?.('data:')) return { ...part, image_url: { ...part.image_url, url: '[image omitted for resume]' } };
       return part;

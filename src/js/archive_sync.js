@@ -2,7 +2,7 @@ import { STORAGE_KEYS, loadAppStore, loadJson, saveJson } from './storage.js';
 import { getSettings, getAdvancedSettings } from './settings.js';
 import { isBrowserFrontendRuntime } from './runtime_env.js';
 import { runIncrementalSync } from './archive_sync_v2.js';
-import { archiveState, saveRecovery } from './archive_state.js';
+import { archiveState, saveRecovery, deleteRecovery } from './archive_state.js';
 import { archiveFetch, chooseArchiveDestination } from './archive_io.js';
 import { stableJson, digestText } from './archive_merge.js';
 import { readLegacyArchive } from './archive_legacy.js';
@@ -175,8 +175,10 @@ export async function syncWebDavNow(options = {}, choices) {
   assertWebDavConfig(config);
   return runIncrementalSync({
     config, request: webDavFetch, snapshot: buildArchiveSnapshot,
-    apply: (snapshot, expected) => applyArchiveSnapshot(snapshot, () => {}, { merge: true, expected }),
-    status: (phase, label, progress) => setSyncStatus(phase, label, progress, options),
+    apply: (snapshot, expected) => applyArchiveSnapshot(snapshot, (progress, detail) => {
+      setSyncStatus('working', '正在应用合并数据', 0.85 + progress * 0.14, options, detail);
+    }, { merge: true, expected }),
+    status: (phase, label, progress, detail) => setSyncStatus(phase, label, progress, options, detail),
     conflict: detail => {
       pendingConflict = detail;
       document.dispatchEvent(new CustomEvent('fritia-archive-conflict', { detail }));
@@ -188,7 +190,8 @@ export async function syncWebDavNow(options = {}, choices) {
       const cached = await archiveState(key) || {};
       const result = await readLegacyArchive({
         read: (path, headers) => webDavFetch(config, remoteUrl(config, path), { method: 'GET', headers }),
-        cache: cached.files || {}
+        cache: cached.files || {},
+        onProgress: detail => setSyncStatus('working', '正在读取旧版云端存档', 0.25, options, detail)
       });
       if (!result) return null;
       const sourceHash = await digestText(stableJson(result.snapshot.legacySource));
@@ -213,6 +216,12 @@ export async function resolveArchiveConflict(choices, options = {}) {
 
 export async function listArchiveRecoveries() {
   return await archiveState('recoveries') || [];
+}
+
+export async function deleteArchiveRecovery(id) {
+  const deleted = await deleteRecovery(id);
+  document.dispatchEvent(new CustomEvent('fritia-archive-recoveries-updated'));
+  return deleted;
 }
 
 export async function getArchiveRecoveryAvailability(id) {
@@ -269,8 +278,11 @@ function formatSyncSuccessMessage(ts = Date.now()) {
 async function buildArchiveSnapshot(options = {}) {
   const localStorageData = collectLocalStorageData(options);
   const indexedDb = {};
+  options.onProgress?.({ current: 'localStorage', completed: 1, total: 1 + IDB_SCHEMAS.length });
   for (const schema of IDB_SCHEMAS) {
+    options.onProgress?.({ current: schema.name, completed: 1 + Object.keys(indexedDb).length, total: 1 + IDB_SCHEMAS.length });
     indexedDb[schema.name] = await exportIndexedDb(schema);
+    options.onProgress?.({ current: schema.name, completed: 1 + Object.keys(indexedDb).length, total: 1 + IDB_SCHEMAS.length });
   }
   const manifest = createManifest(localStorageData, indexedDb);
   return {
@@ -352,12 +364,14 @@ async function applyArchiveSnapshot(snapshot, onProgress = () => {}, options = {
   await saveRecovery({ local: previous }, '应用存档前恢复点');
   // IDB data is installed before references in localStorage; sync never clears stores.
   step += 1;
-  onProgress(step / totalSteps);
+  onProgress(step / totalSteps, { current: '合并前恢复副本', completed: step, total: totalSteps + 1 });
   for (const schema of IDB_SCHEMAS) {
+    onProgress(step / totalSteps, { current: schema.name, completed: step, total: totalSteps + 1 });
     await importIndexedDb(schema, snapshot.indexedDb?.[schema.name] || {}, options.merge, previous.indexedDb?.[schema.name]);
     step += 1;
-    onProgress(step / totalSteps);
+    onProgress(step / totalSteps, { current: schema.name, completed: step, total: totalSteps + 1 });
   }
+  onProgress(step / totalSteps, { current: 'localStorage', completed: step, total: totalSteps + 1 });
   try {
     if (options.merge) for (const [key, value] of Object.entries(previous.localStorage)) {
       if ((localStorage.getItem(key) || '') !== value) throw new Error('应用期间本地有新数据，已保留，请再次同步完成合并。');
@@ -372,6 +386,7 @@ async function applyArchiveSnapshot(snapshot, onProgress = () => {}, options = {
     throw error;
   }
   dispatchRestoreEvents();
+  onProgress(1, { current: 'localStorage', completed: totalSteps + 1, total: totalSteps + 1 });
 }
 
 async function importIndexedDb(schema, stores, merge = false, expected = {}) {
@@ -594,8 +609,8 @@ function scheduleArchiveSync() {
   }, Math.max(5, config.intervalMinutes) * 60 * 1000);
 }
 
-function setSyncStatus(phase, label, progress, options = {}) {
-  lastStatus = { phase, label, progress: Math.max(0, Math.min(1, Number(progress) || 0)) };
+function setSyncStatus(phase, label, progress, options = {}, detail = null) {
+  lastStatus = { phase, label, progress: Math.max(0, Math.min(1, Number(progress) || 0)), detail };
   options.onProgress?.(lastStatus);
   document.dispatchEvent(new CustomEvent('fritia-archive-sync-status', { detail: lastStatus }));
 }

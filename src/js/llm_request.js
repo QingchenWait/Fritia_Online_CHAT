@@ -1,10 +1,12 @@
 import { getDefaultChatProvider, getDefaultImageCaptionProvider, getSettings } from './settings.js';
 import { applyModelReasoningBody, mergeReasoningDelta } from './model_reasoning.js';
 import { isLmStudioProvider, requestLmStudioCompletion } from './lm_studio.js';
+import { requestWithAttachments, classifyAttachmentApiError } from './attachment_inputs.js';
+import { assertModelResponse } from './attachment_state.js';
 
 const IMAGE_UNSUPPORTED_RE = /(image|vision|multimodal|image_url|input image|图片|图像).*(unsupported|not supported|不支持|无法|不能)|unsupported.*(image|vision|multimodal|image_url)/i;
 
-export async function requestLlmCompletion({ settings = getSettings(), messages = [], body = {}, reasoningEffort = '', onCompletion } = {}) {
+export async function requestLlmCompletion({ settings = getSettings(), messages = [], body = {}, reasoningEffort = '', onCompletion, attachmentIssues = [] } = {}) {
   const requestMessages = Array.isArray(messages) && messages.length ? messages : (body.messages || []);
   const needsImages = messagesContainImages(requestMessages);
   const defaultProvider = getDefaultChatProvider(settings);
@@ -15,16 +17,16 @@ export async function requestLlmCompletion({ settings = getSettings(), messages 
     : defaultProvider;
   if (isLmStudioProvider(primaryProvider)) {
     try {
-      const result = await requestLmStudioCompletion({
+      const result = await requestWithAttachments(requestMessages, primaryProvider, { issues: attachmentIssues }, messages => requestLmStudioCompletion({
         provider: primaryProvider,
-        messages: requestMessages,
+        messages,
         body: {
           ...body,
           model: primaryProvider.model,
           temperature: body.temperature ?? settings.temperature,
           stream: body.stream ?? false
         }
-      });
+      }));
       onCompletion?.(result, primaryProvider);
       return String(result?.content || '').trim() || JSON.stringify(result);
     } catch (error) {
@@ -40,13 +42,13 @@ export async function requestLlmCompletion({ settings = getSettings(), messages 
   );
 
   try {
-    return await fetchCompletion(primaryProvider, primaryBody, onCompletion);
+    return await fetchCompletion(primaryProvider, primaryBody, onCompletion, attachmentIssues, needsImages && primaryProvider?.id !== imageProvider?.id);
   } catch (error) {
     if (!needsImages || primaryProvider?.id === imageProvider?.id || !isImageUnsupportedError(error)) {
-      throw annotateProviderError(error, primaryProvider, needsImages);
+      throw annotateProviderError(await classifyAttachmentApiError(error, error.attachmentRequest), primaryProvider, needsImages);
     }
     try {
-      return await fetchCompletion(imageProvider, buildProviderBody(imageProvider, settings, body, requestMessages), onCompletion);
+      return await fetchCompletion(imageProvider, buildProviderBody(imageProvider, settings, body, requestMessages), onCompletion, attachmentIssues);
     } catch (fallbackError) {
       fallbackError.message = `默认图像转述模型请求失败：${fallbackError.message || '未知错误'}`;
       fallbackError.cause = error;
@@ -96,7 +98,8 @@ function buildProviderBody(provider, settings, body, messages, reasoningEffort =
   });
 }
 
-async function fetchCompletion(provider, body, onCompletion) {
+async function fetchCompletion(provider, body, onCompletion, attachmentIssues, deferImages = false) {
+  return requestWithAttachments(body.messages, provider, { issues: attachmentIssues, deferImages }, async messages => {
   const headers = {
     'Content-Type': 'application/json',
     Authorization: 'Bearer ' + provider.apiKey
@@ -105,7 +108,7 @@ async function fetchCompletion(provider, body, onCompletion) {
   const response = await fetch(`${normalizeBaseUrl(provider.baseUrl)}/chat/completions`, {
     method: 'POST',
     headers,
-    body: JSON.stringify(body)
+    body: JSON.stringify({ ...body, messages })
   });
   if (!response.ok) {
     const errorBody = await response.text().catch(() => '');
@@ -118,11 +121,13 @@ async function fetchCompletion(provider, body, onCompletion) {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const json = await response.json();
+    assertModelResponse(json);
     onCompletion?.(json?.choices?.[0]?.message || {}, provider);
     return extractCompletionText(json).trim() || JSON.stringify(json);
   }
   if (!response.body) throw new Error('API 没有返回可读取内容');
   return readCompletionStream(response, message => onCompletion?.(message, provider));
+  });
 }
 
 function flattenMessageContent(messages = []) {
@@ -160,9 +165,11 @@ async function readCompletionStream(response, onCompletion) {
       const payload = clean.startsWith('data:') ? clean.slice(5).trim() : clean;
       try {
         const json = JSON.parse(payload);
+        assertModelResponse(json, payload);
         output += extractCompletionText(json);
         mergeReasoningDelta(reasoning, json?.choices?.[0]?.delta || {});
-      } catch {
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
         output += payload;
       }
     }

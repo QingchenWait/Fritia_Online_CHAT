@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import * as reasoning from '../src/js/model_reasoning.js';
 import * as responses from '../src/js/openai_responses.js';
 import { requestLlmCompletion } from '../src/js/llm_request.js';
+import { assertModelResponse } from '../src/js/attachment_state.js';
 
 const provider = { id: 'test', baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash', apiKey: 'test-only' };
 const settings = { ...provider, temperature: 0.8 };
@@ -71,6 +72,9 @@ async function loadToolEngine(fetcher) {
     buildRagReferenceMessage: async () => null, buildLongTermMemoryMessage: async () => null,
     recordLongTermMemoryTurn: () => {}, buildDeepSeekIntimateUserMessage: async () => null,
     shouldKeepMessageForCurrentDeepSeekMode: () => true, buildModelMessageContent: async ({ text }) => text,
+    filterAttachmentHistory: async history => history, isAttachmentErrorMessage: () => false,
+    assertModelResponse,
+    requestWithAttachments: async (messages, provider, options, request) => request(messages, { files: [] }),
     saveDataUrlAsMedia: () => { throw new Error('Unexpected media write'); },
     collectMcpToolDefinitions: async () => ({
       tools: [{ type: 'function', function: { name: 'lookup', parameters: { type: 'object' } } }],
