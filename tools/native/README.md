@@ -31,3 +31,8 @@ Android 依赖来自 Maven Central 原始 JAR，不修改库源码：
 ### v1.0.2 附件修复再打包
 
 沿用本目录暂存流程与外部 v1.0.2 原生壳，版本、包名、签名证书不变。PDF.js / fflate、字体及 CMaps 随 src 复制到实际 EXE/APK；JavaScript 发行文件以 .js 扩展名适配已有原生 MIME 映射。专用验证使用 tools/attachment_runtime_cases.mjs 在实际 release WebView 执行；测试驱动和受控模型响应不进入发布资源。以外部 BUILD_PROCESS.md 最新的“附件修复”记录为本批校验结果。
+
+
+### v1.0.2 图谱触控与恢复数量修复再打包
+
+本批只更新前端画布手势声明、恢复副本事务和数量控件；原生桥、包名、版本及证书不变。源码与产物继续位于授权的 chat_v1.0.2。验收使用真实 Chromium/WebView2 触控输入协议、专用 Android 模拟器和 recovery_limit_cases.mjs；本批报告存于 validation/graph-recovery，构建过程见两端 BUILD_PROCESS.md。

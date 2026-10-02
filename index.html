@@ -800,6 +800,8 @@
       <select id="archive-recovery-list" aria-label="选择恢复副本"></select>
       <button id="archive-recovery-local" class="btn" type="button" data-archive-action disabled><img src="src/_logo/icons/download.svg" alt="">导出当时本地副本</button>
       <button id="archive-recovery-remote" class="btn" type="button" data-archive-action disabled><img src="src/_logo/icons/download.svg" alt="">导出当时云端副本</button>
+      <label class="archive-recovery-limit"><span>最大恢复副本数量</span><select id="archive-recovery-limit" aria-label="最大恢复副本数量" data-archive-action><option value="5">5</option><option value="10">10</option><option value="20" selected>20</option><option value="40">40</option></select></label>
+      <p>新增时按上限清理最旧副本；需要长期保留的副本请先导出 ZIP。仅清理本机恢复副本，当前聊天与云端存档不受影响。</p>
       <p>坚果云 WebDAV 难以实时多端同步，请主要作为备份使用。合并前的恢复副本会保留在本机，可导出 ZIP。</p>
     </section>
         </section>

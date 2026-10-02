@@ -26,6 +26,7 @@ import { CHAT_PROVIDER_PRESETS, getProviderPresetForUrl, buildMimoTtsSyncPatch, 
 import { readClipboardText } from './archive_io.js';
 import { showSettingsNotice } from './settings_notice.js';
 import { listArchiveRecoveries, getArchiveRecoveryAvailability, exportArchiveRecovery, deleteArchiveRecovery } from './archive_sync.js';
+import { getRecoveryLimit, setRecoveryLimit } from './archive_state.js';
 import { bindExternalLinks } from './external_links.js';
 
 let chatProviderPresets = null;
@@ -2145,6 +2146,14 @@ function bindArchivePanel() {
   document.getElementById('archive-conflict-later')?.addEventListener('click', () => { state.archiveConflict = null; renderArchiveConflict(); });
   document.getElementById('archive-recovery-refresh')?.addEventListener('click', () => runArchiveAction(refreshArchiveRecoveries));
   document.getElementById('archive-recovery-list')?.addEventListener('change', updateArchiveRecoveryButtons);
+  document.getElementById('archive-recovery-limit')?.addEventListener('change', event => {
+    if (archiveActionsBusy) return;
+    const value = event.target.value;
+    runArchiveAction(async () => {
+      try { await setRecoveryLimit(value); }
+      finally { await refreshArchiveRecoveries(); }
+    });
+  });
   document.addEventListener('fritia-archive-recoveries-updated', () => refreshArchiveRecoveries().catch(console.warn));
   const deleteDialog = document.getElementById('archive-recovery-delete-dialog');
   document.getElementById('archive-recovery-delete-cancel')?.addEventListener('click', () => deleteDialog.close());
@@ -2167,6 +2176,7 @@ function bindArchivePanel() {
 
 let archiveActionsBusy = false;
 let recoveryButtonsRequest = 0;
+let archiveRecoveriesRequest = 0;
 let recoveryToDelete = null;
 
 function confirmRecoveryDeletion(id, description) {
@@ -2178,7 +2188,11 @@ function confirmRecoveryDeletion(id, description) {
 }
 
 async function refreshArchiveRecoveries() {
-  const list = await listArchiveRecoveries();
+  const request = ++archiveRecoveriesRequest;
+  const [list, limit] = await Promise.all([listArchiveRecoveries(), getRecoveryLimit()]);
+  if (request !== archiveRecoveriesRequest) return;
+  const limitSelect = document.getElementById('archive-recovery-limit');
+  if (limitSelect) { limitSelect.value = String(limit); updateCustomSelect(limitSelect); }
   const select = document.getElementById('archive-recovery-list');
   if (!select) return;
   const selected = select.value;
@@ -2328,6 +2342,10 @@ function setArchiveButtonsDisabled(disabled) {
   document.querySelectorAll('[data-archive-action]').forEach(button => {
     button.disabled = disabled;
   });
+  const custom = document.getElementById('archive-recovery-limit')?.nextElementSibling;
+  const trigger = custom?.querySelector('.custom-select-trigger');
+  if (trigger) trigger.disabled = disabled;
+  if (disabled && custom) { custom.classList.remove('is-open'); trigger?.setAttribute('aria-expanded', 'false'); }
   updateArchiveRecoveryButtons();
 }
 
@@ -6175,6 +6193,7 @@ function updateCustomSelect(select) {
     item.textContent = option.textContent;
     item.addEventListener('click', event => {
       event.stopPropagation();
+      if (select.id === 'archive-recovery-limit' && select.disabled) return;
       select.value = option.value;
       select.dispatchEvent(new Event('change', { bubbles: true }));
       closeCustomSelects();

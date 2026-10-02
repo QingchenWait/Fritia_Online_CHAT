@@ -1,5 +1,14 @@
 # DEVELOP
 
+## 2026-10-03 v1.0.2 图谱触控 / 恢复副本上限
+
+- 知识图谱已有 Pointer Events 和 pointer capture，但画布未声明 touch-action，浏览器会接管手指平移并触发 pointercancel。仅为 #memory-graph-canvas 增加 touch-action:none，复用现有平移、节点和双指处理，不改全局页面手势及鼠标代码。原生 Android 和移动网页使用相同局部声明。依据 [W3C Pointer Events](https://www.w3.org/TR/pointerevents3/#the-touch-action-css-property)：取消 pointerdown 默认行为不能代替 touch-action 的手势声明。衍生源 long_term_memory.js 使用相同事件实现，没有另造手势层。
+- 恢复上限在独立 IDB state 的 recovery-limit 键保存，合法值仅 5/10/20/40，缺省 20；不随云端同步或 ZIP 覆盖。修改设置只保存偏好，下次 saveRecovery 执行上限。菜单紧接云端导出按钮，通过 flex-wrap 在不足宽度时换行，桌面/手机规则分别维护。
+- 新增副本、候选校验、超限旧副本删除和索引更新在同一 readwrite 事务完成；副本时间/id 在事务中取得，避免并发排队导致新副本被当成最旧。按 at 排序；同毫秒使用原索引插入先后，新副本优先保留。每次只读取一个旧快照，减少大存档内存峰值；写入失败时已排队删除也全部回滚。
+- 全部索引先检查合法 recovery 键、唯一性及安全整数时间；候选 payload 的 id/at/snapshots 必须匹配。异常设置、异常索引、缺失/错配候选均停止事务；不跳过异常候选去删较新的副本。时间倒退导致新副本进入待淘汰范围时同样停止，避免丢掉操作前的安全副本。没有 clear、媒体级联删除、文件系统删除、云端 DELETE 或基线清理。
+- 成功保存后通知列表刷新；刷新有请求序号防止旧异步结果覆盖新列表。控件复用自绘 select，操作期间禁用数量选择。版本保持 1.0.2，离线缓存 v45。
+- 验证：真实 Chromium 输入协议复现旧 pointercancel，并在 1440 / 700 / 390 宽度验证完整连续触控、鼠标、双指与菜单布局/持久化；51 项 IndexedDB 检查涵盖四档、乱序时间、同毫秒、并发、两类事务失败、损坏配置/索引和时钟倒退，逐键比较其他状态与 localStorage。原生成品环境、结果和哈希见 chat_v1.0.2 的最新 BUILD_PROCESS.md 和 validation/graph-recovery 报告；没有实体触控屏或 Android 手机验收。
+
 ## 2026-10-02 v1.0.2 附件输入与上下文隔离修复
 
 - 根因：llm_media 只识别少量文本扩展名，其余统一生成嵌套 `file.file_data`；DeepSeek 文件内容块的字段在顶层，MiMO 不接受这类通用文件项，OpenAI 也不会把 octet-stream 当成任意可理解文件。每次重建历史和工具 resume 都再次发送该项，形成连续失败。部分兼容接口以 HTTP 200 返回 error，旧逻辑还会把 JSON 当作正常回复。

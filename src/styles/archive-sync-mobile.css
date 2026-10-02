@@ -8,5 +8,7 @@
   .archive-conflict-compare { grid-template-columns: 1fr; gap: 4px; }
   .archive-recovery-tools { margin: 12px; }
   .archive-recovery-tools select { width: 100%; }
+  .archive-recovery-limit { max-width: 100%; gap: 6px; font-size: 13px; }
+  .archive-recovery-tools .archive-recovery-limit .custom-select { width: 4.5rem; min-width: 4.5rem; }
   .model-settings-notice { bottom: calc(2rem + env(safe-area-inset-bottom)); font-size: 13px; }
 }

@@ -1,5 +1,14 @@
 # STRUCTURE
 
+## v1.0.2 图谱触控与副本上限（缓存 v45）
+
+- app.css / #memory-graph-canvas：touch-action:none 仅把画布直接触控交给既有 long_term_memory.js Pointer Events，不增加新的全局监听。
+- archive_state.js：RECOVERY_LIMITS、getRecoveryLimit()、setRecoveryLimit(value) 管理本机 recovery-limit；saveRecovery() 在一个事务中保存新副本并严格淘汰超限最旧项，逐份读取校验，任何失败全量回滚。notifyRecoveriesChanged() 在提交后通知。
+- index.html / #archive-recovery-limit / .archive-recovery-limit：云端导出后的数量自绘下拉菜单，5/10/20/40，默认 20；不足宽度向下换行。
+- ui.js：数量修改复用存档错误处理；refreshArchiveRecoveries 同时读取列表/上限并用序号避免过期刷新；繁忙时禁用此自绘菜单。
+- archive-sync-desktop.css / archive-sync-mobile.css：标签、紧凑选择框和两端换行尺寸。
+- tools/recovery_limit_cases.mjs：可供浏览器和正式原生客户端复用的 51 项真实 IDB 安全检查；tools/graph_recovery_browser.mjs：触控协议、鼠标、双指、三宽度菜单布局与偏好持久化。npm run test:graph-recovery 启动时需可用的静态服务器与 Playwright。
+
 ## v1.0.2 附件输入映射（缓存 v44）
 
 | 文件 / API | 职责 |

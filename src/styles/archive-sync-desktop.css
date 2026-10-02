@@ -8,6 +8,8 @@
 .archive-recovery-tools .btn img { width: 18px; height: 18px; flex: 0 0 18px; }
 .archive-recovery-tools .btn:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(1); }
 .archive-recovery-tools select { min-width: 0; max-width: 100%; }
+.archive-recovery-limit { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.archive-recovery-tools .archive-recovery-limit .custom-select { width: 5rem; min-width: 5rem; }
 .archive-recovery-tools p, .archive-webdav-note { width: 100%; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .archive-progress-line { display: flex; align-items: baseline; gap: 0.65rem; min-width: 0; }
 .archive-progress-line > span { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
