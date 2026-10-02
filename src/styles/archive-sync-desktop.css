@@ -1,0 +1,22 @@
+.model-settings-notice {
+  position: fixed; z-index: 11000; left: 50%; bottom: 6vh; transform: translateX(-50%);
+  max-width: calc(100vw - 2rem); padding: 10px 18px; border-radius: 14px;
+  background: #303653; color: white; box-shadow: var(--shadow-floating); pointer-events: none;
+}
+.archive-recovery-tools { margin: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.archive-recovery-tools .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
+.archive-recovery-tools .btn img { width: 18px; height: 18px; flex: 0 0 18px; }
+.archive-recovery-tools .btn:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(1); }
+.archive-recovery-tools select { min-width: 0; max-width: 100%; }
+.archive-recovery-tools p, .archive-webdav-note { width: 100%; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.archive-conflict-files { overflow: auto; min-height: 0; }
+.archive-conflict-files article { margin: 12px 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.archive-conflict-files strong, .archive-conflict-files small { display: block; overflow-wrap: anywhere; }
+.archive-conflict-compare { display: grid; gap: 12px; }
+.archive-conflict-card button.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px; }
+.archive-conflict-card button.btn img { width: 18px; height: 18px; }
+.archive-conflict-compare pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; max-height: 180px; padding: 8px; background: var(--surface-soft); }
+@media (min-width: 761px) {
+  .archive-conflict-card { width: min(960px, 90vw); max-height: 88dvh; overflow: auto; }
+  .archive-conflict-compare { grid-template-columns: 1fr 1fr; }
+}

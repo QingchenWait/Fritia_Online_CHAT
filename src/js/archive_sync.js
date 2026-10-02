@@ -1,6 +1,11 @@
 import { STORAGE_KEYS, loadAppStore, loadJson, saveJson } from './storage.js';
 import { getSettings, getAdvancedSettings } from './settings.js';
 import { isBrowserFrontendRuntime } from './runtime_env.js';
+import { runIncrementalSync } from './archive_sync_v2.js';
+import { archiveState, saveRecovery } from './archive_state.js';
+import { archiveFetch, chooseArchiveDestination } from './archive_io.js';
+import { stableJson, digestText } from './archive_merge.js';
+import { readLegacyArchive } from './archive_legacy.js';
 
 const ARCHIVE_CONFIG_KEY = 'fritia_archive_sync';
 const ARCHIVE_SCHEMA_VERSION = 1;
@@ -90,13 +95,15 @@ export async function getArchiveStats() {
 }
 
 export async function exportArchiveZip(options = {}) {
+  const filename = `fritia-chat-archive-${formatFilenameDate(Date.now())}.zip`;
+  const write = await chooseArchiveDestination(filename);
+  if (!write) { setSyncStatus('idle', '已取消导出', 0, options); return { cancelled: true }; }
   setSyncStatus('working', '正在收集本地数据', 0.08, options);
   const snapshot = await buildArchiveSnapshot({ includeArchiveConfig: true });
   const files = snapshotToFiles(snapshot);
   setSyncStatus('working', '正在生成 ZIP 备份', 0.72, options);
   const blob = createZipBlob(files);
-  const filename = `fritia-chat-archive-${formatFilenameDate(Date.now())}.zip`;
-  downloadBlob(filename, blob);
+  const result = await write(blob);
   const config = getWebDavConfig();
   saveWebDavConfig({
     ...config,
@@ -109,7 +116,7 @@ export async function exportArchiveZip(options = {}) {
     ].slice(0, 10),
     lastStatus: '已创建本地备份'
   });
-  setSyncStatus('idle', 'ZIP 备份已导出', 1, options);
+  setSyncStatus('idle', result?.browserDownload ? '已交给浏览器下载；此环境不支持指定路径，可在浏览器设置中开启下载前询问位置' : 'ZIP 备份已保存到所选位置', 1, options);
   return { filename, size: blob.size };
 }
 
@@ -136,12 +143,12 @@ export async function testWebDavConnection(options = {}) {
   assertWebDavConfig(config);
   await ensureWebDavCorsSupport(config, options);
   setSyncStatus('working', '正在测试 WebDAV 连接', 0.2, options);
-  await ensureRemoteDirectory(config);
-  const response = await webDavFetch(config, remoteUrl(config, 'manifest.json'), {
+  await ensureRemoteDirectory(config, 'fritia-sync-v2');
+  const response = await webDavFetch(config, buildUrl(config.url, `${normalizePath(config.path)}/fritia-sync-v2/`), {
     method: 'PROPFIND',
     headers: { Depth: '0' }
   });
-  if (!response.ok && response.status !== 404 && response.status !== 207 && response.status !== 405) {
+  if (!response.ok && response.status !== 207) {
     throw new Error(`WebDAV 连接失败：${response.status} ${response.statusText}`);
   }
   saveWebDavConfig({ ...config, lastStatus: '连接测试成功' });
@@ -163,50 +170,75 @@ export async function ensureWebDavCorsSupport(config = getWebDavConfig(), option
   }
 }
 
-export async function syncWebDavNow(options = {}) {
+export async function syncWebDavNow(options = {}, choices) {
   const config = getWebDavConfig();
   assertWebDavConfig(config);
-  setSyncStatus('working', '正在准备同步数据', 0.05, options);
-  await ensureRemoteDirectory(config);
-  const localSnapshot = await buildArchiveSnapshot();
-  const localManifestHash = localSnapshot.manifest.hash;
-  const remoteManifest = await fetchRemoteManifest(config);
-  const remoteManifestHash = remoteManifest?.hash || '';
-  const localChanged = Boolean(config.lastLocalManifestHash && config.lastLocalManifestHash !== localManifestHash);
-  const remoteChanged = Boolean(config.lastRemoteManifestHash && remoteManifestHash && config.lastRemoteManifestHash !== remoteManifestHash);
-
-  if (remoteManifest && (localChanged && remoteChanged || (!config.lastSyncAt && remoteManifestHash && localManifestHash !== remoteManifestHash))) {
-    pendingConflict = {
-      config,
-      localSnapshot,
-      remoteManifest,
-      local: summarizeManifest(localSnapshot.manifest),
-      remote: summarizeManifest(remoteManifest)
-    };
-    dispatchArchiveConflict(pendingConflict);
-    setSyncStatus('conflict', '检测到云端与本地存档冲突', 1, options);
-    return { conflict: true };
-  }
-
-  if (remoteManifest && remoteChanged && !localChanged) {
-    await applyRemoteSnapshot(config, remoteManifest, options);
-    return { direction: 'remote-to-local' };
-  }
-
-  await uploadSnapshot(config, localSnapshot, remoteManifest, options);
-  return { direction: 'local-to-remote' };
+  return runIncrementalSync({
+    config, request: webDavFetch, snapshot: buildArchiveSnapshot,
+    apply: (snapshot, expected) => applyArchiveSnapshot(snapshot, () => {}, { merge: true, expected }),
+    status: (phase, label, progress) => setSyncStatus(phase, label, progress, options),
+    conflict: detail => {
+      pendingConflict = detail;
+      document.dispatchEvent(new CustomEvent('fritia-archive-conflict', { detail }));
+    },
+    ensureDirectory: (config, prefix) => ensureRemoteDirectory(config, prefix),
+    readLegacy: async config => {
+      const target = await digestText(JSON.stringify([config.url, config.path, config.username]));
+      const key = `legacy/${target}`;
+      const cached = await archiveState(key) || {};
+      const result = await readLegacyArchive({
+        read: (path, headers) => webDavFetch(config, remoteUrl(config, path), { method: 'GET', headers }),
+        cache: cached.files || {}
+      });
+      if (!result) return null;
+      const sourceHash = await digestText(stableJson(result.snapshot.legacySource));
+      if (cached.sourceHash !== sourceHash) {
+        await saveRecovery({ remote: result.snapshot }, result.mismatches.length ? '旧版云端迁移：清单与文件不一致，已保留原始文件' : '旧版云端迁移原始副本');
+      }
+      await archiveState(key, { sourceHash, files: result.cache });
+      return result.snapshot;
+    },
+    complete: () => {
+      const time = Date.now();
+      saveWebDavConfig({ ...getWebDavConfig(), lastSyncAt: time, lastStatus: formatSyncSuccessMessage(time) });
+      setSyncStatus('idle', formatSyncSuccessMessage(time), 1, options);
+    }
+  }, choices);
 }
 
-export async function resolveArchiveConflict(choice, options = {}) {
+export async function resolveArchiveConflict(choices, options = {}) {
   if (!pendingConflict) return null;
-  const conflict = pendingConflict;
-  pendingConflict = null;
-  if (choice === 'remote') {
-    await applyRemoteSnapshot(conflict.config, conflict.remoteManifest, options);
-    return { direction: 'remote-to-local' };
-  }
-  await uploadSnapshot(conflict.config, conflict.localSnapshot, conflict.remoteManifest, options);
-  return { direction: 'local-to-remote' };
+  return syncWebDavNow(options, choices);
+}
+
+export async function listArchiveRecoveries() {
+  return await archiveState('recoveries') || [];
+}
+
+export async function getArchiveRecoveryAvailability(id) {
+  if (!id) return { local: false, remote: false };
+  const entry = await archiveState(id);
+  return { local: hasRecoveryData(entry?.snapshots?.local), remote: hasRecoveryData(entry?.snapshots?.remote) };
+}
+
+function hasRecoveryData(snapshot) {
+  return Boolean(snapshot && (Object.keys(snapshot.localStorage || {}).length
+    || Object.values(snapshot.indexedDb || {}).some(stores => Object.values(stores).some(rows => Array.isArray(rows) && rows.length))));
+}
+
+export async function exportArchiveRecovery(id, side = 'local') {
+  if (!id || !['local', 'remote'].includes(side)) return { unavailable: true };
+  const entry = await archiveState(id);
+  const snapshot = entry?.snapshots?.[side];
+  if (!hasRecoveryData(snapshot)) return { unavailable: true };
+  const filename = `fritia-recovery-${id}-${side}.zip`;
+  const write = await chooseArchiveDestination(filename);
+  if (!write) { setSyncStatus('idle', '已取消导出恢复副本', 0); return { cancelled: true }; }
+  snapshot.manifest = createManifest(snapshot.localStorage || {}, snapshot.indexedDb || {});
+  const blob = createZipBlob(snapshotToFiles(snapshot));
+  const result = await write(blob);
+  setSyncStatus('idle', result?.browserDownload ? '恢复副本已交给浏览器下载' : '恢复副本已保存到所选位置', 1);
+  return { filename, size: blob.size };
 }
 
 export function formatArchiveSize(size) {
@@ -310,45 +342,61 @@ function getAllFromStore(db, storeName) {
   });
 }
 
-async function applyArchiveSnapshot(snapshot, onProgress = () => {}) {
+async function applyArchiveSnapshot(snapshot, onProgress = () => {}, options = {}) {
   if (!snapshot || typeof snapshot !== 'object') throw new Error('存档格式无效。');
   const localStorageData = snapshot.localStorage || {};
   let step = 0;
   const totalSteps = 1 + IDB_SCHEMAS.length;
-  clearArchivedLocalStorageKeys();
-  for (const [key, value] of Object.entries(localStorageData)) {
-    if (key === ARCHIVE_CONFIG_KEY) continue;
-    localStorage.setItem(key, String(value ?? ''));
-  }
+  const previous = await buildArchiveSnapshot();
+  if (options.expected && (stableJson(previous.localStorage) !== stableJson(options.expected.localStorage) || stableJson(previous.indexedDb) !== stableJson(options.expected.indexedDb))) throw new Error('合并前本地有新数据，已保留，请再次同步。');
+  await saveRecovery({ local: previous }, '应用存档前恢复点');
+  // IDB data is installed before references in localStorage; sync never clears stores.
   step += 1;
   onProgress(step / totalSteps);
   for (const schema of IDB_SCHEMAS) {
-    await importIndexedDb(schema, snapshot.indexedDb?.[schema.name] || {});
+    await importIndexedDb(schema, snapshot.indexedDb?.[schema.name] || {}, options.merge, previous.indexedDb?.[schema.name]);
     step += 1;
     onProgress(step / totalSteps);
+  }
+  try {
+    if (options.merge) for (const [key, value] of Object.entries(previous.localStorage)) {
+      if ((localStorage.getItem(key) || '') !== value) throw new Error('应用期间本地有新数据，已保留，请再次同步完成合并。');
+    }
+    if (!options.merge) clearArchivedLocalStorageKeys();
+    for (const [key, value] of Object.entries(localStorageData)) {
+      if (key !== ARCHIVE_CONFIG_KEY) localStorage.setItem(key, String(value ?? ''));
+    }
+  } catch (error) {
+    // Never overwrite a newly arrived message with a pre-merge snapshot.
+    if (!String(error.message).includes('应用期间')) for (const [key, value] of Object.entries(previous.localStorage)) localStorage.setItem(key, value);
+    throw error;
   }
   dispatchRestoreEvents();
 }
 
-async function importIndexedDb(schema, stores) {
+async function importIndexedDb(schema, stores, merge = false, expected = {}) {
   const db = await openArchiveDb(schema);
   const storeNames = schema.stores.map(store => store.name);
   await new Promise((resolve, reject) => {
     const tx = db.transaction(storeNames, 'readwrite');
-    for (const storeName of storeNames) tx.objectStore(storeName).clear();
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error || new Error(`清空 ${schema.name} 失败。`));
-  });
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(storeNames, 'readwrite');
     for (const storeName of storeNames) {
       const store = tx.objectStore(storeName);
+      if (!merge) store.clear();
       for (const record of Array.isArray(stores[storeName]) ? stores[storeName] : []) {
-        store.put(record);
+        if (!merge) store.put(record);
+        else {
+          const key = record.id ?? record.kbId;
+          const original = (expected[storeName] || []).find(item => (item.id ?? item.kbId) === key);
+          const read = store.get(key);
+          read.onsuccess = () => {
+            if (stableJson(read.result) !== stableJson(original)) { tx.abort(); return; }
+            store.put(record);
+          };
+        }
       }
     }
     tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error || new Error(`恢复 ${schema.name} 失败。`));
+    tx.onerror = tx.onabort = () => reject(tx.error || new Error(`恢复 ${schema.name} 中止，本地数据可能已变化，请重试同步。`));
   });
   db.close();
 }
@@ -417,11 +465,22 @@ function snapshotToFiles(snapshot) {
     }
   }
   files.push({ path: 'manifest.json', content: JSON.stringify(snapshot.manifest, null, 2) });
+  if (snapshot.legacySource) {
+    files.push({ path: 'legacy-source/manifest.json', content: snapshot.legacySource.manifest });
+    for (const [path, content] of Object.entries(snapshot.legacySource.files)) files.push({ path: `legacy-source/${path}`, content });
+  }
   return files;
 }
 
 function filesToSnapshot(fileMap) {
   const manifest = readJsonFile(fileMap, 'manifest.json') || {};
+  if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('存档清单格式不支持，未修改本地数据。');
+  for (const entry of manifest.entries) {
+    const text = fileMap[entry.path];
+    if (text === undefined) throw new Error(`存档缺少文件：${entry.path}`);
+    const parsed = JSON.parse(text);
+    if (hashString(JSON.stringify(parsed)) !== entry.hash) throw new Error(`存档校验失败：${entry.path}`);
+  }
   const localStorageData = {};
   const indexedDb = {};
   for (const [path, content] of Object.entries(fileMap)) {
@@ -446,107 +505,12 @@ function filesToSnapshot(fileMap) {
   };
 }
 
-async function uploadSnapshot(config, snapshot, remoteManifest, options) {
-  const files = snapshotToFiles(snapshot);
-  const remoteHashes = new Map((remoteManifest?.entries || []).map(item => [item.path, item.hash]));
-  let completed = 0;
-  for (const file of files) {
-    const content = typeof file.content === 'string' ? file.content : JSON.stringify(file.content);
-    if (file.path !== 'manifest.json' && remoteHashes.get(file.path) === hashString(content)) {
-      completed += 1;
-      continue;
-    }
-    setSyncStatus('working', `正在上传 ${file.path}`, Math.min(0.92, completed / Math.max(files.length, 1)), options);
-    await putRemoteText(config, file.path, content);
-    completed += 1;
-  }
-  await putRemoteText(config, 'manifest.json', JSON.stringify(snapshot.manifest, null, 2));
-  const now = Date.now();
-  saveWebDavConfig({
-    ...config,
-    lastSyncAt: now,
-    lastStatus: formatSyncSuccessMessage(now),
-    lastLocalManifestHash: snapshot.manifest.hash,
-    lastRemoteManifestHash: snapshot.manifest.hash,
-    lastRemoteUpdatedAt: snapshot.manifest.updatedAt,
-    lastRemoteSize: snapshot.manifest.totalSize
-  });
-  setSyncStatus('idle', formatSyncSuccessMessage(now), 1, options);
-}
-
-async function applyRemoteSnapshot(config, remoteManifest, options) {
-  setSyncStatus('working', '正在下载云端存档', 0.08, options);
-  const fileMap = {};
-  const entries = remoteManifest.entries || [];
-  let completed = 0;
-  for (const entry of entries) {
-    fileMap[entry.path] = await getRemoteText(config, entry.path);
-    completed += 1;
-    setSyncStatus('working', `正在下载 ${entry.path}`, 0.08 + completed / Math.max(entries.length, 1) * 0.48, options);
-  }
-  fileMap['manifest.json'] = JSON.stringify(remoteManifest);
-  const snapshot = filesToSnapshot(fileMap);
-  await applyArchiveSnapshot(snapshot, progress => {
-    setSyncStatus('working', '正在应用云端数据', 0.58 + progress * 0.34, options);
-  });
-  const now = Date.now();
-  saveWebDavConfig({
-    ...config,
-    lastSyncAt: now,
-    lastStatus: formatSyncSuccessMessage(now),
-    lastLocalManifestHash: remoteManifest.hash,
-    lastRemoteManifestHash: remoteManifest.hash,
-    lastRemoteUpdatedAt: remoteManifest.updatedAt,
-    lastRemoteSize: remoteManifest.totalSize
-  });
-  setSyncStatus('idle', formatSyncSuccessMessage(now), 1, options);
-}
-
-async function fetchRemoteManifest(config) {
-  const response = await webDavFetch(config, remoteUrl(config, 'manifest.json'), { method: 'GET' });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`读取云端同步清单失败：${response.status} ${response.statusText}`);
-  return response.json();
-}
-
-async function putRemoteText(config, path, content) {
-  await ensureRemotePathDirectories(config, path);
-  const response = await webDavFetch(config, remoteUrl(config, path), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-    body: content
-  });
-  if (!response.ok && response.status !== 201 && response.status !== 204) {
-    throw new Error(`上传 ${path} 失败：${response.status} ${response.statusText}`);
-  }
-}
-
-async function ensureRemotePathDirectories(config, filePath) {
-  const parts = String(filePath || '').split('/').filter(Boolean);
-  parts.pop();
-  if (!parts.length) return;
-  let current = `${normalizePath(config.path)}/${SYNC_FILE_PREFIX}`.replace(/\/+/g, '/');
-  for (const part of parts) {
-    current = `${current}/${part}`;
-    const response = await webDavFetch(config, buildUrl(config.url, current), { method: 'MKCOL' });
-    if (![200, 201, 204, 405].includes(response.status)) {
-      throw new Error(`创建 WebDAV 子目录失败：${response.status} ${response.statusText}`);
-    }
-  }
-}
-
-async function getRemoteText(config, path) {
-  const response = await webDavFetch(config, remoteUrl(config, path), { method: 'GET' });
-  if (!response.ok) throw new Error(`下载 ${path} 失败：${response.status} ${response.statusText}`);
-  return response.text();
-}
-
-async function ensureRemoteDirectory(config) {
-  const parts = `${normalizePath(config.path)}/${SYNC_FILE_PREFIX}`.split('/').filter(Boolean);
+async function ensureRemoteDirectory(config, prefix = SYNC_FILE_PREFIX) {
+  const parts = `${normalizePath(config.path)}/${prefix}`.split('/').filter(Boolean);
   let current = '';
   for (const part of parts) {
     current += `/${part}`;
-    const response = await webDavFetch(config, buildUrl(config.url, current), { method: 'MKCOL' });
+    const response = await webDavFetch(config, buildUrl(config.url, current) + '/', { method: 'MKCOL', body: '' });
     if (![200, 201, 204, 405].includes(response.status)) {
       throw new Error(`创建 WebDAV 路径失败：${response.status} ${response.statusText}`);
     }
@@ -564,26 +528,14 @@ function clearArchivedLocalStorageKeys() {
 }
 
 function webDavFetch(config, url, options = {}) {
-  return fetch(url, {
+  return archiveFetch(url, {
+    cache: 'no-store',
     ...options,
     headers: {
       ...(options.headers || {}),
       Authorization: `Basic ${basicAuthToken(config.username, config.password)}`
     }
-  }).catch(error => {
-    if (isNullBodyResponseError(error) && allowsSyntheticNoContent(options.method)) {
-      return new Response(null, { status: 204, statusText: 'No Content' });
-    }
-    throw error;
   });
-}
-
-function isNullBodyResponseError(error) {
-  return String(error?.message || error || '').includes("Response with null body status cannot have body");
-}
-
-function allowsSyntheticNoContent(method = 'GET') {
-  return ['OPTIONS', 'PUT', 'MKCOL', 'DELETE'].includes(String(method || 'GET').toUpperCase());
 }
 
 function remoteUrl(config, filePath) {
@@ -650,23 +602,6 @@ function setSyncStatus(phase, label, progress, options = {}) {
 
 function dispatchArchiveUpdate() {
   document.dispatchEvent(new CustomEvent('fritia-archive-sync-updated', { detail: getWebDavConfig() }));
-}
-
-function dispatchArchiveConflict(conflict) {
-  document.dispatchEvent(new CustomEvent('fritia-archive-conflict', {
-    detail: {
-      local: conflict.local,
-      remote: conflict.remote
-    }
-  }));
-}
-
-function summarizeManifest(manifest) {
-  return {
-    updatedAt: manifest.updatedAt || manifest.exportedAt || 0,
-    size: manifest.totalSize || 0,
-    hash: manifest.hash || ''
-  };
 }
 
 function updatedAtFromLocalStorageValue(value) {
@@ -737,15 +672,6 @@ function formatFilenameDate(ts) {
     String(date.getHours()).padStart(2, '0'),
     String(date.getMinutes()).padStart(2, '0')
   ].join('');
-}
-
-function downloadBlob(filename, blob) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function createZipBlob(files) {
@@ -828,6 +754,8 @@ function parseZipFiles(buffer) {
     const nameStart = offset + 30;
     const dataStart = nameStart + fileNameLength + extraLength;
     const path = decoder.decode(bytes.slice(nameStart, nameStart + fileNameLength));
+    if (dataStart + compressedSize > bytes.length || path.includes('..') || files[path] !== undefined) throw new Error('ZIP 存档损坏或包含重复路径。');
+    if (crc32(bytes.subarray(dataStart, dataStart + compressedSize)) !== view.getUint32(offset + 14, true)) throw new Error(`ZIP 校验失败：${path}`);
     files[path] = decoder.decode(bytes.slice(dataStart, dataStart + compressedSize));
     offset = dataStart + compressedSize;
   }

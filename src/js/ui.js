@@ -23,6 +23,10 @@ import { getModelReasoningProfile, normalizeModelReasoningEffort, loadModelReaso
 import { createChatScrollController } from './chat_scroll.js';
 import { getLmStudioReasoningProfile, isLmStudioProvider, testLmStudioConnection } from './lm_studio.js';
 import { CHAT_PROVIDER_PRESETS, getProviderPresetForUrl, buildMimoTtsSyncPatch, initChatProviderPresets } from './model_provider_presets.js';
+import { readClipboardText } from './archive_io.js';
+import { showSettingsNotice } from './settings_notice.js';
+import { listArchiveRecoveries, getArchiveRecoveryAvailability, exportArchiveRecovery } from './archive_sync.js';
+import { bindExternalLinks } from './external_links.js';
 
 let chatProviderPresets = null;
 
@@ -315,6 +319,7 @@ export function initUi() {
 }
 
 function bindGlobalEvents() {
+  bindExternalLinks();
   document.addEventListener('fritia-next-chat-store-updated', event => {
     state.store = event.detail || loadAppStore();
     renderAll();
@@ -2124,16 +2129,53 @@ function bindArchivePanel() {
     runArchiveAction(() => syncWebDavNow());
   });
   document.getElementById('archive-conflict-local')?.addEventListener('click', () => runArchiveAction(async () => {
-    await resolveArchiveConflict('local');
-    state.archiveConflict = null;
+    await resolveArchiveConflict(Object.fromEntries(state.archiveConflict.files.map(item => [item.choiceKey, 'local'])));
     renderArchiveConflict();
   }));
   document.getElementById('archive-conflict-remote')?.addEventListener('click', () => runArchiveAction(async () => {
-    await resolveArchiveConflict('remote');
-    state.archiveConflict = null;
+    await resolveArchiveConflict(Object.fromEntries(state.archiveConflict.files.map(item => [item.choiceKey, 'remote'])));
     renderArchiveConflict();
   }));
+  document.getElementById('archive-conflict-apply')?.addEventListener('click', () => runArchiveAction(async () => {
+    const choices = Object.fromEntries([...document.querySelectorAll('[data-archive-choice]')].map(select => [select.dataset.archiveChoice, select.value]));
+    await resolveArchiveConflict(choices);
+  }));
+  document.getElementById('archive-conflict-later')?.addEventListener('click', () => { state.archiveConflict = null; renderArchiveConflict(); });
+  document.getElementById('archive-recovery-refresh')?.addEventListener('click', () => runArchiveAction(refreshArchiveRecoveries));
+  document.getElementById('archive-recovery-list')?.addEventListener('change', updateArchiveRecoveryButtons);
+  for (const side of ['local', 'remote']) document.getElementById(`archive-recovery-${side}`)?.addEventListener('click', () => {
+    const id = document.getElementById('archive-recovery-list')?.value;
+    if (id) runArchiveAction(() => exportArchiveRecovery(id, side));
+  });
   renderArchivePanel();
+}
+
+let archiveActionsBusy = false;
+let recoveryButtonsRequest = 0;
+
+async function refreshArchiveRecoveries() {
+  const list = await listArchiveRecoveries();
+  const select = document.getElementById('archive-recovery-list');
+  if (!select) return;
+  const selected = select.value;
+  select.replaceChildren(...list.map(item => {
+    const option = document.createElement('option'); option.value = item.id;
+    option.textContent = `${new Date(item.at).toLocaleString()} · ${item.label}`; return option;
+  }));
+  if (list.some(item => item.id === selected)) select.value = selected;
+  updateCustomSelect(select);
+  await updateArchiveRecoveryButtons();
+}
+
+async function updateArchiveRecoveryButtons() {
+  const request = ++recoveryButtonsRequest;
+  const id = document.getElementById('archive-recovery-list')?.value;
+  const buttons = ['local', 'remote'].map(side => [side, document.getElementById(`archive-recovery-${side}`)]);
+  buttons.forEach(([,button]) => { if (button) button.disabled = true; });
+  if (!id || archiveActionsBusy) return;
+  const available = await getArchiveRecoveryAvailability(id).catch(() => ({}));
+  if (request !== recoveryButtonsRequest || archiveActionsBusy) return;
+  buttons.forEach(([side,button]) => { if (button) button.disabled = !available[side]; });
 }
 
 async function runArchiveAction(action) {
@@ -2224,12 +2266,36 @@ function renderArchiveConflict() {
   setText('archive-conflict-local-size', formatArchiveSize(state.archiveConflict.local?.size));
   setText('archive-conflict-remote-time', formatArchiveDate(state.archiveConflict.remote?.updatedAt));
   setText('archive-conflict-remote-size', formatArchiveSize(state.archiveConflict.remote?.size));
+  setText('archive-conflict-local-device', state.archiveConflict.local?.device);
+  setText('archive-conflict-remote-device', state.archiveConflict.remote?.device);
+  const container = document.getElementById('archive-conflict-files');
+  if (container.dataset.recoveryId === state.archiveConflict.recoveryId) return;
+  container.dataset.recoveryId = state.archiveConflict.recoveryId;
+  container.replaceChildren(...(state.archiveConflict.files || []).map(item => {
+    const row = document.createElement('article');
+    const title = document.createElement('strong'); title.textContent = item.path;
+    const source = document.createElement('small'); source.textContent = item.source || '';
+    const compare = document.createElement('div'); compare.className = 'archive-conflict-compare';
+    for (const side of ['local', 'remote']) {
+      const pre = document.createElement('pre');
+      let data = item[side];
+      if (typeof data === 'string') { try { data = JSON.parse(data); } catch { /* plain text */ } }
+      const value = JSON.stringify(data, (key, value) => /api.?key|password|token|authorization|secret|credential/i.test(key) ? (value ? '[已设置，内容隐藏]' : '[未设置]') : value, 2);
+      pre.textContent = `${side === 'local' ? '本地 / 已合并' : '云端'}\n${String(value).slice(0, 3000)}`;
+      compare.appendChild(pre);
+    }
+    const select = document.createElement('select'); select.dataset.archiveChoice = item.choiceKey;
+    select.innerHTML = '<option value="local">保留本地 / 已合并值</option><option value="remote">保留此云端值</option>';
+    row.append(title, source, compare, select); return row;
+  }));
 }
 
 function setArchiveButtonsDisabled(disabled) {
+  archiveActionsBusy = disabled;
   document.querySelectorAll('[data-archive-action]').forEach(button => {
     button.disabled = disabled;
   });
+  updateArchiveRecoveryButtons();
 }
 
 function bindToolCallPanel() {
@@ -3649,6 +3715,17 @@ function bindSettings() {
     button.addEventListener('click', () => showModelProviderTab(button.dataset.modelTab));
   });
   chatProviderPresets = initChatProviderPresets({ onSelect: preset => addModelProvider('chat', preset), openExternalUrl });
+  document.getElementById('chat-provider-paste-key')?.addEventListener('click', async () => {
+    const input = document.getElementById('chat-provider-api-key');
+    const providerId = state.selectedChatProviderId;
+    try {
+      const text = await readClipboardText();
+      if (providerId !== state.selectedChatProviderId) return;
+      if (!text) { showSettingsNotice('剪贴板中没有文本'); return; }
+      input.value = text.trim();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch { showSettingsNotice('无法读取剪贴板，请允许权限或手动粘贴'); input.focus(); }
+  });
   document.getElementById('model-tts-add')?.addEventListener('click', () => addModelProvider('tts'));
   document.getElementById('model-tts-add-mobile')?.addEventListener('click', () => addModelProvider('tts'));
   document.getElementById('model-chat-delete')?.addEventListener('click', () => deleteModelProvider('chat'));
@@ -6212,7 +6289,7 @@ function saveCurrentModelProvider(kind, options = {}) {
       ...defaults
     });
     state.selectedChatProviderId = provider.id;
-    if (!options.skipRender) renderModelSettings(saved);
+    if (!options.skipRender) { renderModelSettings(saved); showSettingsNotice('模型配置已经保存'); }
     return saved;
   }
   const saved = saveSettings({
@@ -6220,7 +6297,7 @@ function saveCurrentModelProvider(kind, options = {}) {
     ...defaults
   });
   state.selectedTtsProviderId = provider.id;
-  if (!options.skipRender) renderModelSettings(saved);
+  if (!options.skipRender) { renderModelSettings(saved); showSettingsNotice('模型配置已经保存'); }
   return saved;
 }
 
@@ -6400,7 +6477,7 @@ function openPanel(id, options = {}) {
     showStickerManagerSection('manage');
     renderStickerManager();
   }
-  if (id === 'archive-panel') renderArchivePanel();
+  if (id === 'archive-panel') { renderArchivePanel(); refreshArchiveRecoveries().catch(() => updateArchiveRecoveryButtons()); }
   if (id === 'app-help-panel') openAppHelpPanel();
   if (id === 'tool-call-panel') renderToolCallPanel();
   if (id === 'plugin-store-panel') {

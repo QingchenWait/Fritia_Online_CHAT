@@ -1,5 +1,27 @@
 # STRUCTURE
 
+## 2026-10-02 v1.0.1 Cloud Fix Mapping
+
+- `src/js/external_links.js`：`bindExternalLinks()` 委托普通外链至既有 `open_external_url`；由 `ui.js:bindGlobalEvents()` 注册一次。
+- `src/js/archive_legacy.js`：`legacyHash()`、`decodeLegacyFile()`、`readLegacyArchive({read,cache})` 负责 v1 文件格式、序列化兼容、ETag 缓存和稳定性确认，返回快照、原始源文件及清单不一致项。
+- `src/js/archive_sync.js`：云迁移调用独立兼容层，目标缓存位于 `fritia_archive_state/state` 的 `legacy/<SHA256>`。`getArchiveRecoveryAvailability(id)` 返回本地/云端可导出状态；`exportArchiveRecovery()` 无有效条目时返回 unavailable，取消时返回 cancelled，完成后返回文件名和大小。
+- `src/js/ui.js`：`refreshArchiveRecoveries()` 自动加载/保留所选项，`updateArchiveRecoveryButtons()` 按侧更新按钮状态并避免异步返回覆盖新选择；忙碌状态结束后重新判断，不盲目启用导出按钮。
+- `src/styles/archive-sync-desktop.css` 的 `.archive-recovery-tools .btn` 定义公共 inline-flex/nowrap 和禁用样式，原移动样式继续负责窄屏换行布局（按钮内部不换行）。
+- 新测试 `tools/archive_legacy.test.mjs`、`tools/cloud_fix_browser.mjs`；新增 JS 加入 SW 核心缓存，缓存批次 `v42`，应用版本保持 `1.0.1`。
+
+## 2026-10-02 v1.0.1 Archive / Settings Mapping
+
+- `archive_merge.js`：`stableJson()` / `digestText()` 做稳定序列化和 SHA-256；`snapshotRecords()` 将聊天、角色、会话、记忆、IDB 记录拆为稳定路径；`recordsSnapshot()` 重组完整存档并保留当前会话/输入中状态；`mergeRecords()` 三方比较和冲突集合。
+- `archive_sync_v2.js`：`runIncrementalSync(context, choices)` 串行化、读取目录、验证/缓存不可变 commit 和 pack、合并 head/本地基线、保存恢复点及只上传变化记录。存储布局 `fritia-sync-v2/{commit-*.json,pack-SHA256.json|gz}`；旧 v1 文件保持原位。
+- `archive_state.js`：独立 `fritia_archive_state/state` object store。`archiveState()` 读写目标状态，`saveRecovery()` 原子保存恢复数据/索引，`getSyncDevice()` 保存唯一设备 ID 与平台名称。
+- `archive_io.js`：`archiveFetch()` 使用新 Android 原生桥、Windows 原始 proxy_fetch 响应或浏览器 fetch；`chooseArchiveDestination()` 支持 Android SAF、Windows Tauri、浏览器 showSaveFilePicker/受限下载回退；`readClipboardText()` 支持原生或 Web Clipboard API。Android 异步回调为 `__FRITIA_ARCHIVE_CALLBACK__`，接口为 `window.FritiaArchive.request/chooseFile/writeFile/clipboard`。
+- `archive_sync.js`：原公共入口不变，`resolveArchiveConflict()` 接收逐项选择映射；新增 `listArchiveRecoveries()`、`exportArchiveRecovery(id, side)`；安全导入/ZIP 校验以及 v1 只读适配在此维护。
+- UI：`#archive-conflict-files` 按记录展示比较，`data-archive-choice` 保存选择；`#archive-conflict-apply` 应用，`#archive-conflict-later` 暂不处理；设备信息为 `#archive-conflict-local-device/remote-device`。`#archive-recovery-list`、刷新及双端导出按钮访问本机恢复点。服务商限制提醒位于存档页及 WebDAV 设置。
+- 设置：`#chat-provider-paste-key` 位于 API Key 后、获取按钮前，复用新增 Lucide `clipboard-paste.svg`。`settings_notice.js:showSettingsNotice()` 创建 `#model-settings-notice` aria-live 气泡，只有保存成功后触发。`onboarding.js:buildImportedSettings()` 为 DeepSeek/MiMO 都设置 `defaultImageCaptionProviderId`。
+- 样式：`archive-sync-desktop.css` 与 `archive-sync-mobile.css` 为新增界面提供独立桌面/手机规则，原模型表单其余行为不变。
+- 原生源码：`tools/native/android/FritiaArchiveBridge.java`、`tools/native/windows/archive_dialog.rs`、`tools/native/apply_archive_bridges.py`，Android 依赖在 `tools/native/android/lib/`，不包含进静态前端 bundle。已授权的 `chat_v1.0.1` 新原生源码树有对应集成文件。
+- 验证：`tools/archive_regression.test.mjs`、`tools/archive_sync_browser.mjs`、`tools/archive_ui_browser.mjs`；npm 命令 `test:archive`、`test:archive-sync`、`test:archive-ui`。版本 `1.0.1`，SW `v41`，新前端 JS/CSS/图标均纳入离线缓存。
+
 ## 2026-10-01 Provider Presets Mapping
 
 - `src/js/model_provider_presets.js`：`CHAT_PROVIDER_PRESETS` 保存 DeepSeek / MiMO / Qwen / OpenAI / GLM / Kimi / 本地模型 / 自定义配置及 Logo、官网、hostname；`getProviderPresetForUrl(value)` 匹配当前输入；`buildMimoTtsSyncPatch(settings, previous, provider)` 返回对指定 TTS 密钥的非破坏性补丁；`initChatProviderPresets({ onSelect, openExternalUrl })` 返回 `close()` / `updateKeyButton()` 控制器。

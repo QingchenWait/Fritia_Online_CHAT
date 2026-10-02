@@ -1,0 +1,7 @@
+@media (max-width: 760px) {
+  .archive-conflict-card { width: calc(100vw - 24px); max-height: 90dvh; overflow: auto; }
+  .archive-conflict-compare { grid-template-columns: 1fr; gap: 4px; }
+  .archive-recovery-tools { margin: 12px; }
+  .archive-recovery-tools select { width: 100%; }
+  .model-settings-notice { bottom: calc(2rem + env(safe-area-inset-bottom)); font-size: 13px; }
+}

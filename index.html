@@ -18,6 +18,8 @@
   <link rel="stylesheet" href="src/styles/chat-model-picker-mobile.css">
   <link rel="stylesheet" href="src/styles/model-provider-presets-desktop.css">
   <link rel="stylesheet" href="src/styles/model-provider-presets-mobile.css">
+  <link rel="stylesheet" href="src/styles/archive-sync-desktop.css">
+  <link rel="stylesheet" href="src/styles/archive-sync-mobile.css">
 </head>
 <body>
   <div id="app" class="app-shell" data-view="chat">
@@ -790,6 +792,14 @@
               </div>
             </article>
           </section>
+    <section class="archive-recovery-tools">
+      <strong>同步恢复副本</strong>
+      <button id="archive-recovery-refresh" class="btn" type="button" data-archive-action><img src="src/_logo/icons/refresh-cw.svg" alt="">刷新列表</button>
+      <select id="archive-recovery-list" aria-label="选择恢复副本"></select>
+      <button id="archive-recovery-local" class="btn" type="button" data-archive-action disabled><img src="src/_logo/icons/download.svg" alt="">导出当时本地副本</button>
+      <button id="archive-recovery-remote" class="btn" type="button" data-archive-action disabled><img src="src/_logo/icons/download.svg" alt="">导出当时云端副本</button>
+      <p>坚果云 WebDAV 难以实时多端同步，请主要作为备份使用。合并前的恢复副本会保留在本机，可导出 ZIP。</p>
+    </section>
         </section>
       </div>
     </div>
@@ -813,6 +823,7 @@
       <label><span>用户名</span><input id="archive-config-username" type="text" autocomplete="username"></label>
       <label><span>密码 / 应用密码</span><input id="archive-config-password" type="password" autocomplete="current-password"></label>
       <label><span>同步时间间隔（分钟）</span><input id="archive-config-interval" type="number" min="5" max="1440" step="5"></label>
+      <p class="archive-webdav-note">坚果云对 WebDAV 请求频率和目录列举有限制，难以实时多端同步。建议主要作为备份使用，避免频繁同步。</p>
       <div id="archive-config-progress" class="archive-progress">
         <span id="archive-config-progress-label">等待操作</span>
         <i><b id="archive-config-progress-fill"></b></i>
@@ -901,23 +912,26 @@
         <div>
           <small>SYNC CONFLICT</small>
           <h2 id="archive-conflict-title">检测到存档冲突</h2>
-          <p>云端和本地都发生了修改，请选择要保留的数据版本。</p>
+          <p>新增记录会合并。以下同一记录存在不同修改，请逐项选择。未选版本已保存为恢复副本，云端历史不会删除。</p>
         </div>
       </header>
       <div class="archive-conflict-grid">
         <article>
-          <strong>使用本地数据</strong>
-          <span>上次修改：<b id="archive-conflict-local-time">从未</b></span>
+          <strong>本地数据</strong><span id="archive-conflict-local-device"></span>
+          <span>备份快照：<b id="archive-conflict-local-time">从未</b></span>
           <span>数据大小：<b id="archive-conflict-local-size">0 B</b></span>
-          <button id="archive-conflict-local" class="btn btn-primary" type="button" data-archive-action>上传本地版本</button>
+          <button id="archive-conflict-local" class="btn btn-primary" type="button" data-archive-action><img src="src/_logo/icons/upload.svg" alt="">冲突项全部保留本地</button>
         </article>
         <article>
-          <strong>使用云端数据</strong>
-          <span>上次修改：<b id="archive-conflict-remote-time">从未</b></span>
+          <strong>云端数据</strong><span id="archive-conflict-remote-device"></span>
+          <span>备份快照：<b id="archive-conflict-remote-time">从未</b></span>
           <span>数据大小：<b id="archive-conflict-remote-size">0 B</b></span>
-          <button id="archive-conflict-remote" class="btn" type="button" data-archive-action>恢复云端版本</button>
+          <button id="archive-conflict-remote" class="btn" type="button" data-archive-action><img src="src/_logo/icons/download.svg" alt="">冲突项全部保留云端</button>
         </article>
       </div>
+      <div id="archive-conflict-files" class="archive-conflict-files"></div>
+      <button id="archive-conflict-apply" class="btn btn-primary" type="button" data-archive-action><img src="src/_logo/icons/save-config.svg" alt="">应用逐项选择并合并</button>
+      <button id="archive-conflict-later" class="btn" type="button"><img src="src/_logo/icons/x.svg" alt="">稍后处理</button>
     </section>
   </div>
 
@@ -1160,7 +1174,7 @@
                     </header>
                     <div class="model-provider-form">
                       <label><span>配置名称</span><small>提供商源唯一 ID</small><input id="chat-provider-id" autocomplete="off"></label>
-                      <div class="chat-provider-key-field"><label for="chat-provider-api-key">API Key</label><small>OpenAI Compatible API 密钥；LM Studio 本地端点可留空</small><div class="chat-provider-key-control"><input id="chat-provider-api-key" type="password" autocomplete="off"><button id="chat-provider-get-key" class="model-icon-btn" type="button" title="获取 API Key" aria-label="获取 API Key" disabled><img src="src/_logo/icons/download.svg" alt=""></button></div></div>
+                      <div class="chat-provider-key-field"><label for="chat-provider-api-key">API Key</label><small>OpenAI Compatible API 密钥；LM Studio 本地端点可留空</small><div class="chat-provider-key-control"><input id="chat-provider-api-key" type="password" autocomplete="off"><button id="chat-provider-paste-key" class="model-icon-btn" type="button" title="粘贴 API Key" aria-label="粘贴 API Key"><img src="src/_logo/icons/clipboard-paste.svg" alt=""></button><button id="chat-provider-get-key" class="model-icon-btn" type="button" title="获取 API Key" aria-label="获取 API Key" disabled><img src="src/_logo/icons/download.svg" alt=""></button></div></div>
                       <label><span>API Base URL</span><small>含 localhost 或 127.0.0.1 时自动按 LM Studio 本地模型处理</small><input id="chat-provider-base-url" placeholder="https://api.openai.com/v1"></label>
                       <label><span>模型名称</span><small>OpenAI Compatible 模型 ID</small><input id="chat-provider-model" placeholder="gpt-6-luna"></label>
                     </div>

@@ -1,5 +1,29 @@
 # DEVELOP
 
+## 2026-10-02 v1.0.1 Cloud Sync Compatibility Patch
+
+- 普通 Markdown/帮助文档 `<a target="_blank">` 之前没有连接壳层 `open_external_url`，与官网按钮的路径不同。`external_links.js` 在文档 click / auxclick 上委托处理外链，动态气泡同样生效；仅原生环境调用现有系统浏览器命令，跳过站内链接、非 HTTP(S) 和 download 链接。
+- 恢复按钮在操作完成后被通用 `data-archive-action` 逻辑统一启用，且列表原本只在手工刷新时加载。现在打开存档窗口自动刷新，异步状态更新有请求序号保护，按实际快照分别启用两侧；读取不到快照时不弹空保存窗口。导出只读数据，先验证条目再调用既有系统路径选择器，保留用户点击激活。
+- 旧 v1 协议为固定文件名逐个覆盖，manifest 与文件不是事务提交；中断或多设备写入后可能属于不同轮次。新 v2 迁移曾对旧 manifest 做强制紧凑 JSON 哈希匹配，因此即使记忆 JSON 有效也中止。新 `archive_legacy.js` 分别兼容原始 JSON、紧凑 JSON、规范 key/value 顺序；仍不匹配时二次条件读取确认该文件未变化，并重新检查 manifest。只有结构有效且稳定的源数据才进入合并。
+- 对于不一致的旧清单，不能声称旧 hash 校验通过。原 manifest、原文件字节和不匹配路径被保存在恢复副本 `legacySource` 中，导出 ZIP 附带 `legacy-source/`；归档页说明清单与文件不一致。损坏 JSON、非法键名/路径、缺失文件、读取中写入均报错，旧云目录完全只读。ZIP 正常导入与 v2 SHA-256 校验未放宽。
+- 迁移缓存按端点/路径/用户名隔离，ETag 条件 GET 减少重读传输；同一旧快照只保存一次迁移恢复点。原始恢复文件不加入 v2 数据包，避免重复上传；v2 继续复用已有记录哈希，未变化同步仍为一次目录查询。
+- `npm run test:archive-legacy` 覆盖两种 JSON 哈希、清单过期稳定读取、条件缓存、并发变化、损坏/缺失/非法结构；`tools/cloud_fix_browser.mjs` 覆盖桌面/手机同排按钮、缺失侧禁用、外链原生委托和两侧保存路径激活。版本不变，SW `v42`。最终原生成品测试与包体校验记录在外部 `chat_v1.0.1` 的 BUILD_PROCESS.md 和验证报告中。
+
+## 2026-10-02 v1.0.1 Archive Safety / Native Bridges / Settings
+
+- 已读取 `.agents/fritia_chat_dev_agent.md`，保留用户对该文件的已有修改。版本 `1.0.1`，SW 缓存 `v41`。本轮没有运行静态 build、APK/D8、Rust release 或打包命令。
+- 旧同步缺陷：manifest 用紧凑 JSON 算 hash，上传用 pretty JSON 再算 hash，导致跳过判断失效；manifest 重复 PUT；每个文件重复 MKCOL；双端变化只允许整份覆盖；恢复 IDB 先独立 clear 再 put，后一步失败会失去原始内容。
+- v2 使用稳定 JSON、SHA-256 校验、记录级三方比较、内容寻址压缩包和不可变 commit DAG。相同 ID、只有一方相对基线修改则采用该修改；独立新增取并集；同一记录双方修改提示选择。删除不自动传播。单设备重复/跨标签同步由 in-flight Promise / Web Locks 串行化；跨设备写不同 commit 文件，无共享清单覆盖竞争。并发出现多个 head 时求公共祖先合并。
+- 每次 PROPFIND 检查版本；只 GET 新清单/未缓存 pack。小变更聚合为约 512KiB JSON 包后 gzip，大媒体单独进包，引用已知 hash 不重传。无变化路径已验证只有一次 PROPFIND。清单仍包含当前记录引用，不承诺恒定大小；首次同步/设备重置会读取历史清单。保留全部历史不做自动 GC。
+- `fritia_archive_state` 独立 IndexedDB 保存每个目标的基线、目录、内容缓存、设备 ID 和恢复副本，不纳入同步/ZIP，避免递归放大。恢复副本与索引在同一事务内写入；失败则停止应用。冲突选择前重新采样数据，出现新修改则重新比较。写入前和 IDB 事务中检查本地是否变化，防止网络等待期间新消息被旧快照覆盖。同步仅 put，不 clear；手动导入 clear/put 合并到同一 IDB 事务，并保存恢复点。ZIP 校验 CRC、路径和 manifest/hash。
+- 旧 v1 目录只读迁移、不删除；新旧协议隔离，请多端一起升级。发现已知 commit 缺失或坚果云单次列举达到 750 条时停止写入，不能把服务器截断误判为空目录。用户数据不因失败自动重置。磁盘/服务器物理损坏、用户清除浏览器数据仍需另行 ZIP 备份；不承诺物理故障下绝对不丢数据。
+- 参考：Joplin 的按项目/目标保存同步状态、定期轮询与测试方法（[官方同步说明](https://joplinapp.org/help/dev/spec/sync/)）；Syncthing 的哈希校验与冲突副本保留（[官方同步说明](https://docs.syncthing.net/users/syncing.html)）。采用适合静态 APP 的简化记录协议，没有引入完整同步框架或中央服务。
+- Android 排查：v1.0.0 原生 `performProxyFetch()` 经 `HttpURLConnection.setRequestMethod()`，失败后反射基类 `method`；该路径对扩展方法/具体 Android 实现不可靠。原 JS 桥还将所有状态构造有 body 的 Response，204 会抛异常，旧 WebDAV 层甚至把这类异常视为成功。新专用桥用 OkHttp 并发送原始方法、同源重定向保留方法，跨源重定向拒绝转发凭据，204/205/304 用 null body。没有实机与服务器日志，不能断言旧 501 只有一个可能原因；此次已消除可见的方法代理/空响应缺陷，非兼容服务返回的真实 501 仍会正常报告。
+- 原生保存：Android SAF `ACTION_CREATE_DOCUMENT` → 用户选择 URI → 仅允许该 URI 写入；Windows Tauri 异步命令调用 Win32 GetSaveFileNameW，所选路径加入一次性允许集合后写 ZIP。网页 showSaveFilePicker 在采集存档前触发，保留点击激活；不支持时说明浏览器下载限制。原生剪贴板仅响应点击，不在后台读。
+- 用户授权的新目录：`D:\Models\vibe_coding\fritia_online_next_desktop\chat_v1.0.1`。只在新目录接入；旧 `chat_v1.0.0` 没有修改。可重用的原生源码和集成脚本位于 `tools/native/`，依赖来源/哈希见其 README。最初对旧外部目录的写入被自动审批拒绝，用户后来明确授权新目录，实际修改已遵循新范围。
+- 桌面和手机冲突 UI 分别由 `archive-sync-desktop.css` / `archive-sync-mobile.css` 定义，两端都有滚动比较区、设备/时间和逐项选择；设置气泡公共逻辑、手机安全区定位。比较仅截短屏幕预览（3000 字符），持久化/传输记录完整；密钥字段隐藏，避免明文出现在冲突窗。
+- 验证：7 项 archive 单元测试；模拟 WebDAV 的双隔离浏览器：消息并集、同条编辑冲突、两个写入者并发、失败重试、损坏阻止应用、实际 LocalStorage/IndexedDB 全链路及一次请求 no-op；桌面 1440×1000 / 手机 390×844 的粘贴、保存气泡、ZIP 文件头/取消、冲突窗；Android Activity + 新桥 Java 编译；Windows Rust 模块使用现有 Tauri 依赖做 `--emit metadata` 类型检查。没有 Android 实机（adb 列表为空）、没有真实 WebDAV 账号验证，没有生成 APK/EXE。
+
 ## 2026-10-01 v1.0.0 Provider Presets / Key Acquisition
 
 - 遵循 `.agents/fritia_chat_dev_agent.md` 与 UI 规范，修改限定于模型设置表单、预设添加、密钥获取和 MiMO TTS 一次性同步。未改聊天引擎、思考参数、工具调用、存档或其他配置功能。

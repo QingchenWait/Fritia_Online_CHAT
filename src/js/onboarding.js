@@ -17,7 +17,7 @@ const PROVIDERS = Object.freeze({
     baseUrl: 'https://api.deepseek.com',
     model: 'deepseek-flash',
     chatProviderId: 'DeepSeek_Import',
-    defaultsLabel: '默认对话模型',
+    defaultsLabel: '对话、图像转述',
     instructions: [
       '注册或登录 DeepSeek 开放平台。',
       '在 [充值] 页面充值 5-10 元，即可满足长时间游玩需求。',
@@ -92,7 +92,8 @@ export function buildImportedSettings(providerKey, apiKey, settings = getSetting
   };
   const patch = {
     chatProviders: upsertProvider(settings.chatProviders, chatProvider),
-    defaultChatProviderId: config.chatProviderId
+    defaultChatProviderId: config.chatProviderId,
+    defaultImageCaptionProviderId: config.chatProviderId
   };
 
   if (providerKey === 'mimo') {
