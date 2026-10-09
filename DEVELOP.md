@@ -1,5 +1,16 @@
 # DEVELOP
 
+## 2026-10-09 v1.1.0 公告板
+
+- 遵循 `.agents/fritia_chat_dev_agent.md` 与 `src/ui_rules/ui_design_rules.md`；保留用户已有 agent 文件修改。新增公告板及必要的侧栏适配、文档、版本和离线资源映射，不做打包。
+- 导航增加 Lucide 邮件按钮，来源为 [Lucide 0.468.0 mail.svg](https://raw.githubusercontent.com/lucide-icons/lucide/0.468.0/icons/mail.svg)，沿用 ISC 许可。桌面设置按钮上方显示公告入口；移动端七个入口按可用宽度缩放，维持原有导航布局。
+- `announcements.js` 每次 UI 启动发起一次官方公告 GET，`cache: no-store`、不携带用户凭据、15 秒超时。窗口重新打开不发请求；网络/HTTP/JSON/条目校验失败均保留已缓存文件与未读状态。ID 按整数数值（BigInt）降序，避免字符串排序和大整数精度问题。
+- 独立 IndexedDB `fritia_announcement_board/files` 以 `announcement.json` 为键，原子保存公告对象及 `unreadIds`，不接入聊天 ZIP/WebDAV。首份文件所有 ID 未读，后续比较上次文件 ID 并累积未读。标题至少 60% 进入正文可见区域且页面在前台时记为已读；本次窗口保留新公告强调色，下次打开更新样式。关闭停止观察，未浏览条目保留未读；写入按队列提交，失败明确提示。
+- 固定本地依赖 Turndown 7.2.0（MIT）将惰性 template 中的 HTML 转 Markdown，移除可执行/嵌入元素及危险链接；复用 `ui.js` 现有 Markdown 函数，仅公告传入 `preserveBreaks`，原聊天和帮助默认行为不变。公告 HTTP(S) 链接使用 `_blank` / `noopener noreferrer`，Windows 复用既有系统外链委托。
+- 公共样式与横屏/竖屏布局分别位于三份 `announcements*.css`，对应两份独立布局交互模块。标题和关闭按钮不参与正文滚动；单列卡片、轻玻璃背景、浅蓝紫强调、自绘滚动条、窄屏安全区、VisualViewport、键盘焦点循环和 Esc 关闭。
+- 版本 `1.1.0`，SW 缓存 `v47`，新增模块、CSS、图标及本地转换库加入核心资源。实际公告接口已读取，支持跨域 GET（`Access-Control-Allow-Origin: *`），包含普通文本及 HTML 列表、链接。
+- 已通过 `npm run check`、`npm run test:service-worker`（7 项）和 `npm run test:announcements`。公告回归覆盖 11 组视口（320×568 至 3840×2160，包含手机横屏、1024×280 矮窗口，以及 1920 屏幕 125%/150% 缩放对应的 1536×864 / 1280×720 CSS 可用视口），验证数值排序、大整数、HTML/Markdown/换行、危险内容过滤、浏览器新标签/Tauri 外链委托、只读可见条目、未读累积与刷新持久化、每启动一次请求、失败保留、数据隔离、固定标题和七入口导航。另通过首次离线、空公告、IDB 读取受限和写入配额失败四种状态。测试使用本机已有 Playwright/Chromium、独立浏览器上下文和受控公告数据；未调用模型 API，未运行原生客户端或打包。
+
 ## 2026-10-03 v1.0.2 Android ZIP 导出内存修复
 
 - 已在旧正式 APK + 全新 API 35 模拟器复现：加入 64 MiB 媒体条目后，使用真实系统路径选择器导出，留下 0 字节 ZIP；fritia-save-archive 线程因 OutOfMemoryError 退出。栈为 String.getBytes → Base64.decode → FritiaArchiveBridge.writeFile，单次申请 93,870,624 字节，Java heap growth limit 为 192 MiB。没有用户设备日志，不能断言所有 ROM 的闪退原因完全相同；此处修复已复现的根因。

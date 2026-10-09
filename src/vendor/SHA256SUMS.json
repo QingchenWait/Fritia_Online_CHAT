@@ -1,5 +1,5 @@
 {
-  "README.md": "504836b2b249ee7b3f7f473df0fa7e0c30d14f53fdd91f8475b6d7bec308a813",
+  "README.md": "633fe3b321ac096945ddaddc64e7edd07dd7b391a2b6ced45121a8d493552c7c",
   "fflate/fflate.js": "b7ca4450b19559a1d50eb381adcee94b82449674be4cd17789d9beba7e6122a1",
   "fflate/LICENSE": "0a1df3a083d0c010560aa342e87959c8c1070e6fd54545741f083f22d0c8b551",
   "pdfjs/LICENSE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
@@ -189,5 +189,7 @@
   "pdfjs/standard_fonts/LiberationSans-Italic.ttf": "832b4406dbef23628800d3aaad21048534ac84d7e3ad955be83b8172ed8ef512",
   "pdfjs/standard_fonts/LiberationSans-Regular.ttf": "f8ace1f892b2bd9dc1792ba7f097fa7588f84fed48321480e04de5390828221f",
   "pdfjs/standard_fonts/LICENSE_FOXIT": "b578cdd2345840ada550bd12519533812320d5f1d21cf4c1c7e1b1b0a31c98b7",
-  "pdfjs/standard_fonts/LICENSE_LIBERATION": "d2c4d5b3e115a519cb58eb691aa64538397e2611f9ebe801392cf9667997e7dc"
+  "pdfjs/standard_fonts/LICENSE_LIBERATION": "d2c4d5b3e115a519cb58eb691aa64538397e2611f9ebe801392cf9667997e7dc",
+  "turndown/turndown.js": "4eb2e4e0440fd67ced8a75eff4dc54b8d823e7e53a54a580ac969470c66d86be",
+  "turndown/LICENSE": "a055e3a15db4b4cbb5af381230eba085603126d7d5d8c4dae45ee85b877a9729"
 }

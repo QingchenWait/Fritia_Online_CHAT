@@ -22,6 +22,9 @@
   <link rel="stylesheet" href="src/styles/archive-sync-mobile.css">
   <link rel="stylesheet" href="src/styles/attachment-input-desktop.css">
   <link rel="stylesheet" href="src/styles/attachment-input-mobile.css">
+  <link rel="stylesheet" href="src/styles/announcements.css">
+  <link rel="stylesheet" href="src/styles/announcements-desktop.css">
+  <link rel="stylesheet" href="src/styles/announcements-mobile.css">
 </head>
 <body>
   <div id="app" class="app-shell" data-view="chat">
@@ -43,6 +46,10 @@
       </button>
       <button class="rail-btn" type="button" data-panel-open="archive-panel" title="存档备份">
         <img src="src/_logo/icons/refresh-cw.svg" alt="">
+      </button>
+      <button id="announcement-btn" class="rail-btn" type="button" data-panel-open="announcement-panel" title="公告板" aria-label="公告板" aria-controls="announcement-panel" aria-expanded="false">
+        <img src="src/_logo/icons/mail.svg" alt="">
+        <span id="announcement-unread-count" class="announcement-badge hidden" aria-hidden="true">0</span>
       </button>
       <button class="rail-btn" type="button" data-panel-open="settings-panel" title="设置">
         <img src="src/_logo/icons/settings.svg" alt="">
@@ -2058,6 +2065,24 @@
       <span class="conversation-item__meta"></span>
     </button>
   </template>
+
+  <div id="announcement-panel" class="modal hidden announcement-modal" role="dialog" aria-modal="true" aria-labelledby="announcement-title">
+    <section class="modal-shell announcement-shell">
+      <header class="modal-head announcement-head">
+        <div class="announcement-heading">
+          <span class="announcement-heading-icon"><img src="src/_logo/icons/mail.svg" alt=""></span>
+          <h2 id="announcement-title">公告板</h2>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="announcement-panel" aria-label="关闭公告板" title="关闭">
+          <img src="src/_logo/icons/x.svg" alt="">
+        </button>
+      </header>
+      <div id="announcement-scroll" class="announcement-scroll" tabindex="0" role="region" aria-label="公告列表">
+        <p id="announcement-status" class="announcement-status" role="status"></p>
+        <div id="announcement-cards" class="announcement-cards"></div>
+      </div>
+    </section>
+  </div>
 
   <script type="module" src="src/js/main.js"></script>
 </body>

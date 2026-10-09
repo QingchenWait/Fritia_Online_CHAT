@@ -1,5 +1,31 @@
 # STRUCTURE
 
+## v1.1.0 公告板结构与映射（2026-10-09，缓存 v47）
+
+| 文件 / API / 元素 | 职责 |
+| --- | --- |
+| src/js/announcements.js / ANNOUNCEMENT_URL | 官方公告地址；启动单次 GET，15 秒超时，禁用 HTTP/SW 缓存 |
+| normalizeAnnouncementFile、sortedAnnouncementIds、mergeAnnouncementFile | 校验整数 ID 和四个字符串字段；BigInt 降序；新增 ID 合并既有未读 |
+| announcementContentToMarkdown(content) | 惰性 HTML 清理、HTTP(S) URL 规范化、Turndown 转换；普通 Markdown 保持原文 |
+| initAnnouncementBoard({renderMarkdown,requestClose}) / open()、close() | 缓存、单次联网、卡片/红点/状态、可见标题已读、写入队列、焦点与关闭 |
+| src/js/announcements_desktop.js / initAnnouncementDesktopLayout | 横屏状态、正文获得焦点时 PageUp/PageDown 翻页 |
+| src/js/announcements_mobile.js / initAnnouncementMobileLayout | 竖屏/窄屏状态、VisualViewport 高度与旋转适配 |
+| src/styles/announcements.css | 公共玻璃窗口、单列卡片、未读强调、红色徽章、字体层级和动画 |
+| src/styles/announcements-desktop.css、announcements-mobile.css | 两套独立窗口尺寸、留白、安全区、自绘滚动条；移动七个入口窄屏适配 |
+| src/vendor/turndown/turndown.js、LICENSE | 固定 Turndown 7.2.0 ESM 与 MIT 许可；SHA256SUMS.json 校验 |
+| src/_logo/icons/mail.svg | Lucide 0.468.0 线性邮件图标，ISC 许可 |
+| index.html / #announcement-btn、#announcement-unread-count | 设置之前的公告入口与未读数字，aria-label 同步数量 |
+| #announcement-panel、#announcement-title、[data-panel-close="announcement-panel"] | 悬浮窗口、固定标题、关闭按钮 |
+| #announcement-scroll、#announcement-status、#announcement-cards | 独立滚动容器、加载/离线/存储失败状态、单列列表 |
+| .announcement-card、.announcement-card-head、.announcement-meta、.announcement-content | 标题、灰色时间与版本、Markdown 正文；is-unread 表示本次打开时的强调 |
+| src/js/ui.js / initUi、openPanel、closePanel | 初始化公告模块，复用现有弹窗和移动返回流程 |
+| renderMarkdownDocument(markdown,{preserveBreaks}) | 公告可选换行保留；聊天/帮助默认行为不变 |
+| tools/announcements_browser.mjs / npm run test:announcements | 独立数据验证行为、持久化、渲染安全、外链和两端布局 |
+
+持久化：独立 IndexedDB `fritia_announcement_board` version 1，object store `files`，键 `announcement.json`，值 `{fileName, announcements: {[id]: {title,date,version,content}}, unreadIds: string[]}`。公告与未读状态单事务提交，不属于聊天存档/云同步结构。首次成功下载全部未读，后续新增 ID 合并未读并过滤远端已移除 ID。已读 ID 的正文变化不算新公告。下载失败不写入替代文件、不清空缓存。
+
+打开只观察 `.announcement-card-head`，标题至少 60% 可见且 APP 在前台时从未读集合移除，当前浏览窗口仍保留强调色。窗口标题位于滚动容器外，任意高度均固定。关闭取消观察、恢复入口焦点；移动返回继续调用现有 `closePanel()`。
+
 ## v1.0.2 Android 分块导出与成功提示（缓存 v46）
 
 - archive_io.js / chooseArchiveDestination：Android 要求分块保存桥，打开 SAF 后返回写入器；Blob.slice → beginWrite / writeChunk / finishWrite，逐块确认偏移，异常 abortWrite。不会整包调用 arrayBuffer 或 Base64；Windows 与网页分支保持原协议。
@@ -425,6 +451,7 @@ fritia_online_next_chat/
 ├── wrangler.toml
 ├── sw.js
 ├── tools/
+│   ├── announcements_browser.mjs
 │   ├── build_static.mjs
 │   └── static_server.mjs
 ├── README.md
@@ -455,12 +482,26 @@ fritia_online_next_chat/
     │   │   ├── sparkles_3d.png
     │   │   └── speech_balloon_3d.png
     │   └── icons/
+    │       ├── mail.svg
     │       └── *.svg
     ├── _rag_data/
     │   └── chenbai_character_settings_260622.json
     ├── docs/
+    │   ├── doc_1 软件简介.md
+    │   ├── doc_2 快速开始.md
     │   └── mcp_help.md
+    ├── vendor/
+    │   ├── README.md
+    │   ├── SHA256SUMS.json
+    │   ├── fflate/
+    │   ├── pdfjs/
+    │   └── turndown/
+    │       ├── LICENSE
+    │       └── turndown.js
     ├── js/
+    │   ├── announcements.js
+    │   ├── announcements_desktop.js
+    │   ├── announcements_mobile.js
     │   ├── main.js
     │   ├── onboarding.js
     │   ├── onboarding_desktop.js
@@ -480,6 +521,9 @@ fritia_online_next_chat/
     │   ├── roundtable.js
     │   └── ui.js
     └── styles/
+        ├── announcements.css
+        ├── announcements-desktop.css
+        ├── announcements-mobile.css
         ├── app.css
         ├── onboarding.css
         ├── onboarding-desktop.css

@@ -1,11 +1,12 @@
 # 芙提雅 CHAT
 
-基于纯静态 HTML、CSS 和 JavaScript 的 AI 角色聊天 APP，支持网页、Windows 和 Android。当前版本 **v1.0.2**。项目地址：[QingchenWait/Fritia_Online_CHAT](https://github.com/QingchenWait/Fritia_Online_CHAT)。
+基于纯静态 HTML、CSS 和 JavaScript 的 AI 角色聊天 APP，支持网页、Windows 和 Android。当前版本 **v1.1.0**。项目地址：[QingchenWait/Fritia_Online_CHAT](https://github.com/QingchenWait/Fritia_Online_CHAT)。
 
 可以与预置或自定义角色私聊、组建角色群聊，发送图片和附件，结合知识库、长期记忆和 MCP 工具完成对话。数据默认保存在当前设备，模型请求使用你自行配置的服务商 API。
 
 ## 功能
 
+- 公告板：导航栏的邮件按钮可查看最新公告，桌面端位于设置按钮上方，移动端位于底部导航。公告按整数 ID 从新到旧单列排列，标题与关闭按钮固定，正文可滚动；红色数字显示未读数量，未读卡片使用浅蓝紫强调色。
 - 私聊：预置芙提雅、芬妮、琴诺、安卡希雅、凯茜娅、里芙、苔丝、肴，点击联系人即可创建私聊。
 - 群聊：通过单列角色多选窗口创建群聊，群聊头像固定使用 `src/_char/Profile_GroupChat.png`，群聊调度继承旧项目“圆桌密语”的单角色轮流发言与 bot-to-bot 链式接话方式。
 - 群聊成员与规则：群聊右上角“群聊成员”会打开侧边悬浮面板，可在当前群聊内修改群聊名称、增减成员、设置自动接话/空闲搭话/Bot 开头 @ 触发、群聊最大人数和玩家未介入时最大互聊次数，不会新建另一个群聊。
@@ -22,6 +23,14 @@
 - 长期记忆：继承旧项目 `fritia_long_term_memory` 的文本记忆、关系边、私有 scope 和公共圆桌 scope 组织方式，并提供左侧搜索/详情、中间可缩放图谱、悬浮搜索结果/档案/设置的“记忆节点”界面。
 - UI：桌面端横屏为导航、会话列表和聊天主窗口布局，列表与聊天区之间可拖拽调整宽度并记忆；私聊默认不显示右侧角色卡，点击右上角角色卡片按钮后展开。移动端竖屏会切换为会话列表和聊天窗口滑入式单栏布局，并支持左侧边缘右滑返回上一层页面。
 - 离线壳层：包含 `manifest.webmanifest` 和 `sw.js`，便于后续作为 PWA 或 WebView 应用使用；HTML/JS/CSS/JSON 使用 network-first 缓存策略，避免更新后继续加载旧代码。
+
+## 查看公告
+
+每次启动 APP 自动获取一次官方公告，打开或关闭公告板不会重复下载。公告显示标题、`公告时间 | 版本号` 和正文，支持 HTML 转 Markdown 的段落、列表、加粗、换行以及普通 Markdown 内容；网页链接可点击，网页端在新标签页打开，Windows 客户端沿用系统浏览器外链处理。
+
+首次获取的公告全部计为未读；后续启动按 ID 比较，仅新增 ID 增加未读数量。卡片标题进入可见滚动区域后记为已读，未滚动看到的公告继续保留未读。本次打开期间保留新公告强调色，下次打开时显示为已读样式。
+
+公告文件和未读状态保存在当前设备独立的 IndexedDB 中，不参与聊天存档及 WebDAV 同步。联网失败或返回无效数据时保留原公告和未读状态；离线可查看已缓存公告，首次使用离线时显示获取失败提示。静态网页跨域访问需要公告服务器允许 CORS。
 
 ## 运行
 
@@ -248,6 +257,8 @@ PDF、DOCX、XLSX、PPTX 可在本机提取文字或单元格内容；不会执�
 ## 资源来源
 
 - 图标：Lucide Icons，下载到 `src/_logo/icons`。
+- 公告邮件图标：[Lucide 0.468.0](https://raw.githubusercontent.com/lucide-icons/lucide/0.468.0/icons/mail.svg)，与现有侧栏使用同系列线性 SVG。
+- 公告 HTML 转 Markdown：[Turndown 7.2.0](https://github.com/mixmark-io/turndown)，本地固定版本，保留 MIT 许可证。
 - 表情美术：Microsoft Fluent UI Emoji，下载到 `src/_logo/emoji`。
 - 预置角色头像与提示词：`src/_char`。
 - 预置知识库：`src/_rag_data`。
@@ -260,4 +271,4 @@ PDF、DOCX、XLSX、PPTX 可在本机提取文字或单元格内容；不会执�
 - WebDAV 同步在纯前端浏览器环境中需要服务器允许浏览器跨域请求；启用同步和连接测试会先做 CORS 探测。ZIP 和 WebDAV 数据目前不加密，配置和 API Key 会随本地备份数据保存。
 
 
-开发结构与版本记录分别见 [STRUCTURE.md](STRUCTURE.md) 和 [DEVELOP.md](DEVELOP.md)；操作教程位于 APP 内“使用说明”。
+开发结构与版本记录分别见 [STRUCTURE.md](STRUCTURE.md) 和 [DEVELOP.md](DEVELOP.md)；操作教程位于 APP 内“使用说明”。公告板回归可运行 `npm run test:announcements`，需要已安装的 Playwright / Chromium；可通过 `PLAYWRIGHT_MODULE` 和 `CHAT_TEST_BROWSER` 指定已有安装路径。测试默认自行启动本地静态服务器，也支持 `CHAT_TEST_URL` 指定已有服务器。

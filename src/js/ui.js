@@ -28,8 +28,10 @@ import { showSettingsNotice } from './settings_notice.js';
 import { listArchiveRecoveries, getArchiveRecoveryAvailability, exportArchiveRecovery, deleteArchiveRecovery } from './archive_sync.js';
 import { getRecoveryLimit, setRecoveryLimit } from './archive_state.js';
 import { bindExternalLinks } from './external_links.js';
+import { initAnnouncementBoard } from './announcements.js';
 
 let chatProviderPresets = null;
+let announcementBoard = null;
 
 const CHAT_MODEL_LOGO_PATHS = Object.freeze({
   mimo: 'src/_logo/llms/mimo.svg',
@@ -308,6 +310,7 @@ export function initUi() {
   installNativeBackHandler();
   initWebMcpServer({ getStore: () => state.store });
   bindGlobalEvents();
+  announcementBoard = initAnnouncementBoard({ renderMarkdown: renderMarkdownDocument, requestClose: () => closePanel('announcement-panel') });
   applyStoredConversationListWidth();
   syncSettingsToForm();
   renderAll();
@@ -3657,7 +3660,7 @@ function renderMarkdownDocument(markdown = '', options = {}) {
       paragraph.push(lines[index].trim());
       index += 1;
     }
-    html.push(`<p>${renderMarkdownInline(paragraph.join(' '), options)}</p>`);
+    html.push(`<p>${renderMarkdownInline(paragraph.join(options.preserveBreaks ? '\n' : ' '), options)}</p>`);
   }
   return `<article class="markdown-body">${html.join('')}</article>`;
 }
@@ -3734,6 +3737,7 @@ function renderMarkdownInline(text = '', options = {}) {
     .replace(/~~([^~]+)~~/g, '<del>$1</del>')
     .replace(/(^|[^\w])\*([^*\s][^*]*?)\*/g, '$1<em>$2</em>')
     .replace(/(^|[^\w])_([^_\s][^_]*?)_/g, '$1<em>$2</em>');
+  if (options.preserveBreaks) source = source.replace(/\n/g, '<br>');
   return tokens.reduce((result, html, index) => result.replace(new RegExp(`\\u0000${index}\\u0000`, 'g'), html), source);
 }
 
@@ -6577,6 +6581,7 @@ function openPanel(id, options = {}) {
     return;
   }
   document.getElementById(id)?.classList.remove('hidden');
+  if (id === 'announcement-panel') announcementBoard?.open();
   if (id === 'group-editor-panel') {
     prepareGroupEditor(options);
     renderGroupMemberPicker();
@@ -6602,6 +6607,7 @@ function openPanel(id, options = {}) {
 }
 
 function closePanel(id) {
+  if (id === 'announcement-panel') announcementBoard?.close();
   if (id === 'settings-panel') chatProviderPresets?.close();
   if (id === 'memory-node-panel') {
     closeMemoryNodePanel();

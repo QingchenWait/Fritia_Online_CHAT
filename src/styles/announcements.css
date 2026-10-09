@@ -1,0 +1,152 @@
+#announcement-btn {
+  position: relative;
+}
+
+.announcement-badge {
+  position: absolute;
+  top: -0.2rem;
+  right: -0.2rem;
+  display: grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding-inline: 0.22rem;
+  border: 0.125rem solid var(--surface);
+  border-radius: 999rem;
+  background: var(--danger);
+  box-shadow: 0 0.2rem 0.6rem rgba(217, 58, 58, 0.18);
+  color: white;
+  font-size: 0.625rem;
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+#announcement-panel {
+  background: rgba(40, 50, 90, 0.22);
+  backdrop-filter: blur(0.35rem);
+}
+
+#announcement-panel .announcement-shell {
+  min-height: 0;
+  border: 1px solid rgba(120, 140, 180, 0.2);
+  background: rgba(248, 250, 255, 0.97);
+  box-shadow: var(--shadow-floating);
+  backdrop-filter: blur(1.25rem);
+  animation: announcement-enter 180ms ease-out;
+}
+
+.announcement-head {
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.announcement-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.announcement-heading-icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.95rem;
+  background: var(--brand-gradient);
+  box-shadow: 0 0.3rem 0.8rem rgba(79, 99, 255, 0.16);
+}
+
+.announcement-heading-icon img {
+  width: 1.25rem;
+  height: 1.25rem;
+  filter: brightness(0) invert(1);
+}
+
+.announcement-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.announcement-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.announcement-card {
+  min-width: 0;
+  padding: clamp(1rem, 2.2vw, 1.5rem);
+  border: 1px solid var(--line);
+  border-radius: clamp(1rem, 1.8vw, 1.35rem);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0.4rem 1.1rem rgba(40, 60, 120, 0.035);
+  overflow-wrap: anywhere;
+}
+
+.announcement-card.is-unread {
+  border-color: rgba(99, 91, 255, 0.28);
+  background: linear-gradient(135deg, rgba(79, 99, 255, 0.075), rgba(108, 92, 255, 0.05)), var(--surface);
+  box-shadow: inset 0.2rem 0 0 rgba(99, 91, 255, 0.55), 0 0.4rem 1.1rem rgba(79, 99, 255, 0.055);
+}
+
+.announcement-card h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1.025rem, 1.25vw, 1.2rem);
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.announcement-meta {
+  margin: 0.35rem 0 0.85rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.65;
+}
+
+.announcement-content .markdown-body {
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.announcement-content .markdown-body > :first-child { margin-top: 0; }
+.announcement-content .markdown-body > :last-child { margin-bottom: 0; }
+.announcement-content .markdown-body pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.announcement-content .markdown-table-wrap { max-width: 100%; overflow: auto; }
+.announcement-content .markdown-body a { text-decoration: underline; text-underline-offset: 0.2em; }
+.announcement-content .markdown-body a:hover { color: var(--brand-strong); }
+
+.announcement-status {
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+
+#announcement-btn:focus-visible,
+#announcement-panel :is(button, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+#announcement-btn[aria-expanded="true"] { background: var(--surface-hover); }
+#announcement-btn:active { transform: scale(0.96); }
+
+@keyframes announcement-enter {
+  from { opacity: 0; transform: translateY(0.5rem) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #announcement-panel .announcement-shell { animation: none; }
+}

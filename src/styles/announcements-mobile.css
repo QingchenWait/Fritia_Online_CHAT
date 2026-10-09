@@ -1,0 +1,41 @@
+@media (max-width: 760px), (orientation: portrait) {
+  #announcement-panel {
+    place-items: center;
+    padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    height: var(--announcement-viewport-height, 100dvh);
+    bottom: auto;
+  }
+  #announcement-panel .announcement-shell {
+    width: min(42rem, 100%);
+    height: min(48rem, 100%);
+    max-height: 100%;
+    border-radius: 1.3rem;
+  }
+  .announcement-head { min-height: 4.25rem; padding: 0.8rem 1rem; }
+  .announcement-head h2 { font-size: 1.1rem; }
+  .announcement-scroll { padding: 0.85rem 0.85rem 1rem; }
+  .announcement-cards { gap: 0.8rem; }
+
+  .announcement-scroll,
+  .announcement-content .markdown-table-wrap {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 91, 255, 0.45) transparent;
+  }
+  .announcement-scroll::-webkit-scrollbar,
+  .announcement-content .markdown-table-wrap::-webkit-scrollbar { width: 0.4rem; height: 0.4rem; }
+  .announcement-scroll::-webkit-scrollbar-track,
+  .announcement-content .markdown-table-wrap::-webkit-scrollbar-track { background: transparent; }
+  .announcement-scroll::-webkit-scrollbar-thumb,
+  .announcement-content .markdown-table-wrap::-webkit-scrollbar-thumb {
+    border: 0.08rem solid transparent;
+    border-radius: 999rem;
+    background: rgba(99, 91, 255, 0.42);
+    background-clip: padding-box;
+  }
+  .announcement-scroll::-webkit-scrollbar-thumb:active { background-color: rgba(99, 91, 255, 0.65); }
+}
+
+/* Seven existing/new entries must fit the smallest supported mobile rail. */
+@media (max-width: 760px) {
+  .rail .rail-btn { width: clamp(1.875rem, calc((100vw - 4.375rem) / 7), 3rem); }
+}
