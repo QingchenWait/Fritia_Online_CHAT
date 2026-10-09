@@ -62,5 +62,8 @@ text = main.read_text(encoding='utf-8')
 text = text.replace('private static final String MODELSCOPE_LOGIN_URL = MODELSCOPE_ORIGIN + "/mcp?hosted=1";', 'private static final String MODELSCOPE_HOME_URL = MODELSCOPE_ORIGIN + "/mcp?hosted=1";\n    private static final String MODELSCOPE_LOGIN_URL = MODELSCOPE_ORIGIN + "/login";')
 text = text.replace('if (!isModelScopeUrl(currentUrl)) {\n            modelScopeReady = false;\n            modelScopeWebView.loadUrl(MODELSCOPE_LOGIN_URL);', 'if (visible || !isModelScopeUrl(currentUrl)) {\n            modelScopeReady = false;\n            modelScopeWebView.loadUrl(visible ? MODELSCOPE_LOGIN_URL : MODELSCOPE_HOME_URL);')
 text = text.replace('source.loadUrl(MODELSCOPE_LOGIN_URL);','source.loadUrl(MODELSCOPE_HOME_URL);')
+if 'archiveBridge.close();' not in text:
+    text = text.replace('protected void onDestroy() {', 'protected void onDestroy() {\n        if (archiveBridge != null) archiveBridge.close();', 1)
 main.write_text(text,encoding='utf-8')
+copy(project / 'tools/native/android/FritiaArchiveBridge.java', main.with_name('FritiaArchiveBridge.java'))
 print('Prepared v1.0.2 source trees:', new)

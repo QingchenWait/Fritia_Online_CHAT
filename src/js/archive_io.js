@@ -37,9 +37,31 @@ export async function archiveFetch(url, init) {
 // Call before collecting data, while the button's user activation is alive.
 export async function chooseArchiveDestination(filename) {
   if (window.FritiaArchive?.chooseFile) {
+    if (!['beginWrite', 'writeChunk', 'finishWrite', 'abortWrite'].every(method => typeof window.FritiaArchive[method] === 'function')) {
+      throw new Error('当前 Android 保存桥不支持分块写入，请安装更新后的客户端再导出备份。');
+    }
     const chosen = await androidCall('chooseFile', { filename, mime: 'application/zip' });
     if (chosen.cancelled) return null;
-    return async blob => androidCall('writeFile', { uri: chosen.uri, body: toBase64(new Uint8Array(await blob.arrayBuffer())) });
+    return async blob => {
+      const session = await androidCall('beginWrite', { uri: chosen.uri, size: blob.size });
+      try {
+        // One bounded message is in flight at a time; never materialize the
+        // entire ZIP as an ArrayBuffer/Base64/JSON bridge argument.
+        const chunkSize = Math.min(128 * 1024, Number(session.chunkBytes) || 128 * 1024);
+        if (!session.writeId || !Number.isSafeInteger(chunkSize) || chunkSize <= 0) throw new Error('Android 保存会话无效');
+        for (let offset = 0; offset < blob.size; offset += chunkSize) {
+          const bytes = new Uint8Array(await blob.slice(offset, offset + chunkSize).arrayBuffer());
+          const result = await androidCall('writeChunk', { writeId: session.writeId, offset, body: toBase64(bytes) });
+          if (result.written !== offset + bytes.length) throw new Error('Android 备份写入进度不一致');
+        }
+        const result = await androidCall('finishWrite', { writeId: session.writeId });
+        if (result.saved !== true || result.written !== blob.size) throw new Error('Android 备份文件未完整写入');
+        return result;
+      } catch (error) {
+        await androidCall('abortWrite', { writeId: session.writeId }).catch(() => {});
+        throw error;
+      }
+    };
   }
   const dialog = window.__TAURI__?.dialog;
   const fs = window.__TAURI__?.fs;

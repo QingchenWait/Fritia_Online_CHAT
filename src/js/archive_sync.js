@@ -6,6 +6,7 @@ import { archiveState, saveRecovery, deleteRecovery } from './archive_state.js';
 import { archiveFetch, chooseArchiveDestination } from './archive_io.js';
 import { stableJson, digestText } from './archive_merge.js';
 import { readLegacyArchive } from './archive_legacy.js';
+import { showSettingsNotice } from './settings_notice.js';
 
 const ARCHIVE_CONFIG_KEY = 'fritia_archive_sync';
 const ARCHIVE_SCHEMA_VERSION = 1;
@@ -117,6 +118,7 @@ export async function exportArchiveZip(options = {}) {
     lastStatus: '已创建本地备份'
   });
   setSyncStatus('idle', result?.browserDownload ? '已交给浏览器下载；此环境不支持指定路径，可在浏览器设置中开启下载前询问位置' : 'ZIP 备份已保存到所选位置', 1, options);
+  showSettingsNotice('备份 ZIP 包已成功导出');
   return { filename, size: blob.size };
 }
 
@@ -247,6 +249,7 @@ export async function exportArchiveRecovery(id, side = 'local') {
   const blob = createZipBlob(snapshotToFiles(snapshot));
   const result = await write(blob);
   setSyncStatus('idle', result?.browserDownload ? '恢复副本已交给浏览器下载' : '恢复副本已保存到所选位置', 1);
+  showSettingsNotice('备份 ZIP 包已成功导出');
   return { filename, size: blob.size };
 }
 

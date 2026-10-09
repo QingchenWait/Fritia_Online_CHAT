@@ -63,12 +63,15 @@ test('native file cancellation is respected; selected destination is used and cl
   let written;
   globalThis.window = { FritiaArchive: {
     chooseFile(raw) { const input=JSON.parse(raw); queueMicrotask(()=>window.__FRITIA_ARCHIVE_CALLBACK__(input.token,{uri:'content://user-selected'})); },
-    writeFile(raw) { written=JSON.parse(raw); queueMicrotask(()=>window.__FRITIA_ARCHIVE_CALLBACK__(written.token,{saved:true})); },
+    beginWrite(raw) { const input=JSON.parse(raw); assert.equal(input.uri,'content://user-selected'); queueMicrotask(()=>window.__FRITIA_ARCHIVE_CALLBACK__(input.token,{writeId:'session',chunkBytes:131072})); },
+    writeChunk(raw) { written=JSON.parse(raw); queueMicrotask(()=>window.__FRITIA_ARCHIVE_CALLBACK__(written.token,{written:3})); },
+    finishWrite(raw) { const input=JSON.parse(raw); queueMicrotask(()=>window.__FRITIA_ARCHIVE_CALLBACK__(input.token,{saved:true,written:3})); },
+    abortWrite() { throw Error('unexpected abort'); },
     clipboard(raw) { const input=JSON.parse(raw); queueMicrotask(()=>window.__FRITIA_ARCHIVE_CALLBACK__(input.token,{text:'clipboard-test'})); }
   } };
   try {
     const save = await chooseArchiveDestination('test.zip'); await save(new Blob(['ZIP']));
-    assert.equal(written.uri,'content://user-selected'); assert.equal(atob(written.body),'ZIP');
+    assert.equal(written.writeId,'session'); assert.equal(atob(written.body),'ZIP');
     assert.equal(await readClipboardText(),'clipboard-test');
     window.FritiaArchive.chooseFile = raw => { const input=JSON.parse(raw); queueMicrotask(()=>window.__FRITIA_ARCHIVE_CALLBACK__(input.token,{cancelled:true})); };
     assert.equal(await chooseArchiveDestination('test.zip'),null);

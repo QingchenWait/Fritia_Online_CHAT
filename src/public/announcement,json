@@ -1,0 +1,16 @@
+{
+
+    "1": {
+        "title": "v1.1.0 版本开发中",
+        "date": "2026-10-09",
+        "version": "v1.1.0",
+        "content": "新版本将增加公告板、对话选择性删除、grok 模型支持，敬请期待"
+    }
+    ,
+    "0": {
+        "title": "欢迎来到海姆休息室",
+        "date": "2026-10-01",
+        "version": "v1.0.2",
+        "content": "<p>欢迎分析员使用「海姆休息室」APP，这是您与您的恋人们聊天互动的 AI 终端。</p> <br> <ul> <li>介绍视频：<a href=\"https://www.bilibili.com/video/BV1S6aB63EC8\">BiliBili @CyanDust_青尘</a></li> <li>官网 &amp; 客户端下载：<a href=\"https://fritia.online/chatroom/\">https://fritia.online/chatroom/</a></li> <li>在线聊天：<a href=\"https://chat.fritia.online\">https://chat.fritia.online</a></li> </ul> <br> <p>本 APP 永久免费开源，欢迎您访问青尘工作室的 <a href=\"https://github.com/QingchenWait/Fritia_Online_CHAT\">GitHub 仓库</a> 反馈，或进行代码贡献！</p>"
+    }
+}

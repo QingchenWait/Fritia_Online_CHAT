@@ -1,5 +1,15 @@
 # DEVELOP
 
+## 2026-10-03 v1.0.2 Android ZIP 导出内存修复
+
+- 已在旧正式 APK + 全新 API 35 模拟器复现：加入 64 MiB 媒体条目后，使用真实系统路径选择器导出，留下 0 字节 ZIP；fritia-save-archive 线程因 OutOfMemoryError 退出。栈为 String.getBytes → Base64.decode → FritiaArchiveBridge.writeFile，单次申请 93,870,624 字节，Java heap growth limit 为 192 MiB。没有用户设备日志，不能断言所有 ROM 的闪退原因完全相同；此处修复已复现的根因。
+- 旧链路把整个 ZIP 同时持有为 Blob、ArrayBuffer、Base64/JSON 字符串，再在 Android 分配完整 UTF-8 和解码数组；catch(Exception) 不会处理 OutOfMemoryError。新链路使用 Blob.slice，每块最多 128 KiB，等待原生确认后继续，避免整包桥参数。不增大堆、不截断备份、不限制总备份大小。
+- Android beginWrite/writeChunk/finishWrite/abortWrite 使用单一串行 executor 和一次性目标 URI；校验会话、偏移、块长及最终字节数。成功 flush/close 后才返回 saved；失败释放本次输出流，未匹配会话不能影响另一个写入。Activity 销毁时关闭资源。没有删除源数据、没有自动删除选中文档或其他文件；失败/中断可能留下未完成目标文件，但不计为成功。
+- archive_sync 在完整 ZIP 和恢复副本导出完成后复用 showSettingsNotice，显示用户指定文字。Windows 原保存命令和网页保存路径不改；普通浏览器下载 API 无法确认最终落盘，保留原状态说明，提示代表生成并交给浏览器。
+- canonical 原生源码及集成/暂存脚本同时维护，防止以后从旧模板覆盖新桥。本轮只写入/构建外部 android_arm，Windows 文件哈希另行核对不变；版本 1.0.2、Android versionCode 10002、原证书不变，SW v46。
+- 参考 AOSP Base64 实现的整块分配与复制（https://github.com/aosp-mirror/platform_frameworks_base/blob/master/core/java/android/util/Base64.java），采用 Java OutputStream 的增量写入。Android 开发文档站点当时超时，未据未取得页面臆测 SAF 完成通知能力。
+- 新测试 test:archive-export 验证分块上限/字节一致性、错误中止、取消、旧桥拒绝和 Windows 原命令；test:archive-export:browser 验证两种尺寸的成功提示、失败/取消无提示、恢复副本及浏览器下载。旧 APK 复现日志、新 APK 的真实 SAF/ZIP CRC/内容和数据保留证据见外部 validation/zip-export 与 Android BUILD_PROCESS.md。
+
 ## 2026-10-03 v1.0.2 图谱触控 / 恢复副本上限
 
 - 知识图谱已有 Pointer Events 和 pointer capture，但画布未声明 touch-action，浏览器会接管手指平移并触发 pointercancel。仅为 #memory-graph-canvas 增加 touch-action:none，复用现有平移、节点和双指处理，不改全局页面手势及鼠标代码。原生 Android 和移动网页使用相同局部声明。依据 [W3C Pointer Events](https://www.w3.org/TR/pointerevents3/#the-touch-action-css-property)：取消 pointerdown 默认行为不能代替 touch-action 的手势声明。衍生源 long_term_memory.js 使用相同事件实现，没有另造手势层。

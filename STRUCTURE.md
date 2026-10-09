@@ -1,5 +1,13 @@
 # STRUCTURE
 
+## v1.0.2 Android 分块导出与成功提示（缓存 v46）
+
+- archive_io.js / chooseArchiveDestination：Android 要求分块保存桥，打开 SAF 后返回写入器；Blob.slice → beginWrite / writeChunk / finishWrite，逐块确认偏移，异常 abortWrite。不会整包调用 arrayBuffer 或 Base64；Windows 与网页分支保持原协议。
+- tools/native/android/FritiaArchiveBridge.java：SaveSession{id,size,written,output} 和串行 writer；beginWrite 消费用户选中的 URI，writeChunk 最大 128 KiB，finishWrite 校验总量并 flush/close，abortWrite 仅关闭匹配会话。close() 由 MainActivity.onDestroy 调用。
+- tools/native/apply_archive_bridges.py / prepare_v102_sources.py：安装规范桥源码及关闭钩子。此轮未运行同时写 Windows 的暂存脚本，只安装 Android 桥并调用 Android 构建器。
+- archive_sync.js / exportArchiveZip、exportArchiveRecovery：完成写入后使用 settings_notice.js 的既有 role=status 悬浮气泡；文字为“备份 ZIP 包已成功导出”，复用现有桌面/手机样式，不增加新布局。
+- tools/archive_export.test.mjs / archive_export_browser.mjs：分块协议、字节内容、取消/错误和提示时机回归。外部 validation/zip-export 保存原生旧包崩溃复现与最终 APK 实测。
+
 ## v1.0.2 图谱触控与副本上限（缓存 v45）
 
 - app.css / #memory-graph-canvas：touch-action:none 仅把画布直接触控交给既有 long_term_memory.js Pointer Events，不增加新的全局监听。

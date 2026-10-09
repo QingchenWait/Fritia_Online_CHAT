@@ -35,6 +35,10 @@ if args.android_root:
             marker = 'webView.addJavascriptInterface(new AndroidBridge(this), "FritiaAndroid");'
             assert marker in after
             after = after.replace(marker, marker + '\n        archiveBridge = new FritiaArchiveBridge(this, webView);', 1)
+        if 'archiveBridge.close();' not in after:
+            marker = 'protected void onDestroy() {'
+            assert marker in after
+            after = after.replace(marker, marker + '\n        if (archiveBridge != null) archiveBridge.close();', 1)
         write_checked(path, before, after)
         shutil.copy2(source / 'android/FritiaArchiveBridge.java', directory / 'FritiaArchiveBridge.java')
     libs = root / 'tools/archive-libs'

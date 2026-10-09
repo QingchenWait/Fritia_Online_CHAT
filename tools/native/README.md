@@ -36,3 +36,8 @@ Android 依赖来自 Maven Central 原始 JAR，不修改库源码：
 ### v1.0.2 图谱触控与恢复数量修复再打包
 
 本批只更新前端画布手势声明、恢复副本事务和数量控件；原生桥、包名、版本及证书不变。源码与产物继续位于授权的 chat_v1.0.2。验收使用真实 Chromium/WebView2 触控输入协议、专用 Android 模拟器和 recovery_limit_cases.mjs；本批报告存于 validation/graph-recovery，构建过程见两端 BUILD_PROCESS.md。
+
+
+### v1.0.2 Android ZIP 分块保存
+
+Android 保存桥改为 beginWrite / writeChunk / finishWrite / abortWrite，每次最多 128 KiB，按会话与偏移顺序写入 OutputStream；全部关闭成功才确认 saved。MainActivity.onDestroy 调用 close() 释放资源。集成脚本和未来暂存脚本均使用本目录规范源码。本批只构建 android_arm，没有生成或替换 Windows 客户端；共享前端的完成提示随下次 Windows 构建生效。旧客户端无法仅靠网页代码得到新原生方法，请使用新 APK。旧包 0KB/OOM 复现及大存档测试见外部 validation/zip-export。

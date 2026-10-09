@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v45';
+const CACHE_NAME = 'fritia-next-chat-v46';
 const CORE_ASSETS = [
   './',
   './index.html',
