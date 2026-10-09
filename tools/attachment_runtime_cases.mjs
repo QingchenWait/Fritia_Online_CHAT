@@ -119,6 +119,7 @@ export async function attachmentRuntimeCases(fixtures) {
     await roundtable.runRoundtableTurn({store:groupStore,conversation:group,characters:[character],triggerText:'@附件验证 继续普通文字聊天',onStore:s=>{groupStore=s;}});
     assert(groupStore.messages[group.id].at(-1).status==='sent','group chat recovers on the next plain-text turn');
     assert(!JSON.stringify(requests.at(-1).body).includes('group-unsupported.bin'),'group request and RAG context omit rejected file');
-    return {checks,requests:requests.length,blockedFixture:binary,conversationId:conversation.id};
+    return {checks,requests:requests.length,blockedFixture:binary,conversationId:conversation.id,
+      legacyError: store.messages[conversation.id].find(item => item.meta?.attachmentApiError?.length > 14000)};
   } finally { window.fetch=originalFetch; }
 }

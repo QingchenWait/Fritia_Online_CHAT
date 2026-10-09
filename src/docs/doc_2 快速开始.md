@@ -10,6 +10,7 @@
 - **小米 MiMO**: [https://platform.xiaomimimo.com/console/api-keys](https://platform.xiaomimimo.com/console/api-keys)
 - **硅基流动**: [https://cloud.siliconflow.cn/me/account/ak](https://cloud.siliconflow.cn/me/account/ak)
 - **千问 Qwen**: [https://bailian.console.aliyun.com/?tab=model#/api-key](https://bailian.console.aliyun.com/?tab=model#/api-key)
+- **Grok / xAI**：[https://console.x.ai/](https://console.x.ai/)
 - **GPT 中转站**: [示例站点](https://www.onetopai.com/register?aff=edZL) (中转站虽然便宜，但服务不如官方稳定，请谨慎选择)
 
 其中，小米 MiMO 的 API 也可以用于本 APP 中的角色语音功能。
@@ -19,7 +20,7 @@
 需要配置至少一个 AI 大模型服务商，才可以和角色开始聊天。
 
 1. 点击侧边栏底部中的设置图标（齿轮）。
-2. 进入 [大模型] 页面，点击 [对话] 栏目中的 `+ 新增` 按钮，在按钮下方选择 DeepSeek、MiMO、Qwen、OpenAI、GLM、Kimi、本地模型或自定义。选择预设后会自动填写名称、Base URL 和模型名称；重复名称会自动追加序号。
+2. 进入 [大模型] 页面，点击 [对话] 栏目中的 `+ 新增` 按钮，在按钮下方选择 DeepSeek、MiMO、Qwen、OpenAI、GLM、Kimi、Grok、本地模型或自定义。选择预设后会自动填写名称、Base URL 和模型名称；重复名称会自动追加序号。
 3. `配置名称` 不与其他模型重复即可；`API Key` 填写你从供应商获取的密钥。输入栏右侧“获取”图标会按 **Base URL 输入框当前内容** 打开对应官网，修改网址后无需先保存；未知网址时按钮置灰。网页端打开新标签，客户端打开系统浏览器。
 4. 预设的 Base URL 和模型名称如下，也可根据自己的服务商配置修改：
 
@@ -31,6 +32,7 @@
    | OpenAI | `https://api.openai.com/v1` | `gpt-6-luna` |
    | GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-5.3-flash` |
    | Kimi | `https://api.moonshot.cn/v1` | `kimi-k3` |
+   | Grok | `https://api.x.ai/v1` | `grok-4.7` |
    | 本地模型 | `http://localhost:1234/v1` | 留空，使用前填写已加载模型 ID |
 
    其他兼容服务的配置示例：
@@ -46,6 +48,8 @@
 填写完成以后，点击 `保存配置` 按钮 (**不是保存模型设置按钮**)，保存上述 API 配置。
 
 您可以添加多个对话模型 API 服务商。
+
+新请求产生报错气泡时，本轮失败输入及其附件引用、错误气泡仅临时显示，不进入后续上下文、长期记忆和最终聊天存档，重启后消失。正常回复、语音合成失败时的正常文字回复，以及旧版历史报错都不会据此删除。
 
 ## 🎙️ 配置声音模型
 

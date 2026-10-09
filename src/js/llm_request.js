@@ -3,6 +3,7 @@ import { applyModelReasoningBody, mergeReasoningDelta } from './model_reasoning.
 import { isLmStudioProvider, requestLmStudioCompletion } from './lm_studio.js';
 import { requestWithAttachments, classifyAttachmentApiError } from './attachment_inputs.js';
 import { assertModelResponse } from './attachment_state.js';
+import { isDeepSeekMaxReply } from './deepseek_reply.js';
 
 const IMAGE_UNSUPPORTED_RE = /(image|vision|multimodal|image_url|input image|图片|图像).*(unsupported|not supported|不支持|无法|不能)|unsupported.*(image|vision|multimodal|image_url)/i;
 
@@ -75,6 +76,7 @@ function providerImageInputSupport(provider) {
     /vision|multimodal|omni|image|pixtral/,
     /claude-3|claude-sonnet|claude-opus|claude-haiku/,
     /gemini/,
+    /(?:^|\/)grok-(?:4|2-vision)/,
     /mimo-v2\.5/,
     /qwen[\w.-]*(?:vl|omni|vision)/,
     /glm-[\w.-]*v/,
@@ -120,13 +122,22 @@ async function fetchCompletion(provider, body, onCompletion, attachmentIssues, d
   }
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
-    const json = await response.json();
+    let json;
+    if (isDeepSeekMaxReply(provider, body)) {
+      const raw = await response.text();
+      try { json = JSON.parse(raw); }
+      catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        onCompletion?.({ content: raw }, provider);
+        return raw.trim();
+      }
+    } else json = await response.json();
     assertModelResponse(json);
     onCompletion?.(json?.choices?.[0]?.message || {}, provider);
     return extractCompletionText(json).trim() || JSON.stringify(json);
   }
   if (!response.body) throw new Error('API 没有返回可读取内容');
-  return readCompletionStream(response, message => onCompletion?.(message, provider));
+  return readCompletionStream(response, message => onCompletion?.(message, provider), isDeepSeekMaxReply(provider, body));
   });
 }
 
@@ -147,7 +158,7 @@ function extractCompletionText(json) {
     || '';
 }
 
-async function readCompletionStream(response, onCompletion) {
+async function readCompletionStream(response, onCompletion, preserveEmptyFallback = false) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -176,6 +187,7 @@ async function readCompletionStream(response, onCompletion) {
     if (done) break;
   }
   onCompletion?.({ content: output, ...reasoning });
+  if (preserveEmptyFallback && !output.trim()) return JSON.stringify({ choices: [{ message: { content: output, ...reasoning } }] });
   return output.trim();
 }
 

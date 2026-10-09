@@ -14,6 +14,17 @@ try {
     const result=await page.evaluate(attachmentRuntimeCases,attachmentFixtures());
     assert.ok(result.checks.length>=35);
     console.log(`PASS ${viewport.width}: ${result.checks.length} attachment cases (${result.requests} controlled API requests)`);
+    // New failed rounds are transient. Retain a separately seeded pre-update
+    // error to continue validating legacy quarantine recovery from backups.
+    await page.locator('.conversation-item').filter({hasText:'附件测试'}).first().click();
+    assert.ok(await page.locator('.is-attachment-error').count());
+    assert.ok((await page.locator('.is-attachment-error details pre').last().textContent()).length>14000);
+    const hasNewErrors = await page.evaluate(id => JSON.parse(localStorage.getItem('fritia_next_chat_store')).messages[id].some(item => item.meta?.attachmentInputError), result.conversationId);
+    assert.equal(hasNewErrors,false,'new failed replies are not persisted');
+    await page.evaluate(async ({id,error}) => {
+      const storage=await import('/src/js/storage.js');
+      storage.appendMessage(storage.loadAppStore(),id,{...error,id:'pre-update-attachment-error'});
+    },{id:result.conversationId,error:result.legacyError});
     await page.reload();await page.waitForFunction(()=>document.querySelector('.conversation-item'));
     const persistent=await page.evaluate(async fixture=>{
       const {buildModelMessageContent}=await import('/src/js/llm_media.js');

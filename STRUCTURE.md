@@ -1,5 +1,45 @@
 # STRUCTURE
 
+## v1.1.0 DeepSeek 原生协议与兜底（2026-10-09，缓存 v50）
+
+| 文件 / API | 作用 |
+| --- | --- |
+| src/js/deepseek_reply.js / isDeepSeekMaxReply | 检查官方域名、DeepSeek 模型与 thinking=enabled / reasoning_effort=max |
+| applyDeepSeekMaxReplyBoundary | 请求端直接作答约束、stream=true；不强制 JSON，不分析或改写已生成正文 |
+| model_reasoning.js / applyModelReasoningBody | 保留极限参数，仅目标请求采用原生流式通道 |
+| chat_engine.js / requestOpenAICompatible | 恢复原调用方式，无 finalReplyOnly 或 reply 字段协议 |
+| llm_request.js / fetchCompletion | 优先正文，空正文保留 JSON.stringify 原始响应；目标请求误标 JSON 的文本也保留 |
+| readCompletionStream | 正文与独立思考分别累积，非 JSON 文本继续兜底；max 纯思考流保留可用响应字段 |
+| tools/deepseek_reply_regression.test.mjs、deepseek_reply_browser.mjs | 普通文本、无 reply JSON、非 JSON/空正文兜底、两端发送与刷新回归 |
+
+不新增持久化键、角色字段或 UI 元素。正常响应的 reasoning_content 继续位于既有 message.meta.reasoning，正文位于 message.text。用户要求的原始响应兜底保留，兜底信息可能包含独立思考字段。不存在强制 JSON、格式错误拒绝或本地思考关键词删句。真实 HTTP/API 错误继续走原错误处理。
+
+## v1.1.0 Grok 与失败轮次映射（2026-10-09，缓存 v48）
+
+| 文件 / API | 职责 |
+| --- | --- |
+| model_provider_presets.js / CHAT_PROVIDER_PRESETS | Grok 默认名称、Base URL、模型、控制台网址和 X Logo |
+| model_reasoning.js / hasReasoningCapability、getModelReasoningProfile、applyModelReasoningBody | 能力类型检查；Grok 四档与协议参数；拒绝参数清理 |
+| src/_logo/llms/grok.svg | 联网下载的 Simple Icons X 单色资源；复用原 CSS 规定的尺寸和颜色 |
+| grok_inputs.js / isNativeGrokProvider、transcribeGrokAudio、grokVideoFrames | 原生 xAI STT、运行中转写缓存、浏览器视频画面均匀取样；不写入独立持久状态 |
+| attachment_inputs.js / prepareAttachmentRequest | 官方 Grok 音频转换；其余格式沿用现有附件处理和最终私有字段清理 |
+| llm_media.js / buildModelMessageContent、buildAttachmentContentParts | 可选 provider 参数，将原生 Grok 视频转换为图片帧；其他模型原行为保留 |
+| failed_turns.js / markFailedTurn、isFailedTurnMessage、filterFailedTurnHistory、persistentChatStore | 当前运行期间的精确失败 ID 集合；只过滤本次登记的消息，不分析正文或历史 status |
+| storage.js / saveAppStore | 持久化过滤后的 store，仍返回/广播完整运行中 store；不修改存储版本 |
+| message.meta.modelReplySucceeded / attachment_state.js | 成功请求的正向标记；正常 JSON 错误示例不被旧附件错误文本兼容逻辑误判 |
+| chat_engine.js / completePrivateMessageReply、requestCharacterReply | 请求失败登记本轮 user/assistant IDs；未来上下文/RAG/记忆排除；成功回复后异常保护 |
+| tool_chat_engine.js / completeToolPrivateMessageReply、getResumableToolState | 新失败输入/错误回复临时显示、无失败续跑快照；旧版与手动停止兼容 |
+| tool_chat_engine.js / requestToolAwareCompletion、normalizeToolCalls、extractMcpResultAttachments、normalizeGeneratedAttachments | 导出的原工具请求/结果处理函数，供 Grok 群聊复用 |
+| roundtable.js / runRoundtableTurn、requestGrokGroupTools | triggerMessageId 精确关联；运行中群模型/强度；MCP 循环、工具附件与群 JSON；部分成功正常消息保护 |
+| ui.js / getActiveChatModelContext、canUseConversationMcp | 私聊角色键与群聊临时键；Grok 群聊 MCP 入口；现有横竖屏菜单继续适配 |
+| ui.js / commitOutgoingMessage、sendMessageToActiveConversation | 提交和渲染分离，真实存储错误仍阻止发送 |
+| tools/grok_regression.test.mjs、grok_browser.mjs | 元数据结构、Grok 协议、运行时失败隔离和真实两端 UI |
+| tools/fixtures/grok-video.webm、WPT-LICENSE.md、README.md | 814 字节 WPT VP8 解码夹具及许可来源；不属于 APP 运行资源 |
+
+不新增持久化键或迁移。失败索引为 `Map<conversationId, Set<messageId>>`，只有当前请求的异常分支可登记。返回 UI 的 store 保留临时错误气泡，序列化到 `fritia_next_chat_store` 时排除已登记 ID；重启清空运行时集合，旧错误记录仍照常读取。同一群输入已得到正常回复时不排除该输入，失败成员的消息独立登记。
+
+横屏和竖屏复用原 `model-provider-presets-desktop/mobile.css/js` 和 `chat-model-picker-desktop/mobile.css` 的菜单尺寸、自绘滚动条与视口定位；新增 Logo 使用统一 img 规则，没有新布局或图标绘制。官方 Grok 的视频仅传画面取样，音频独立 STT 后传文本。
+
 ## v1.1.0 公告板结构与映射（2026-10-09，缓存 v47）
 
 | 文件 / API / 元素 | 职责 |
@@ -452,6 +492,12 @@ fritia_online_next_chat/
 ├── sw.js
 ├── tools/
 │   ├── announcements_browser.mjs
+│   ├── grok_regression.test.mjs
+│   ├── grok_browser.mjs
+│   ├── fixtures/
+│   │   ├── grok-video.webm
+│   │   ├── WPT-LICENSE.md
+│   │   └── README.md
 │   ├── build_static.mjs
 │   └── static_server.mjs
 ├── README.md
@@ -476,6 +522,9 @@ fritia_online_next_chat/
     │       ├── Cherno_Voice.mp3
     │       └── char_cherno_prompt.txt
     ├── _logo/
+    │   ├── llms/
+    │   │   ├── grok.svg
+    │   │   └── *.svg
     │   ├── emoji/
     │   │   ├── chat.svg
     │   │   ├── robot_3d.png
@@ -499,6 +548,8 @@ fritia_online_next_chat/
     │       ├── LICENSE
     │       └── turndown.js
     ├── js/
+    │   ├── failed_turns.js
+    │   ├── grok_inputs.js
     │   ├── announcements.js
     │   ├── announcements_desktop.js
     │   ├── announcements_mobile.js

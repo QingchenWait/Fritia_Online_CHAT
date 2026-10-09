@@ -1,5 +1,35 @@
 # DEVELOP
 
+## 2026-10-09 v1.1.0 撤回 DeepSeek JSON 方案、恢复兜底
+
+- 用户真实界面确认上一方案导致正常对话出现“DeepSeek 未返回约定的最终回复 JSON”。此前模拟测试只证明预设 JSON 成功路径，不能证明真实模型总遵守该约定；该方案已撤回。版本仍为 1.1.0，未打包。
+- 删除强制 json_object、reply 字段解析及空正文/非 JSON 流式载荷的新增拒绝条件。普通正文、模型自行返回的 JSON、原始 JSON 响应兜底和非 JSON 文本兜底恢复；真正 HTTP / API error 仍按原规则处理，不把它们伪装成成功。
+- 官方 DeepSeek thinking=max 请求改用原生 stream=true；读取 delta.content 与 delta.reasoning_content 各自字段。请求端仅保留直接作答、避免自我复盘的自然语言约束，保留用户明确要求的分析/评论和既有群聊/工具格式，不加入关键词删句、思考降档、生成截断或额外模型调用。
+- 兼容服务端忽略流式参数后返回普通 JSON，也兼容 JSON 响应头下的原始文本。空 JSON 正文继续返回完整原始响应；极限档纯思考 SSE 返回已有字段组成的可用响应兜底，避免只剩新增的格式报错。原始兜底可含思考信息，这是用户要求保留的既有兼容行为，不能宣称兜底时已保证不含思考。
+- 修改不涉及角色、特殊模式源提示词、历史消息、设置字段、其他模型/档位或持久化版本。SW 升为 v50，更新同名模块，防止旧 JSON 解析代码继续加载。
+- 6 项针对性单元和桌面 1440×1000 / 手机 390×844 回归通过，覆盖特殊模式开关、原始文本、无 reply 的 JSON、误标 JSON 的文本、非 JSON SSE、空 JSON / SSE 兜底、独立思考字段、刷新和无新增格式错误；既有思考协议 9 项与 Grok 单元 5 项通过。验证为受控响应，未调用真实收费接口。此次已修复人为 JSON 报错回归；原始偶发点评是否在官方 content 内生成，仍需原始响应判断，原生流式与提示约束不构成零概率保证。
+
+## 2026-10-09 v1.1.0 DeepSeek 极限档正文与思考边界（JSON 方案已撤回）
+
+- 用户确认模型为官方 `deepseek-flash / https://api.deepseek.com/v1`，特殊模式开关均可能发生。请求的 `thinking.type=enabled / reasoning_effort=max` 与官方文档一致，正常 JSON/SSE 读取没有直接拼接 reasoning_content。截图不足以确定该次原始响应的字段归属；特殊模式中要求展示计划/分析/反思的指令属于潜在诱因，不能作为关闭该模式时问题的唯一解释。
+- 确认一处协议隐患：普通 JSON 响应正文为空时会返回 JSON.stringify(整个响应)，可能连同 reasoning_content 展示。极限档修复此兜底；流式格式异常也不再将未解析的载荷拼入正文。错误提示不携带原始思考文本，不扫描或删除历史消息。
+- `deepseek_reply.js` 仅对官方 api.deepseek.com 的 DeepSeek thinking=max 请求添加系统级输出通道约定。普通私聊通过官方 `response_format: {type:'json_object'}` 请求只有 reply 一个字段的回复；完整思考保持在 reasoning_content，客户端只做字段解析与结构验证，不做关键词/正则删句，不降低思考强度，不设置 max_tokens，不截断生成内容，也不增加第二次模型请求。
+- JSON 回复缺失、空值、额外字段或无效格式按本轮协议错误处理，不回退显示原始包。用户明确要求的分析/点评属于正式回复，保持原文本；原角色设定、特殊模式提示词文件、存储结构、其他档位、其他提供商及已有工具/群聊 JSON 格式均不改写。
+- 官方依据：[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode) 规定正文与思考独立字段；[JSON Output](https://api-docs.deepseek.com/guides/json_mode) 支持 json_object 并要求提示词包含 json 与格式示例。没有使用未文档化的“关闭返回思考”参数；极限思考时 API 原始包仍可包含独立思考字段，本次约束的是给用户的正文。
+- 版本保持 1.1.0；SW 升为 v49，新增模块加入离线资源。新增 6 项协议回归和桌面 1440×1000 / 手机 390×844 浏览器验证，覆盖原档位、特殊模式开关、原始回复字段、思考独立存储、普通点评保留、空正文/异常 SSE、原格式不变和刷新。既有思考协议 9 项与 Grok 单元 5 项通过。模型响应均为受控夹具，未调用真实收费接口；因此不将测试结果表述为真实官方模型随机问题的统计复现或零概率保证。未做打包。
+
+## 2026-10-09 v1.1.0 Grok、模型元数据兼容与失败轮次隔离
+
+- 遵循 `.agents/fritia_chat_dev_agent.md` 和 UI 规则，版本保持 `1.1.0`，SW 升为 `v48`。仅修改模型配置/请求、发送错误处理、失败轮次及相关文档和回归；未运行 build、原生客户端或打包。
+- Grok 预设为 `Grok / https://api.x.ai/v1 / grok-4.7`，获取网站为 `https://console.x.ai/`。X 图标从 [Simple Icons](https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/x.svg) 下载，沿用现有 Logo 尺寸与单色样式，资源项目使用 CC0。聊天模型入口复用现有两端菜单、滚动条与思考进度段，群聊采用独立的临时 `group:<conversation-id>` 运行键，不改配置字段。
+- 核对 xAI 官方 [思考参数](https://docs.x.ai/developers/model-capabilities/text/reasoning.md)、[Chat Completions](https://docs.x.ai/developers/rest-api-reference/inference/chat-completions.md)、[图片](https://docs.x.ai/developers/model-capabilities/images/understanding.md)、[STT](https://docs.x.ai/developers/model-capabilities/audio/speech-to-text.md) 和 [函数调用](https://docs.x.ai/developers/tools/function-calling.md)：Grok 4.7 / 4.6 支持 low/medium/high/xhigh、默认 high、不可禁用；4.5 不提供 xhigh。Grok 4 请求清理不接受的 presence_penalty / frequency_penalty / stop，不截断 LLM 输出。
+- `grok_inputs.js` 仅对官方 api.x.ai 做音频 / 视频适配：音频使用 `/stt` + `grok-voice-transcribe-2.0`，multipart 的 file 位于最后，认证仍发送给配置的同一端点；最多缓存 8 个转写 Promise，失败移除。视频使用浏览器解码、最多 12 个均匀取样画面（不处理音轨），附时间点并缩放至 768 边长；读取失败显式报错。PDF/Office 继续复用现有本地解析。视频测试采用 WPT 的有效 VP8 文件及 BSD-3-Clause 许可，没有引入运行时媒体库。
+- 截图中的 `metadata?.capabilities?.includes is not a function` 来自模型元数据能力字段为对象。新增类型检查兼容数组、字符串、明确的对象布尔/支持字段及缺失/异常值；未知能力不臆测档位。`commitOutgoingMessage()` 仅负责存储提交，后续渲染错误不再被误报为持久化失败；真正 localStorage 写入失败仍阻止发送。
+- `failed_turns.js` 只在当前请求确认失败的 catch 分支登记 conversation + message IDs。`saveAppStore()` 写入时过滤这些 ID，返回/广播完整运行中 store 供当前气泡展示；不靠正文关键词或历史 status 推断，不扫描删除历史。私聊/工具/群聊在构造请求及 RAG/记忆历史前过滤已登记 ID，失败不采集本轮记忆。新失败工具 trace 不保存可续跑快照；手动停止、上限暂停及旧历史兼容保持。
+- 群聊传递精确 triggerMessageId，失败后跳过尚未处理的同一失败触发事件；如果本次队列已有角色成功响应该输入，则保留正常输入和已成功回复，仅排除失败成员。群聊 Grok MCP 复用原工具请求、工具定义、权限和附件提取函数，最终仍验证群聊 JSON；完成 trace 明确显示完成，原请求预算与 50 步边界保留。
+- 正常 LLM 回复后发生 TTS / 记忆保存 / UI 回调错误不应被重新判为模型失败；私聊通过 replyReceived，工具通过 completed 保护已成功消息。成功回复保存 modelReplySucceeded 正向标记，防止正常 JSON 错误示例被旧附件错误文本兼容逻辑误判；历史规则保持兼容。底层附件文件不自动删除，避免波及正常消息及共享媒体；聊天中的失败引用不会进入最终持久化 store。
+- 已通过 Node 思考协议回归 9 项、Grok/元数据/失败 ID/STT/正常 JSON 示例 5 项、模型预设 6 项、附件单元 6 项；Grok 浏览器每端 53 项（1440×1000 / 390×844），覆盖截图、四档、图片/音频/文档/真实 VP8 视频、私聊/群聊 MCP、HTTP/网络/200 error/SSE error、下一轮上下文与记忆隔离、刷新、TTS 与部分成功群聊保护。既有预设浏览器 5 个尺寸及附件浏览器每端 51 项通过，包括原文件、旧历史隔离恢复和真实文件选择器。所有模型/MCP/STT 响应为受控夹具，未调用真实付费 xAI 服务。
+
 ## 2026-10-09 v1.1.0 公告板
 
 - 遵循 `.agents/fritia_chat_dev_agent.md` 与 `src/ui_rules/ui_design_rules.md`；保留用户已有 agent 文件修改。新增公告板及必要的侧栏适配、文档、版本和离线资源映射，不做打包。

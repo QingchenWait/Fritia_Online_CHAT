@@ -38,6 +38,7 @@ const CHAT_MODEL_LOGO_PATHS = Object.freeze({
   qwen: 'src/_logo/llms/qwen.svg',
   deepseek: 'src/_logo/llms/deepseek.svg',
   kimi: 'src/_logo/llms/kimi.svg',
+  grok: 'src/_logo/llms/grok.svg',
   glm: 'src/_logo/llms/glm.svg',
   gpt: 'src/_logo/llms/openai.svg',
   default: 'src/_logo/icons/bot.svg'
@@ -829,9 +830,14 @@ function appHelpStatusText() {
   return `${state.appHelp.docs.length} 篇文档`;
 }
 
+function canUseConversationMcp(conversation) {
+  if (conversation?.type === 'private') return true;
+  return conversation?.type === 'group' && /(?:^|\/)grok-/i.test(getCharacterChatRuntime(`group:${conversation.id}`).provider.model);
+}
+
 function toggleMcpPicker() {
   const conversation = getActiveConversation();
-  if (!conversation || conversation.type !== 'private') return;
+  if (!canUseConversationMcp(conversation)) return;
   state.mcpPickerOpen = !state.mcpPickerOpen;
   renderMcpPicker();
 }
@@ -860,14 +866,14 @@ function renderMcpPicker() {
   const button = document.getElementById('external-tools-toggle-btn');
   if (!popover || !button) return;
   const conversation = getActiveConversation();
-  const isPrivate = conversation?.type === 'private';
+  const isAvailable = canUseConversationMcp(conversation);
   const clients = getAvailableMcpClients();
-  const selectedIds = new Set(isPrivate ? getSelectedMcpClientIds(conversation.id) : []);
-  button.classList.toggle('hidden', !isPrivate);
+  const selectedIds = new Set(isAvailable ? getSelectedMcpClientIds(conversation.id) : []);
+  button.classList.toggle('hidden', !isAvailable);
   button.classList.toggle('is-active', selectedIds.size > 0);
   button.setAttribute('aria-pressed', String(selectedIds.size > 0));
-  button.setAttribute('aria-expanded', String(state.mcpPickerOpen && isPrivate));
-  if (!isPrivate || !state.mcpPickerOpen) {
+  button.setAttribute('aria-expanded', String(state.mcpPickerOpen && isAvailable));
+  if (!isAvailable || !state.mcpPickerOpen) {
     popover.classList.add('hidden');
     return;
   }
@@ -1006,6 +1012,12 @@ function sendMessageToActiveConversation(text, attachments = []) {
     notifyPersistenceFailure(error);
   }
   if (!committed) return null;
+  try {
+    chatScrollController?.followLatest();
+    updateStore(committed.store);
+  } catch (error) {
+    console.warn('[ui] outgoing message render failed', error);
+  }
   continueConversationAfterOutgoing(committed);
   return committed;
 }
@@ -1033,8 +1045,6 @@ function commitOutgoingMessage(text, attachments = []) {
     ...(toolMode ? { meta: { toolMode: true } } : {})
   };
   const store = appendMessage(state.store, conversation.id, message);
-  chatScrollController?.followLatest();
-  updateStore(store);
   return {
     store,
     conversation: store.conversations.find(item => item.id === conversation.id) || conversation,
@@ -1052,12 +1062,16 @@ function continueConversationAfterOutgoing(committed) {
   const { store, conversation, message } = committed;
   if (!conversation) return;
   if (conversation.type === 'group') {
+    const chatRuntime = buildCharacterChatSettings(`group:${conversation.id}`);
     runRoundtableTurn({
       store,
       conversation,
       characters: store.characters,
       triggerText: message.text,
       triggerAttachments: message.attachments || [],
+      triggerMessageId: message.id,
+      chatSettings: chatRuntime.settings,
+      reasoningEffort: chatRuntime.reasoningEffort,
       onStore: updateStore
     }).catch(error => {
       console.warn('[ui] roundtable turn failed', error);
@@ -1189,7 +1203,7 @@ function bindChatModelControl() {
   control?.addEventListener('click', event => {
     event.stopPropagation();
     const conversation = getActiveConversation();
-    if (conversation?.type !== 'private') return;
+    if (!getActiveChatModelContext()) return;
     state.chatModelPickerOpen = !state.chatModelPickerOpen;
     if (state.chatModelPickerOpen) {
       closeStickerPopover();
@@ -1208,14 +1222,14 @@ function bindChatModelControl() {
   });
   document.getElementById('lm-studio-connect-btn')?.addEventListener('click', event => {
     event.stopPropagation();
-    const character = getActivePrivateCharacter();
+    const character = getActiveChatModelContext();
     if (!character) return;
     const runtime = getCharacterChatRuntime(character.id);
     connectLmStudio(runtime);
   });
   document.getElementById('lm-studio-config-btn')?.addEventListener('click', event => {
     event.stopPropagation();
-    const character = getActivePrivateCharacter();
+    const character = getActiveChatModelContext();
     const runtime = character ? getCharacterChatRuntime(character.id) : null;
     if (runtime?.provider && isLmStudioProvider(runtime.provider)) {
       state.selectedChatProviderId = runtime.provider.id;
@@ -1229,8 +1243,14 @@ function bindChatModelControl() {
   popover?.addEventListener('click', event => event.stopPropagation());
 }
 
+function getActiveChatModelContext() {
+  const conversation = getActiveConversation();
+  if (conversation?.type === 'group') return { id: `group:${conversation.id}`, name: conversation.title };
+  return getActivePrivateCharacter();
+}
+
 async function refreshChatReasoningProfile() {
-  const character = getActivePrivateCharacter();
+  const character = getActiveChatModelContext();
   if (!character) return;
   const { provider } = getCharacterChatRuntime(character.id);
   if (isLmStudioProvider(provider)) return;
@@ -1252,13 +1272,11 @@ function renderChatModelControl() {
   if (!control || !progress || !popover || !options || !modelName || !modelTrigger || !submenu) return;
 
   const conversation = getActiveConversation();
-  const character = conversation?.type === 'private'
-    ? getCharacterById(state.store.characters, conversation.memberIds[0])
-    : null;
+  const character = getActiveChatModelContext();
   const enabled = Boolean(character);
   control.setAttribute('aria-disabled', String(!enabled));
   if (!enabled) {
-    control.title = '模型切换仅适用于角色私聊';
+    control.title = '请先选择私聊或群聊';
     control.setAttribute('aria-label', control.title);
     if (controlIcon) controlIcon.src = CHAT_MODEL_LOGO_PATHS.default;
     if (currentModelIcon) currentModelIcon.src = CHAT_MODEL_LOGO_PATHS.default;
@@ -1405,6 +1423,7 @@ function renderChatModelSubmenu(characterId, runtime, container) {
         providerId: provider.id,
         reasoningEffort: profile.defaultValue
       });
+      renderMcpPicker();
       state.chatModelSubmenuOpen = false;
       renderChatModelControl();
       refreshChatReasoningProfile();
@@ -6716,11 +6735,14 @@ function scheduleRoundtableIdle() {
     if (!active || active.id !== conversation.id || active.type !== 'group') return;
     const activeSettings = normalizeGroupSettings(active.groupSettings);
     if (!activeSettings.idleTalk || !activeSettings.autoBotChat) return;
+    const runtime = buildCharacterChatSettings(`group:${active.id}`);
     await runRoundtableTurn({
       store: state.store,
       conversation: active,
       characters: state.store.characters,
       triggerText: '',
+      chatSettings: runtime.settings,
+      reasoningEffort: runtime.reasoningEffort,
       onStore: updateStore
     });
   }, delay);

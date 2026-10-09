@@ -16,6 +16,7 @@ import {
 } from './mcp_tools.js';
 import { isLmStudioSettings, isLmStudioProvider, requestLmStudioCompletion } from './lm_studio.js';
 import { needsOpenAIResponses, requestOpenAIResponses } from './openai_responses.js';
+import { markFailedTurn, filterFailedTurnHistory, isFailedTurnMessage } from './failed_turns.js';
 
 const PLAYER_NAME = '分析员';
 const MAX_TOOL_AGENT_STEPS = 50;
@@ -38,6 +39,7 @@ export async function completeToolPrivateMessageReply({
 }) {
   if (!store || !conversation || !character) return null;
   const typingId = createId('tool_typing');
+  let completed = false;
   const resumeState = getResumableToolState(store, conversation.id, text, selectedClientIds);
   const resumeUserText = resumeState?.userText || text;
   let trace = createInitialTrace(selectedClientIds, resumeState);
@@ -62,6 +64,7 @@ export async function completeToolPrivateMessageReply({
         toolTrace: trace
       }
     });
+    if (patch.status === 'sent') completed = true;
     onStore?.(nextStore, { source: 'tool', status: patch.status || 'typing', messageId: typingId });
   };
   let agentMessagesForResume = [];
@@ -303,6 +306,7 @@ export async function completeToolPrivateMessageReply({
       text: reply,
       attachments: finalAttachments.map(prepareToolAttachmentForPersistence),
       meta: {
+        modelReplySucceeded: true,
         ...(attachmentIssues.length ? { attachmentIssues } : {}),
         reasoning: finalReasoning,
         reasoningProvider: reasoningProviderKey(getDefaultChatProvider(settings)),
@@ -324,6 +328,7 @@ export async function completeToolPrivateMessageReply({
     }
     return reply;
   } catch (error) {
+    if (completed) throw error;
     if (agentMessagesForResume.length) {
       trace = setTraceResumeState(trace, {
         userText: resumeUserText,
@@ -340,10 +345,11 @@ export async function completeToolPrivateMessageReply({
       stoppedByUser ? '本轮工具对话已停止，可发送“继续”从中断点续跑。' : '本轮工具对话异常中断，可发送“继续”从中断点续跑。'
     );
     const attachmentFailure = error?.kind === 'attachment-input';
-    if (attachmentFailure) {
+    if (!stoppedByUser) {
+      markFailedTurn(conversation.id, [userMessage?.id, typingId]);
       // This failed input must not become an automatically resumable request.
       const { resumeState, interrupted, ...clean } = trace;
-      trace = finishTrace(clean, '附件输入已隔离，后续对话可以继续。');
+      trace = finishTrace(clean, attachmentFailure ? '附件输入已隔离，后续对话可以继续。' : '本轮请求失败，请重新发送要处理的内容。');
     }
     const fallback = stoppedByUser ? '工具调用已停止。' : attachmentFailure ? error.message : `工具调用流程失败：${error?.message || '未知错误'}`;
     commit({ text: fallback, status: 'error', createdAt: now(), ...(attachmentFailure ? { meta: { attachmentInputError: true, attachmentApiError: error.body || '', attachmentQuarantine: error.issues } } : {}) });
@@ -353,8 +359,9 @@ export async function completeToolPrivateMessageReply({
 
 async function buildToolMessages({ store, conversation, character, userText, userMessage, toolSummary, settings = getSettings(), attachmentIssues = [] }) {
   const advanced = getAdvancedSettings();
-  const currentUserContent = await buildModelMessageContent({ speakerName: PLAYER_NAME, text: userText, attachments: userMessage?.attachments || [], attachmentIssues });
-  const history = await filterAttachmentHistory(getConversationMessages(store, conversation.id)
+  const provider = getDefaultChatProvider(settings);
+  const currentUserContent = await buildModelMessageContent({ speakerName: PLAYER_NAME, text: userText, attachments: userMessage?.attachments || [], attachmentIssues, provider });
+  const history = await filterAttachmentHistory(filterFailedTurnHistory(getConversationMessages(store, conversation.id), conversation.id)
     .filter(item => item.status !== 'typing')
     .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, settings)));
   const intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
@@ -396,6 +403,7 @@ async function buildToolMessages({ store, conversation, character, userText, use
         speakerName: item.speakerName || (item.role === 'user' ? PLAYER_NAME : character.name),
         text: item.text || '',
         historical: true, attachmentIssues,
+        provider,
         attachments: item.meta?.voiceReply === true || item.meta?.toolMode === true ? [] : (item.attachments || [])
       })
     })));
@@ -409,7 +417,7 @@ async function buildToolMessages({ store, conversation, character, userText, use
   ];
 }
 
-async function requestToolAwareCompletion({
+export async function requestToolAwareCompletion({
   settings,
   messages,
   tools = [],
@@ -658,7 +666,7 @@ function mergeToolCallDeltas(toolCalls, deltas) {
   }
 }
 
-function normalizeToolCalls(toolCalls = []) {
+export function normalizeToolCalls(toolCalls = []) {
   return toolCalls.map(call => {
     const name = call?.function?.name || call?.name || '';
     const rawArgs = call?.function?.arguments ?? call?.arguments ?? '{}';
@@ -681,7 +689,7 @@ function parseToolArguments(value) {
   }
 }
 
-async function extractMcpResultAttachments(result, toolName = 'tool', args = {}) {
+export async function extractMcpResultAttachments(result, toolName = 'tool', args = {}) {
   const content = Array.isArray(result?.content) ? result.content : [];
   const raw = [];
   for (const item of content) {
@@ -911,7 +919,7 @@ function dedupeRawAttachments(values = []) {
   });
 }
 
-async function normalizeGeneratedAttachments(attachments = []) {
+export async function normalizeGeneratedAttachments(attachments = []) {
   const normalized = [];
   for (const raw of attachments) {
     const attachment = normalizeToolAttachment(raw);
@@ -1234,6 +1242,7 @@ function getResumableToolState(store, conversationId, text, selectedClientIds = 
   if (!RESUME_TEXT_RE.test(String(text || '').trim())) return null;
   const messages = getConversationMessages(store, conversationId);
   for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (isFailedTurnMessage(messages[index], conversationId)) return null;
     if (isAttachmentErrorMessage(messages[index])) return null;
     const trace = messages[index]?.meta?.toolTrace;
     if (!trace?.interrupted || !trace.resumeState?.messages?.length) continue;

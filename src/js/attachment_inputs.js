@@ -1,5 +1,6 @@
 import { attachmentKey, blockedAttachment, quarantineAttachment, AttachmentInputError, isAttachmentErrorMessage, isFileRejection } from './attachment_state.js';
 import { dataUrlBytes, isPdf, extractDocumentText } from './attachment_documents.js';
+import { isNativeGrokProvider, transcribeGrokAudio } from './grok_inputs.js';
 const documentCache = new Map();
 
 async function readDocument(bytes, info, mime) {
@@ -80,6 +81,10 @@ export async function prepareAttachmentRequest(messages, provider, { historical 
         if (info) {
           const blocked = await blockedAttachment(info.keys);
           if (blocked) { if (info.current) throw new AttachmentInputError([{ ...blocked, keys: info.keys }]); else continue; }
+        }
+        if (part.type === 'input_audio' && isNativeGrokProvider(provider)) {
+          content.push(await transcribeGrokAudio(part, provider, info));
+          continue;
         }
         if (part.type === 'file') {
           const file = part.file;

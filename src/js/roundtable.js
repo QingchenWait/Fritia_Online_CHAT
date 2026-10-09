@@ -1,12 +1,18 @@
 import { appendMessage, replaceMessage, createId, now, getConversationMessages, normalizeGroupSettings } from './storage.js';
 import { buildRagReferenceMessage } from './knowledge_base.js';
 import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_term_memory.js';
-import { getSettings, getAdvancedSettings } from './settings.js';
+import { getSettings, getAdvancedSettings, getDefaultChatProvider } from './settings.js';
 import { buildDeepSeekIntimateUserMessage, shouldKeepMessageForCurrentDeepSeekMode } from './deepseek_intimate_mode.js';
 import { attachmentLabelText, buildAttachmentContentParts } from './llm_media.js';
 import { requestLlmCompletion } from './llm_request.js';
 import { isLmStudioSettings } from './lm_studio.js';
 import { filterAttachmentHistory } from './attachment_inputs.js';
+import { markFailedTurn, filterFailedTurnHistory, isFailedTurnMessage } from './failed_turns.js';
+import { getSelectedMcpClientIds, collectMcpToolDefinitions, callMcpToolByRegistryEntry, formatMcpContentText } from './mcp_tools.js';
+import { requestToolAwareCompletion, normalizeToolCalls, extractMcpResultAttachments, normalizeGeneratedAttachments } from './tool_chat_engine.js';
+import { getReasoningFields } from './model_reasoning.js';
+
+const groupModelRuntime = new Map();
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -142,8 +148,13 @@ export async function sendGroupPlayerMessage({ store, conversation, text, attach
   return { store: nextStore, message };
 }
 
-export async function runRoundtableTurn({ store, conversation, characters, triggerText = '', triggerAttachments = [], onStore }) {
+export async function runRoundtableTurn({ store, conversation, characters, triggerText = '', triggerAttachments = [], triggerMessageId = '', chatSettings = null, reasoningEffort = '', onStore }) {
   if (!conversation || conversation.type !== 'group') return store;
+  if (chatSettings) groupModelRuntime.set(conversation.id, { chatSettings, reasoningEffort });
+  if (!triggerMessageId && (triggerText || triggerAttachments.length)) {
+    const candidate = getConversationMessages(store, conversation.id).at(-1);
+    if (candidate?.role === 'user' && candidate.text === triggerText) triggerMessageId = candidate.id;
+  }
   const runtimeSettings = resolveRoundtableSettings(conversation);
   const effectiveTriggerText = String(triggerText || '').trim() || attachmentLabelText(triggerAttachments);
   if (!effectiveTriggerText && !runtimeSettings.idleTalk) return store;
@@ -168,6 +179,7 @@ export async function runRoundtableTurn({ store, conversation, characters, trigg
       targetName: PLAYER_NAME,
       triggerText: effectiveTriggerText,
       eventType: 'mention',
+      triggerMessageId,
       priority: 120 - index,
       suppressFollowUp: index < mentioned.length - 1
     }));
@@ -181,6 +193,7 @@ export async function runRoundtableTurn({ store, conversation, characters, trigg
       targetName: PLAYER_NAME,
       triggerText: effectiveTriggerText,
       eventType: effectiveTriggerText ? 'player' : 'idle',
+      triggerMessageId,
       priority: effectiveTriggerText ? 80 : 40
     });
   }
@@ -193,10 +206,12 @@ async function processRoundtableQueue({ store, conversationId, characters, onSto
   roundtableState.processing = true;
   let nextStore = store;
   let processed = 0;
+  const successfulTriggers = new Set();
   try {
     while (processed < MAX_EVENTS_PER_DRAIN) {
       const event = dequeueRoundtableEvent(conversationId);
       if (!event) break;
+      if (event.triggerMessageId && isFailedTurnMessage({ id: event.triggerMessageId }, conversationId)) continue;
       const conversation = getGroupConversation(nextStore, event.conversationId);
       if (!conversation) continue;
       const settings = resolveRoundtableSettings(conversation);
@@ -232,6 +247,7 @@ async function processRoundtableQueue({ store, conversationId, characters, onSto
         event,
         interBotDebt: roundtableState.interBotDebt,
         botChainLimit: settings.botChainLimit,
+        successfulTriggers,
         onStore
       });
       nextStore = result.store;
@@ -271,6 +287,7 @@ async function runSpeakerReply({
   event,
   interBotDebt,
   botChainLimit,
+  successfulTriggers = new Set(),
   onStore
 }) {
   const typingId = createId('typing');
@@ -285,8 +302,9 @@ async function runSpeakerReply({
   });
   onStore?.(nextStore);
 
-  const currentSettings = getSettings();
-  let history = getConversationMessages(nextStore, conversation.id)
+  const modelRuntime = groupModelRuntime.get(conversation.id);
+  const currentSettings = modelRuntime?.chatSettings || getSettings();
+  let history = filterFailedTurnHistory(getConversationMessages(nextStore, conversation.id), conversation.id)
     .filter(item => item.status !== 'typing')
     .filter(shouldKeepMessageForDailyToolContext)
     .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, currentSettings));
@@ -309,13 +327,14 @@ async function runSpeakerReply({
   let attachmentInputError = false;
   let attachmentApiError = '';
   let attachmentQuarantine = [];
+  let toolResult = null;
   try {
     history = await filterAttachmentHistory(history);
     requestEvent = buildRequestEvent(event, { triggerText, eventType, target, interBotDebt, botChainLimit, participants, history, conversationId: conversation.id });
     const settings = currentSettings;
     const speakerForRequest = normalizeSpeakerForRoundtable(speaker);
-    const currentUserId = ['player','mention'].includes(eventType) ? history.findLast(item => item.role === 'user')?.id : '';
-    const mediaContentParts = await buildRoundtableMediaContentParts(history, attachmentIssues, currentUserId);
+    const currentUserId = ['player','mention'].includes(eventType) ? event.triggerMessageId || '' : '';
+    const mediaContentParts = await buildRoundtableMediaContentParts(history, attachmentIssues, currentUserId, getDefaultChatProvider(settings));
     const ragMessage = await buildRoundtableRagMessage(requestEvent, history);
     const memoryMessage = await buildRoundtableMemoryMessage(requestEvent, speakerForRequest, history);
     intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
@@ -337,7 +356,8 @@ async function runSpeakerReply({
     }
 
     const body = buildRequestBody(settings, speakerForRequest, requestEvent, ragMessage, memoryMessage, intimateMessage, mediaContentParts);
-    const rawReply = await requestRoundtableCompletion({ settings, body, attachmentIssues });
+    toolResult = await requestRoundtableCompletion({ settings, body, attachmentIssues, conversationId: conversation.id, reasoningEffort: modelRuntime?.reasoningEffort || '' });
+    const rawReply = typeof toolResult === 'string' ? toolResult : toolResult.content;
     recordCall(requestEvent.type, estimatedTokens + estimateTokens(rawReply));
     const parsed = parseRoundtableJson(rawReply);
     payload = normalizeBotPayload(parsed, speakerForRequest, requestEvent, participants);
@@ -348,6 +368,7 @@ async function runSpeakerReply({
     finalText = payload.text;
     clearRoundtableBug();
   } catch (err) {
+    markFailedTurn(conversation.id, [typingId, ...(['player', 'mention'].includes(eventType) && !successfulTriggers.has(event.triggerMessageId) ? [event.triggerMessageId] : [])]);
     const replyTarget = target?.id && target.id !== speaker.id
       ? target
       : { id: PLAYER_ID, name: PLAYER_NAME };
@@ -380,7 +401,9 @@ async function runSpeakerReply({
     text: finalText,
     createdAt: now(),
     status,
+    ...(status === 'sent' && toolResult?.attachments?.length ? { attachments: toolResult.attachments } : {}),
     meta: {
+      ...(status === 'sent' ? { modelReplySucceeded: true } : {}),
       eventType,
       targetId: payloadTarget.id,
       intent: payload.intent,
@@ -390,10 +413,12 @@ async function runSpeakerReply({
       fallback: payload.fallback === true,
       deepseekIntimateMode: Boolean(intimateMessage),
       ...(attachmentInputError ? { attachmentInputError: true, attachmentApiError, attachmentQuarantine } : {}),
-      ...(attachmentIssues.length ? { attachmentIssues } : {})
+      ...(attachmentIssues.length ? { attachmentIssues } : {}),
+      ...(status === 'sent' && toolResult?.trace ? { toolMode: true, toolTrace: toolResult.trace } : {})
     }
   });
   if (status === 'sent') {
+    if (event.triggerMessageId) successfulTriggers.add(event.triggerMessageId);
     recordLongTermMemoryTurn({
       source: 'roundtable',
       publicScope: true,
@@ -459,7 +484,7 @@ function canRunEvent(event, conversationId) {
   if (event.eventType === 'idle' && (roundtableState.playerFloorLock || roundtableState.interBotDebt > 0)) return false;
   if (isLowPriorityEvent(event) && roundtableState.playerFloorLock) return false;
 
-  const settings = getSettings();
+  const settings = groupModelRuntime.get(conversationId)?.chatSettings || getSettings();
   const baseUrl = normalizeBaseUrl(settings.baseUrl);
   const localLmStudio = isLmStudioSettings(settings);
   if ((!settings.apiKey && !localLmStudio) || !baseUrl || !settings.model) {
@@ -488,13 +513,56 @@ function canRunEvent(event, conversationId) {
   return true;
 }
 
-async function requestRoundtableCompletion({ settings, body, attachmentIssues }) {
+async function requestRoundtableCompletion({ settings, body, attachmentIssues, conversationId, reasoningEffort }) {
+  const selected = /(?:^|\/)grok-/i.test(settings.model) ? getSelectedMcpClientIds(conversationId) : [];
+  if (selected.length) return requestGrokGroupTools({ settings, messages: body.messages, selected, attachmentIssues, reasoningEffort });
   return requestLlmCompletion({
     settings,
     messages: body.messages,
     body,
+    reasoningEffort,
     attachmentIssues
   });
+}
+
+async function requestGrokGroupTools({ settings, messages, selected, attachmentIssues, reasoningEffort }) {
+  const toolSet = await collectMcpToolDefinitions(selected);
+  const agentMessages = [...messages];
+  const trace = { version: 1, collapsed: true, calls: [], thoughts: [] };
+  const attachments = [];
+  for (let step = 0; step < 50; step++) {
+    const result = await requestToolAwareCompletion({ settings, messages: agentMessages, tools: toolSet.tools || [],
+      toolChoice: toolSet.tools?.length ? 'auto' : 'none', completeToolResultReply: false, reasoningEffort, attachmentIssues });
+    const calls = normalizeToolCalls(result.toolCalls);
+    if (!calls.length) {
+      trace.thoughts.push({ id: createId('thought'), title: '思考中', content: '本轮工具对话已完成。', status: 'done', createdAt: now(), updatedAt: now() });
+      return { content: result.content, trace,
+        attachments: await normalizeGeneratedAttachments([...attachments, ...(result.attachments || [])]) };
+    }
+    agentMessages.push({ role: 'assistant', content: result.content || '', ...getReasoningFields(result),
+      tool_calls: calls.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } })) });
+    for (const call of calls) {
+      let text;
+      const entry = toolSet.registry[call.name];
+      const detail = { id: call.id, toolName: entry?.toolName || call.name, clientName: entry?.client?.name || 'MCP', args: call.arguments };
+      try {
+        if (!entry) throw new Error(`未找到工具映射：${call.name}`);
+        const output = await callMcpToolByRegistryEntry(entry, call.arguments);
+        text = formatMcpContentText(output);
+        attachments.push(...await extractMcpResultAttachments(output, detail.toolName, call.arguments));
+        trace.calls.push({ ...detail, status: 'success', result: text });
+      } catch (error) {
+        text = `工具调用失败：${error.message}`;
+        trace.calls.push({ ...detail, status: 'error', result: text });
+      }
+      agentMessages.push({ role: 'tool', tool_call_id: call.id, content: text || '工具已完成' });
+    }
+    agentMessages.push({ role: 'system', content: '根据工具结果继续处理，最终回复仍须遵守群聊 JSON 字段与 @ 规则。' });
+    const budget = getBudgetState();
+    if (budget.hardLimited) throw new Error('圆桌工具调用达到请求上限');
+    recordCall('tool', estimateTokens(JSON.stringify(result)));
+  }
+  throw new Error('圆桌工具调用达到 50 步上限');
 }
 
 async function buildRoundtableRagMessage(event, history) {
@@ -535,13 +603,13 @@ async function buildRoundtableMemoryMessage(event, speaker, history) {
   return null;
 }
 
-async function buildRoundtableMediaContentParts(history = [], issues = [], currentUserId = '') {
+async function buildRoundtableMediaContentParts(history = [], issues = [], currentUserId = '', provider = null) {
   const mediaMessages = history
     .filter(item => item && item.status !== 'typing' && Array.isArray(item.attachments) && item.attachments.length)
     .slice(-4);
   const parts = [];
   for (const message of mediaMessages) {
-    const converted = await buildAttachmentContentParts(message.attachments, { historical: message.id !== currentUserId, issues });
+    const converted = await buildAttachmentContentParts(message.attachments, { historical: message.id !== currentUserId, issues, provider });
     if (!converted.length) continue;
     const speakerName = message.speakerName || (message.role === 'user' ? PLAYER_NAME : '角色');
     parts.push({

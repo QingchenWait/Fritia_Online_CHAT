@@ -20,7 +20,7 @@ try {
     const menu = page.locator('#chat-provider-preset-menu');
     const snapshot = await page.evaluate(() => localStorage.getItem('fritia_next_chat_store'));
     await add.click();
-    assert.deepEqual(await menu.locator('button span').allTextContents(), ['DeepSeek', 'MiMO', 'Qwen', 'OpenAI', 'GLM', 'Kimi', '本地模型', '自定义']);
+    assert.deepEqual(await menu.locator('button span').allTextContents(), ['DeepSeek', 'MiMO', 'Qwen', 'OpenAI', 'GLM', 'Kimi', 'Grok', '本地模型', '自定义']);
     const menuBounds = await menu.boundingBox();
     const buttonBounds = await add.boundingBox();
     assert.ok(Math.abs(menuBounds.y - buttonBounds.y - buttonBounds.height - 4) < 2, 'menu must sit directly below Add');

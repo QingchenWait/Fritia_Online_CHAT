@@ -11,6 +11,7 @@ test('all requested presets keep exact names, endpoints and model IDs', () => {
     ['openai', 'OpenAI', 'https://api.openai.com/v1', 'gpt-6-luna'],
     ['glm', 'GLM', 'https://open.bigmodel.cn/api/paas/v4', 'glm-5.3-flash'],
     ['kimi', 'Kimi', 'https://api.moonshot.cn/v1', 'kimi-k3'],
+    ['grok', 'Grok', 'https://api.x.ai/v1', 'grok-4.7'],
     ['local', 'LM Studio', 'http://localhost:1234/v1', ''],
     ['custom', 'custom', 'https://api.openai.com/v1', 'gpt-6-luna']
   ]);
@@ -24,9 +25,10 @@ test('key links match parsed hostnames, including unsaved URLs and local endpoin
     'https://platform.openai.com/api-keys',
     'https://bigmodel.cn/apikey/platform',
     'https://platform.kimi.com/console/api-keys',
+    'https://console.x.ai/',
     'https://lmstudio.ai/'
   ];
-  CHAT_PROVIDER_PRESETS.slice(0, 7).forEach((preset, index) => {
+  CHAT_PROVIDER_PRESETS.slice(0, 8).forEach((preset, index) => {
     assert.equal(getProviderPresetForUrl(`  ${preset.baseUrl}/  `).website, links[index]);
   });
   for (const baseUrl of ['http://localhost:1234/v1', 'http://127.0.0.1:8080/v1', 'http://[::1]:1234/v1']) assert.equal(getProviderPresetForUrl(baseUrl).key, 'local');

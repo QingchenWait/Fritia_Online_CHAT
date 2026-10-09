@@ -2,6 +2,7 @@ import { getMediaDataUrl, isMediaRef } from './media_store.js';
 import { fileAttachmentParts, attachmentSource } from './attachment_inputs.js';
 import { attachmentKey, blockedAttachment, AttachmentInputError } from './attachment_state.js';
 import { dataUrlBytes } from './attachment_documents.js';
+import { isNativeGrokProvider, grokVideoFrames } from './grok_inputs.js';
 
 const DATA_URL_RE = /^data:([^;,]*)(?:;[^,]*)?,/i;
 
@@ -13,7 +14,7 @@ export async function resolveMediaDataUrl(source) {
   return fetchPathAsDataUrl(value);
 }
 
-export async function buildModelMessageContent({ speakerName = '', text = '', attachments = [], historical = false, attachmentIssues = [] } = {}) {
+export async function buildModelMessageContent({ speakerName = '', text = '', attachments = [], historical = false, attachmentIssues = [], provider = null } = {}) {
   const cleanText = String(text || '').trim();
   const normalizedAttachments = Array.isArray(attachments) ? attachments.filter(Boolean) : [];
   const prefix = speakerName ? `${speakerName}：` : '';
@@ -23,7 +24,7 @@ export async function buildModelMessageContent({ speakerName = '', text = '', at
 
   const parts = [], readable = [];
   for (const attachment of normalizedAttachments) {
-    const converted = await attachmentToContentParts(attachment, { historical, issues: attachmentIssues });
+    const converted = await attachmentToContentParts(attachment, { historical, issues: attachmentIssues, provider });
     if (converted.length) { readable.push(attachment); parts.push(...converted); }
   }
   if (!readable.length) return cleanText ? `${prefix}${cleanText}` : '';
@@ -90,6 +91,10 @@ async function attachmentToContentParts(attachment = {}, options = {}) {
   const mime = attachment.mime || inferMimeFromDataUrl(dataUrl) || 'application/octet-stream';
   const name = attachment.name || attachment.fileName || 'attachment';
   const provenance = async () => ({ name, keys: [key, await attachmentKey(dataUrlBytes(dataUrl))], current: !options.historical });
+
+  if ((mime.startsWith('video/') || attachment.type === 'video') && isNativeGrokProvider(options.provider)) {
+    return grokVideoFrames(dataUrl, name, await provenance());
+  }
 
   if ((mime.startsWith('image/') || attachment.type === 'image') && mime !== 'image/svg+xml') {
     return [{

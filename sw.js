@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v47';
+const CACHE_NAME = 'fritia-next-chat-v50';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -23,6 +23,9 @@ const CORE_ASSETS = [
   './src/styles/model-provider-presets-desktop.css',
   './src/styles/model-provider-presets-mobile.css',
   './src/js/main.js',
+  './src/js/failed_turns.js',
+  './src/js/grok_inputs.js',
+  './src/_logo/llms/grok.svg',
   './src/js/onboarding.js',
   './src/js/onboarding_desktop.js',
   './src/js/onboarding_mobile.js',
@@ -31,6 +34,7 @@ const CORE_ASSETS = [
   './src/js/characters.js',
   './src/js/settings.js',
   './src/js/model_reasoning.js',
+  './src/js/deepseek_reply.js',
   './src/js/model_provider_presets.js',
   './src/js/model_provider_presets_desktop.js',
   './src/js/model_provider_presets_mobile.js',

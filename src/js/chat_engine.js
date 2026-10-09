@@ -1,5 +1,5 @@
 import { appendMessage, replaceMessage, createId, now, getConversationMessages } from './storage.js';
-import { getSettings, getAdvancedSettings } from './settings.js';
+import { getSettings, getAdvancedSettings, getDefaultChatProvider } from './settings.js';
 import { buildRagReferenceMessage } from './knowledge_base.js';
 import { buildLongTermMemoryMessage, recordLongTermMemoryTurn } from './long_term_memory.js';
 import { characterDisplayName } from './characters.js';
@@ -12,6 +12,7 @@ import { isLmStudioSettings } from './lm_studio.js';
 import { getReasoningFields, reasoningProviderKey } from './model_reasoning.js';
 import { filterAttachmentHistory } from './attachment_inputs.js';
 import { AttachmentInputError } from './attachment_state.js';
+import { markFailedTurn, filterFailedTurnHistory } from './failed_turns.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -70,6 +71,7 @@ export async function completePrivateMessageReply({
 }) {
   if (!store || !conversation || !character) return null;
   const typingId = createId('typing');
+  let replyReceived = false;
   let nextStore = appendMessage(store, conversation.id, {
     id: typingId,
     role: 'assistant',
@@ -92,7 +94,9 @@ export async function completePrivateMessageReply({
       reasoningEffort
     });
     const reply = typeof result === 'string' ? result : result.text;
+    replyReceived = true;
     const baseMeta = {
+      modelReplySucceeded: true,
       ...(result?.attachmentIssues?.length ? { attachmentIssues: result.attachmentIssues } : {}),
       deepseekIntimateMode: typeof result === 'object' && result?.deepseekIntimateMode === true,
       ...(result?.reasoning ? { reasoning: result.reasoning, reasoningProvider: result.reasoningProvider } : {})
@@ -151,7 +155,9 @@ export async function completePrivateMessageReply({
     onStore?.(nextStore);
     return reply;
   } catch (err) {
+    if (replyReceived) throw err;
     const fallback = friendlyError(err);
+    markFailedTurn(conversation.id, [userMessage?.id, typingId]);
     nextStore = replaceMessage(nextStore, conversation.id, typingId, {
       text: fallback,
       status: 'error',
@@ -168,12 +174,13 @@ export async function requestCharacterReply({ store, conversation, character, us
   if (!settings.apiKey && !isLmStudioSettings(settings)) {
     return localFallbackReply(character, userText, mode);
   }
-  const history = await filterAttachmentHistory(getConversationMessages(store, conversation.id)
+  const history = await filterAttachmentHistory(filterFailedTurnHistory(getConversationMessages(store, conversation.id), conversation.id)
     .filter(item => item.status !== 'typing')
     .filter(shouldKeepMessageForDailyToolContext)
     .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, settings)));
   const attachmentIssues = [];
-  const currentUserContent = await buildModelMessageContent({ speakerName: PLAYER_NAME, text: userText, attachments: userMessage?.attachments || [], attachmentIssues });
+  const provider = getDefaultChatProvider(settings);
+  const currentUserContent = await buildModelMessageContent({ speakerName: PLAYER_NAME, text: userText, attachments: userMessage?.attachments || [], attachmentIssues, provider });
   const advanced = getAdvancedSettings();
   const intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
   const ragMessage = await buildRagReferenceMessage({
@@ -202,7 +209,8 @@ export async function requestCharacterReply({ store, conversation, character, us
     mode,
     event,
     attachmentIssues,
-    currentUserContent
+    currentUserContent,
+    provider
   });
   const response = await requestOpenAICompatible(settings, messages, reasoningEffort, attachmentIssues);
   return {
@@ -228,7 +236,7 @@ function shouldIsolateToolContextFromDailyChat() {
   }
 }
 
-async function buildMessages({ character, history, userText, userMessage, ragMessage, memoryMessage, intimateMessage, historyLimit, mode, event, attachmentIssues, currentUserContent }) {
+async function buildMessages({ character, history, userText, userMessage, ragMessage, memoryMessage, intimateMessage, historyLimit, mode, event, attachmentIssues, currentUserContent, provider }) {
   const system = [
     `你正在一个 QQ / Telegram 风格的角色扮演聊天软件中发言。`,
     `本次你只扮演：${character.name}。不要代替用户或其他角色发言。`,
@@ -253,6 +261,7 @@ async function buildMessages({ character, history, userText, userMessage, ragMes
         speakerName: item.speakerName || (item.role === 'user' ? PLAYER_NAME : character.name),
         text: item.text || '',
         historical: true, attachmentIssues,
+        provider,
         attachments: item.meta?.voiceReply === true ? [] : (item.attachments || [])
       })
     })));

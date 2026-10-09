@@ -1,4 +1,5 @@
 import { deleteMedia, isMediaRef, saveDataUrlAsMedia } from './media_store.js';
+import { persistentChatStore } from './failed_turns.js';
 
 export const STORAGE_KEYS = {
   settings: 'fritia-settings',
@@ -88,7 +89,7 @@ export function loadAppStore() {
 
 export function saveAppStore(store) {
   const normalized = normalizeAppStore({ ...store, updatedAt: now() });
-  saveJson(STORAGE_KEYS.app, normalized);
+  saveJson(STORAGE_KEYS.app, persistentChatStore(normalized));
   document.dispatchEvent(new CustomEvent('fritia-next-chat-store-updated', { detail: normalized }));
   return normalized;
 }

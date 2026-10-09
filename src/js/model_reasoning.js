@@ -1,3 +1,5 @@
+import { applyDeepSeekMaxReplyBoundary } from './deepseek_reply.js';
+
 const LABELS = {
   default: '默认',
   enabled: '思考',
@@ -108,6 +110,19 @@ export function getModelReasoningProfile(provider = {}) {
   const toggleMode = bailian ? 'enable-thinking' : 'thinking';
   const effortMode = bailian ? 'enable-thinking-effort' : 'deepseek';
 
+  if (/(?:^|\/)grok-4\.[67](?:$|[-_])/.test(model)) {
+    return createProfile('grok-4.7', ['low', 'medium', 'high', 'xhigh'], 'high');
+  }
+  if (/(?:^|\/)grok-4\.5(?:$|[-_])/.test(model)) {
+    return createProfile('grok-4.5', ['low', 'medium', 'high'], 'high');
+  }
+  if (/(?:^|\/)grok-3-mini(?:$|[-_])/.test(model)) {
+    return createProfile('grok-3-mini', ['low', 'high'], 'low');
+  }
+  if (/(?:^|\/)grok-4(?:$|[-_.])/.test(model)) {
+    return createProfile('grok-mandatory', ['enabled'], 'enabled', 'default');
+  }
+
   // Provider protocols differ even for the same hosted model ID. These are
   // documented fallbacks; exact API metadata above always wins.
   if (/glm-5\.3(?:$|[-_])/.test(model)) {
@@ -209,7 +224,7 @@ export function getModelReasoningProfile(provider = {}) {
   }
   const metadata = catalogModel(provider);
   const profile = createProfile('default', ['default'], 'default', 'default');
-  if (metadata?.supports_reasoning === true || metadata?.capabilities?.includes('Reasoning')) {
+  if (metadata?.supports_reasoning === true || hasReasoningCapability(metadata?.capabilities)) {
     profile.options[0].label = '思考（API 默认）';
   }
   return profile;
@@ -220,6 +235,15 @@ export function normalizeModelReasoningEffort(provider, effort) {
   return profile.options.some(option => option.value === effort)
     ? effort
     : profile.defaultValue;
+}
+
+function hasReasoningCapability(capabilities) {
+  if (Array.isArray(capabilities)) return capabilities.some(value => typeof value === 'string' && /^reasoning$/i.test(value));
+  if (typeof capabilities === 'string') return /(?:^|[\s,;])reasoning(?:$|[\s,;])/i.test(capabilities);
+  if (capabilities && typeof capabilities === 'object') {
+    return capabilities.reasoning === true || capabilities.Reasoning === true || capabilities.reasoning?.supported === true;
+  }
+  return false;
 }
 
 export function buildModelReasoningBody(provider, effort) {
@@ -245,6 +269,9 @@ export function buildModelReasoningBody(provider, effort) {
 
 export function applyModelReasoningBody(provider, effort, body) {
   const next = { ...body, ...buildModelReasoningBody(provider, effort) };
+  if (/(?:^|\/)grok-4(?:$|[-_.])/i.test(provider?.model || '')) {
+    for (const key of ['presence_penalty', 'frequency_penalty', 'stop']) delete next[key];
+  }
   // Some Bailian reasoning models require streaming; the caller still
   // collects the entire answer, with no change to display or token limits.
   if (next.enable_thinking === true || getModelReasoningProfile(provider).id === 'qwen-mandatory') next.stream = true;
@@ -262,7 +289,7 @@ export function applyModelReasoningBody(provider, effort, body) {
     delete next.temperature;
     delete next.top_p;
   }
-  return next;
+  return applyDeepSeekMaxReplyBoundary(provider, next);
 }
 
 function createProfile(id, values, defaultValue, requestMode = 'reasoning-effort') {

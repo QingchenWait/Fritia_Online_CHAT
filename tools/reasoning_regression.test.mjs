@@ -6,6 +6,7 @@ import * as reasoning from '../src/js/model_reasoning.js';
 import * as responses from '../src/js/openai_responses.js';
 import { requestLlmCompletion } from '../src/js/llm_request.js';
 import { assertModelResponse } from '../src/js/attachment_state.js';
+import * as failedTurns from '../src/js/failed_turns.js';
 
 const provider = { id: 'test', baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash', apiKey: 'test-only' };
 const settings = { ...provider, temperature: 0.8 };
@@ -62,7 +63,7 @@ function streamResponse(deltas, { tail = false } = {}) {
   } }), { headers: { 'Content-Type': 'text/event-stream' } });
 }
 
-async function loadToolEngine(fetcher) {
+async function loadToolEngine(fetcher, overrides = {}) {
   let id = 0;
   const stubs = {
     appendMessage: (store, conversationId, message) => ({ ...store, messages: [...store.messages, message] }),
@@ -84,7 +85,7 @@ async function loadToolEngine(fetcher) {
     callMcpToolByRegistryEntry: async () => ({ content: [{ type: 'text', text: '42' }] }),
     formatMcpContentText: () => '42', getMcpConfig: () => ({ permissions: { completeToolResultReply: true } }),
     isLmStudioSettings: () => false, isLmStudioProvider: () => false, requestLmStudioCompletion: () => {},
-    ...reasoning, ...responses
+    ...reasoning, ...responses, ...failedTurns, ...overrides
   };
   const source = await readFile(new URL('../src/js/tool_chat_engine.js', import.meta.url), 'utf8');
   const imports = new Map([...source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g)]
@@ -116,14 +117,12 @@ test('stream/JSON preserve full reasoning, structured blocks and unterminated la
   } finally { restore(); }
 });
 
-test('real tool loop sends reasoning with tool results, intermediate replies and resume state', async () => {
+test('real tool loop sends reasoning with tool results and intermediate replies', async () => {
   const requests = [];
   const secret = '必须完整回传'.repeat(1500);
-  let failNext = false;
   const { engine, restore } = await loadToolEngine(async (url, init) => {
     const request = JSON.parse(init.body);
     requests.push(request);
-    if (failNext) { failNext = false; return Response.json({ error: 'interrupted' }, { status: 503 }); }
     if (requests.length === 1) return streamResponse([
       { reasoning_content: secret },
       { tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{"q":' } }] },
@@ -133,7 +132,6 @@ test('real tool loop sends reasoning with tool results, intermediate replies and
     assert.equal(previous.reasoning_content, secret);
     assert.equal(request.messages.find(message => message.role === 'tool').tool_call_id, 'call-1');
     if (requests.length === 2) {
-      failNext = true;
       return Response.json({ choices: [{ message: { role: 'assistant', content: '我继续查询', reasoning_content: '中间思考' } }] });
     }
     assert.equal(request.messages.find(message => message.content === '我继续查询').reasoning_content, '中间思考');
@@ -142,12 +140,8 @@ test('real tool loop sends reasoning with tool results, intermediate replies and
   try {
     let store = { messages: [] };
     const args = { conversation: { id: 'chat' }, character: { id: 'bot', name: '角色' }, text: '查询', selectedClientIds: ['test'], reasoningEffort: 'high', onStore: next => { store = next; } };
-    await engine.completeToolPrivateMessageReply({ ...args, store });
-    assert.equal(store.messages.at(-1).status, 'error');
-    const snapshot = JSON.parse(JSON.stringify(store));
-    const saved = snapshot.messages.at(-1).meta.toolTrace.resumeState.messages;
-    assert.equal(saved.find(message => message.tool_calls?.length).reasoning_content, secret);
-    assert.equal(await engine.completeToolPrivateMessageReply({ ...args, store: snapshot, text: '继续' }), '结果为 42。');
+    assert.equal(await engine.completeToolPrivateMessageReply({ ...args, store }), '结果为 42。');
+    assert.equal(store.messages.at(-1).status, 'sent');
     assert.equal(store.messages.at(-1).meta.reasoning.reasoning_content, '已完成');
     assert.equal(requests.every(request => request.thinking.type === 'enabled' && request.reasoning_effort === 'high'), true);
   } finally { restore(); }
@@ -180,6 +174,20 @@ test('provider-specific metadata uses documented endpoints and fields', async ()
     assert.deepEqual(reasoning.getModelReasoningProfile({ model: 'kimi-k3' }).options.map(x => x.value), ['low', 'high', 'max']);
     assert.equal(requests.every(([, options]) => options.headers.Authorization === 'Bearer test-only'), true);
   } finally { globalThis.fetch = savedFetch; }
+});
+
+test('successful tool reply survives a later memory storage failure', async () => {
+  let store = { messages: [] };
+  const { engine, restore } = await loadToolEngine(async () => Response.json({ choices: [{ message: { content: '有效的正常回复' } }] }), {
+    recordLongTermMemoryTurn: () => { throw new Error('fixture memory write failure'); }
+  });
+  try {
+    await assert.rejects(engine.completeToolPrivateMessageReply({ store, conversation: { id: 'memory-failure-fixture' },
+      character: { id: 'bot', name: '角色' }, text: '正常输入', onStore: next => { store = next; } }), /memory write failure/);
+    assert.equal(store.messages.at(-1).status, 'sent');
+    assert.equal(store.messages.at(-1).text, '有效的正常回复');
+    assert.equal(failedTurns.isFailedTurnMessage(store.messages.at(-1), 'memory-failure-fixture'), false);
+  } finally { restore(); }
 });
 
 test('resume snapshots keep tool call boundaries and complete JSON arguments', async () => {

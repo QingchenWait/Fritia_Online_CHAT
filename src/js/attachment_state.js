@@ -75,6 +75,7 @@ export function formatAttachmentError(issues, apiError) {
 }
 
 export function isAttachmentErrorMessage(message) {
+  if (message?.meta?.modelReplySucceeded === true && message.status === 'sent') return false;
   if (message?.meta?.attachmentInputError) return true;
   if (message?.status === 'error' && isFileRejection(message.text || '')) return true;
   if (message?.role === 'assistant') {

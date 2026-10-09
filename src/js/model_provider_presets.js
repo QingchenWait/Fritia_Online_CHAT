@@ -8,6 +8,7 @@ export const CHAT_PROVIDER_PRESETS = [
   { key: 'openai', label: 'OpenAI', id: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-luna', website: 'https://platform.openai.com/api-keys', icon: 'src/_logo/llms/openai.svg', hosts: ['api.openai.com'] },
   { key: 'glm', label: 'GLM', id: 'GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-5.3-flash', website: 'https://bigmodel.cn/apikey/platform', icon: 'src/_logo/llms/glm.svg', hosts: ['open.bigmodel.cn'] },
   { key: 'kimi', label: 'Kimi', id: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k3', website: 'https://platform.kimi.com/console/api-keys', icon: 'src/_logo/llms/kimi.svg', hosts: ['api.moonshot.cn', 'api.moonshot.ai', 'api.kimi.com', 'api.kimi.ai'] },
+  { key: 'grok', label: 'Grok', id: 'Grok', baseUrl: 'https://api.x.ai/v1', model: 'grok-4.7', website: 'https://console.x.ai/', icon: 'src/_logo/llms/grok.svg', hosts: ['api.x.ai'] },
   { key: 'local', label: '本地模型', id: 'LM Studio', baseUrl: 'http://localhost:1234/v1', model: '', website: 'https://lmstudio.ai/', icon: 'src/_logo/llms/lm-studio.svg', hosts: ['localhost', '127.0.0.1', '[::1]'] },
   { key: 'custom', label: '自定义', id: 'custom', baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-luna', website: '', icon: 'src/_logo/icons/settings.svg', hosts: [] }
 ];
