@@ -6,3 +6,13 @@
     overflow-anchor: none;
   }
 }
+
+/* Only older engines that cannot parse dvh use the legacy viewport unit. */
+@supports not (height: 100dvh) {
+  @media (min-width: 761px) {
+    .app-shell,
+    .chat-pane {
+      height: 100vh;
+    }
+  }
+}

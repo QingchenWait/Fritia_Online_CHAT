@@ -12,3 +12,20 @@
     overflow-anchor: none;
   }
 }
+
+/* Keep the existing dvh layout untouched on engines that support it. */
+@supports not (height: 100dvh) {
+  @media (max-width: 760px) {
+    .app-shell,
+    .conversation-list {
+      height: 100vh;
+    }
+    .app-shell .chat-pane {
+      height: 100vh;
+      height: min(100vh, var(--chat-viewport-height, 100vh));
+    }
+    .composer textarea {
+      max-height: clamp(42px, calc(var(--chat-viewport-height, 100vh) - 24rem), 128px);
+    }
+  }
+}

@@ -1,5 +1,16 @@
 # STRUCTURE
 
+## v1.1.0 旧版 WebView dvh 回退（2026-10-11）
+
+| 文件 / 规则 | 作用 |
+| --- | --- |
+| chat-scroll-desktop.css / @supports not (height: 100dvh) | 仅不支持 dvh 的宽屏使用 100vh 约束主窗口与聊天区 |
+| chat-scroll-mobile.css / 同一支持条件 | 仅不支持 dvh 的窄屏约束主窗口、会话列表及聊天区，保留既有视口高度变量；输入框 max-height 的单位回退到 vh |
+| tools/dvh_fallback_browser.mjs | 支持环境全部 APP 元素样式/几何无变化；模拟 dvh 声明失效，验证空私聊/群聊及长列表下输入栏、列表滚动与缩放视口 |
+
+不新增运行模块或资源入口。支持 dvh 的环境不匹配任何补丁规则；现有 JS、问题 2 的视口缓存逻辑、其他 UI 与公共版本号均不变。
+
+
 ## v1.1.0 对话管理与聊天分享（2026-10-10，缓存 v51）
 
 | 文件 / API / 元素 | 作用 |

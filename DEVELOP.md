@@ -1,5 +1,13 @@
 # DEVELOP
 
+## 2026-10-11 v1.1.0 旧版 WebView dvh 高度补丁
+
+- 仅向 `chat-scroll-desktop.css` / `chat-scroll-mobile.css` 追加 `@supports not (height: 100dvh)` 规则。桌面回退主窗口/聊天区高度；窄屏回退主窗口/会话列表/聊天区及输入框 max-height，使用 vh 和既有 --chat-viewport-height。限定聊天布局，不泛化替换其他窗口中的 dvh。
+- 支持 dvh 时新规则不参与层叠，既有规则原样保留；不新增 JS、监听器、持久化字段或 UI，不修改问题 2 的视口测量/缓存/恢复逻辑。版本仍 1.1.0，未打包。
+- 复用已有 CSS 入口及 SW 核心资源，沿用 network-first 更新策略，缓存仍 v52。`tools/dvh_fallback_browser.mjs` 比较支持环境中启用/移除补丁前后的全部 APP 元素计算样式与位置，并在隔离 CSS 解析模拟中复核旧内核下长会话列表的输入栏可见性。
+- 验证通过：支持 dvh 的 320×568、390×844、760×700、761×700、844×390、1440×900、3840×2160，每组 563 个 APP 元素的全部计算样式和矩形坐标逐项一致；4 组不支持单位的解析模拟覆盖窄屏/宽屏、有/无 VisualViewport、空私聊/群聊、40 条额外会话和视口缩小，并先移除补丁复现输入栏越界，再恢复补丁确认可见。既有 test:chat-scroll 7 组视口通过；语法、git diff --check 及生产变更范围检查通过。未在真实旧版 Android WebView 或 APK 上验证。
+
+
 ## 2026-10-10 v1.1.0 对话删除确认窗口（缓存 v52）
 
 - 标题改为加粗“对话删除确认”，通过 conversation-delete-title 标注 dialog；原数量提示仍保留。取消/确认按钮局部 inline-flex、nowrap，让图标与文字同排，不改通用按钮样式。
