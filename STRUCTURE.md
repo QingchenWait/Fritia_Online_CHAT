@@ -1,5 +1,33 @@
 # STRUCTURE
 
+## v1.1.0 对话管理与聊天分享（2026-10-10，缓存 v51）
+
+| 文件 / API / 元素 | 作用 |
+| --- | --- |
+| conversation_management.js / initConversationManagement | 私聊运行态 ID、多选集合、确认/预览、入口和退出；返回 update/exit/back/closePreview/active |
+| conversation_management_data.js / planMessageDeletion | 纯函数，原始消息 ID、private scope、daily/private 来源和共享关联保守检查；返回 app/memory/mediaRefs/count |
+| deleteSelectedPrivateMessages | 同步存储提交/回滚、运行中拒绝、精确运行时消息清理；通知后仅清理明确无引用媒体 |
+| media_store.js / deleteMediaIfUnreferenced | IDB 打开后同步引用 guard；只删除单个明确 media ref |
+| conversation_share.js / renderConversationImage | 复制选中行、图片加载校验、复用现有 Markdown/语音/工具 UI、白色 SVG 栅格化、分段浏览器原生 DOM 绘图 |
+| createTranscriptPng | 流式 PNG：Sub scanline filter、现有 fflate Zlib、CRC32/IDAT；单图无固定高度上限 |
+| saveConversationImage/copyConversationImage | 原生目录/文件 Web picker 或现有 Tauri 插件；无能力时下载回退；ClipboardItem PNG |
+| conversation_management_desktop.js / initConversationManagementDesktop | 桌面预览 PageUp/PageDown 滚动 |
+| conversation_management_mobile.js / initConversationManagementMobile | 手机 VisualViewport、旋转和安全区高度 |
+| conversation-management.css | 选择控件、固定提示、确认/分享玻璃窗口、自绘滚动条及固定像素导出样式 |
+| conversation-management-desktop/mobile.css | 各自响应式窗口与聊天选择布局 |
+| index.html / detail-conversation-management | 内置/导入角色私聊的快速操作入口 |
+| conversation-management-actions/delete/share/close/hint | 管理工具栏、禁用状态、退出及替换输入栏的固定提示 |
+| conversation-delete-panel/title/count/confirm/cancel/error | 加粗“对话删除确认”、精确数量、不可恢复和共享保护说明；内容高度居中卡片、单行图标按钮，矮屏仅正文滚动；确认与写入错误 |
+| conversation-share-panel/image/copy/save/close/status | 单张长图、固定工具栏、复制保存及状态反馈 |
+| ui.js / pendingConversationReplies | 跟踪已发出的回复 Promise，生成期间管理删除禁用；切换/主页/返回接入退出 |
+| src/vendor/html-to-image/html-to-image.js、LICENSE | 固定 1.11.13 浏览器发行包 / MIT，运行期不请求 CDN |
+| src/_logo/icons/list-checks.svg、share-2.svg、copy.svg、LUCIDE-LICENSE | 官方 Lucide 静态包 SVG 与 ISC 许可 |
+| tools/conversation_management.test.mjs、conversation_management_browser.mjs | 保守删除、共享保护、40,000 高 PNG 编码、双端真实操作与布局回归 |
+| src/docs/doc_7 对话管理.md | APP 内动态帮助目录发现的完整操作指南 |
+
+不新增持久化键或聊天字段，不更改 1.1.0。管理状态不参与存档。原始 memory.deletedIds 仅追加本次独占记忆/边的精确 ID；其他数据不进行生命周期维护、级联擦除或全库垃圾回收。原有备份、云合并和 ZIP 专用原生桥行为不变。
+
+
 ## v1.1.0 DeepSeek 原生协议与兜底（2026-10-09，缓存 v50）
 
 | 文件 / API | 作用 |

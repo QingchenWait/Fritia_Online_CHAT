@@ -25,6 +25,9 @@
   <link rel="stylesheet" href="src/styles/announcements.css">
   <link rel="stylesheet" href="src/styles/announcements-desktop.css">
   <link rel="stylesheet" href="src/styles/announcements-mobile.css">
+  <link rel="stylesheet" href="src/styles/conversation-management.css">
+  <link rel="stylesheet" href="src/styles/conversation-management-desktop.css">
+  <link rel="stylesheet" href="src/styles/conversation-management-mobile.css">
 </head>
 <body>
   <div id="app" class="app-shell" data-view="chat">
@@ -141,6 +144,11 @@
             <img src="src/_logo/icons/role-card.svg" alt="">
           </button>
         </div>
+        <div id="conversation-management-actions" class="conversation-management-actions hidden" aria-label="对话管理操作">
+          <button id="conversation-management-delete" class="icon-btn conversation-management-danger" type="button" aria-label="删除选中的对话" title="删除" disabled><img src="src/_logo/icons/trash-2.svg" alt=""></button>
+          <button id="conversation-management-share" class="icon-btn" type="button" aria-label="分享选中的对话" title="分享" disabled><img src="src/_logo/icons/share-2.svg" alt=""></button>
+          <button id="conversation-management-close" class="icon-btn" type="button" aria-label="退出对话管理" title="关闭"><img src="src/_logo/icons/x.svg" alt=""></button>
+        </div>
       </header>
 
       <aside id="roundtable-error-popover" class="roundtable-error-popover hidden" aria-live="polite">
@@ -243,6 +251,7 @@
           <img src="src/_logo/icons/send.svg" alt="">
         </button>
       </footer>
+      <div id="conversation-management-hint" class="conversation-management-hint hidden">对话管理模式 | 可多选对话进行删除或分享 | 右上角 X 退出</div>
       <input id="sticker-upload-input" type="file" accept="image/*" multiple hidden>
     </main>
 
@@ -261,6 +270,7 @@
           <h3>快速操作</h3>
         </div>
         <div class="quick-grid">
+          <button id="detail-conversation-management" class="hidden" type="button"><img src="src/_logo/icons/list-checks.svg" alt=""><span>对话管理</span></button>
           <button id="detail-character-action" type="button" data-panel-open="character-import-panel">
             <img id="detail-character-action-icon" src="src/_logo/icons/user-plus.svg" alt="">
             <span id="detail-character-action-label">导入角色</span>
@@ -1935,6 +1945,24 @@
     </div>
   </div>
 
+  <div id="conversation-delete-panel" class="modal hidden conversation-management-modal" role="dialog" aria-modal="true" aria-labelledby="conversation-delete-title" aria-describedby="conversation-delete-count conversation-delete-description">
+    <section class="conversation-delete-shell">
+      <header class="conversation-management-modal-head"><h2 id="conversation-delete-title">对话删除确认</h2><button id="conversation-delete-close" class="icon-btn" type="button" aria-label="关闭删除确认"><img src="src/_logo/icons/x.svg" alt=""></button></header>
+      <div class="conversation-delete-body">
+        <h2 id="conversation-delete-count">删除选中的对话？</h2>
+        <p id="conversation-delete-description">选中的对话及其独占的长期记忆、附件、图片、语音、思考提示和工具调用记录将一并删除。此操作无法恢复。</p>
+        <p class="conversation-delete-note">与其他记录共享或无法确认归属的文件、记忆会保留，确保其余数据完整。</p>
+        <p id="conversation-delete-error" class="conversation-management-error" role="alert"></p>
+      </div>
+      <footer class="conversation-delete-actions"><button id="conversation-delete-cancel" class="btn" type="button"><img src="src/_logo/icons/x.svg" alt=""><span>取消</span></button><button id="conversation-delete-confirm" class="btn conversation-delete-confirm" type="button"><img src="src/_logo/icons/trash-2.svg" alt=""><span>确认删除</span></button></footer>
+    </section>
+  </div>
+  <div id="conversation-share-panel" class="modal hidden conversation-management-modal" role="dialog" aria-modal="true" aria-labelledby="conversation-share-title">
+    <section class="conversation-share-shell">
+      <header class="conversation-management-modal-head"><div><h2 id="conversation-share-title">分享对话</h2><p id="conversation-share-status" role="status">正在生成聊天记录图…</p></div><div class="conversation-share-actions"><button id="conversation-share-copy" class="icon-btn" type="button" aria-label="复制聊天记录图" title="复制" disabled><img src="src/_logo/icons/copy.svg" alt=""></button><button id="conversation-share-save" class="icon-btn" type="button" aria-label="保存聊天记录图" title="保存" disabled><img src="src/_logo/icons/download.svg" alt=""></button><button id="conversation-share-close" class="icon-btn" type="button" aria-label="关闭分享图片" title="关闭"><img src="src/_logo/icons/x.svg" alt=""></button></div></header>
+      <div class="conversation-share-scroll" tabindex="0" aria-label="聊天记录长图预览"><img id="conversation-share-image" alt="选中的聊天记录长图"></div>
+    </section>
+  </div>
   <div id="memory-node-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="memory-node-title">
     <div class="modal-shell modal-shell-wide memory-shell">
       <header class="modal-head">

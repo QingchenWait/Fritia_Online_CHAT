@@ -191,5 +191,7 @@
   "pdfjs/standard_fonts/LICENSE_FOXIT": "b578cdd2345840ada550bd12519533812320d5f1d21cf4c1c7e1b1b0a31c98b7",
   "pdfjs/standard_fonts/LICENSE_LIBERATION": "d2c4d5b3e115a519cb58eb691aa64538397e2611f9ebe801392cf9667997e7dc",
   "turndown/turndown.js": "4eb2e4e0440fd67ced8a75eff4dc54b8d823e7e53a54a580ac969470c66d86be",
-  "turndown/LICENSE": "a055e3a15db4b4cbb5af381230eba085603126d7d5d8c4dae45ee85b877a9729"
+  "turndown/LICENSE": "a055e3a15db4b4cbb5af381230eba085603126d7d5d8c4dae45ee85b877a9729",
+  "html-to-image/html-to-image.js": "a90b42909d80964269ef6d5f3d1e4a5a7e2a4c263a5d2a76a9e7151901343262",
+  "html-to-image/LICENSE": "9fe73723f7a9e91057f73aafc9b6a3c3b2174db2b3ddc0a3a6a8ddf2bad68e37"
 }

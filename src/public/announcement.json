@@ -1,16 +1,16 @@
 {
 
     "1": {
-        "title": "v1.1.0 版本开发中",
-        "date": "2026-10-09",
+        "title": "v1.1.0 版本发布",
+        "date": "2026-10-11",
         "version": "v1.1.0",
-        "content": "新版本将增加公告板、对话选择性删除、grok 模型支持，敬请期待"
+        "content": "<p>本次更新新增了对话管理、公告板、Grok 模型支持等功能，可通过 <a href=\"https://github.com/QingchenWait/Fritia_Online_CHAT/releases/tag/v1.1.0\">GitHub</a> 或 <a href=\"https://pan.baidu.com/s/1WMKyftMp534Trel9yx0sYA?pwd=chen\">百度网盘</a> 下载。</p> <br> <p>由于本次更新修改了数据管理策略，强烈建议更新前先<strong>手动导出一份本地存档</strong>，作为备份。</p> <br> <ul> <li><strong>新增</strong>：私聊 <code>对话管理</code> 功能，可多选并删除对话，或生成分享图 (类似 MoeTalk 形式)。</li> <li><strong>新增</strong>：<code>公告板</code> 功能，可实时获取海姆休息室 APP 的最新开发进展。</li> <li><strong>新增</strong>：添加了对 X.ai <code>Grok</code> 系列模型的支持。</li> <li><strong>新增</strong>：由于部分用户反映里芙的文字对话中性格偏冷，在 <code>插件商店</code> 中增加了<code>外芙</code> 角色卡，加强了里芙恒约后的柔和风格，同时支持自行调整提示词。可按需下载，新角色卡不会替代原版里芙。</li> <li><strong>优化</strong>：将模型产生报错的对话记录与正常上下文隔离 (不会被写入记忆、关闭 APP 后不会保存)，避免报错反复产生或上下文污染。</li> <li><strong>修复</strong>：修复了配置自定义模型后可能导致本地持久化存储失败的问题。</li> <li><strong>修复</strong>：修复了使用 DeepSeek 最高思考档位时，有一定概率把思考内容也写入对话气泡的问题。</li> </ul>"
     }
     ,
     "0": {
         "title": "欢迎来到海姆休息室",
         "date": "2026-10-01",
         "version": "v1.0.2",
-        "content": "<p>欢迎分析员使用「海姆休息室」APP，这是您与您的恋人们聊天互动的 AI 终端。</p> <br> <ul> <li>介绍视频：<a href=\"https://www.bilibili.com/video/BV1S6aB63EC8\">BiliBili @CyanDust_青尘</a></li> <li>官网 &amp; 客户端下载：<a href=\"https://fritia.online/chatroom/\">https://fritia.online/chatroom/</a></li> <li>在线聊天：<a href=\"https://chat.fritia.online\">https://chat.fritia.online</a></li> </ul> <br> <p>本 APP 永久免费开源，欢迎您访问青尘工作室的 <a href=\"https://github.com/QingchenWait/Fritia_Online_CHAT\">GitHub 仓库</a> 反馈，或进行代码贡献！</p>"
+        "content": "<p>欢迎分析员使用「海姆休息室」APP，这是您与您的恋人们聊天互动的 AI 终端。</p> <br> <ul> <li>介绍视频：<a href=\"https://www.bilibili.com/video/BV1S6aB63EC8\">BiliBili @CyanDust青尘</a></li> <li>官网 &amp; 客户端下载：<a href=\"https://fritia.online/chatroom/\">https://fritia.online/chatroom/</a></li> <li>在线聊天：<a href=\"https://chat.fritia.online\">https://chat.fritia.online</a></li> </ul> <br> <p>本 APP 永久免费开源，欢迎您访问青尘工作室的 <a href=\"https://github.com/QingchenWait/Fritia_Online_CHAT\">GitHub 仓库</a> 反馈，或进行代码贡献！</p>"
     }
 }

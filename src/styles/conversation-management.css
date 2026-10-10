@@ -1,0 +1,66 @@
+.is-conversation-management .composer,
+.is-conversation-management .chat-head > .chat-head__actions,
+.is-conversation-management .chat-head > .head-actions { display: none; }
+.conversation-management-actions, .conversation-share-actions { display: flex; align-items: center; gap: .4rem; flex-shrink: 0; }
+.conversation-management-actions .icon-btn { border: 1px solid rgba(120, 140, 180, .16); border-radius: .9rem; background: rgba(255, 255, 255, .8); }
+.conversation-management-danger:not(:disabled) { background: #fff3f4 !important; }
+.conversation-management-danger:not(:disabled) img { filter: invert(36%) sepia(70%) saturate(1840%) hue-rotate(326deg) brightness(92%) contrast(88%); }
+.conversation-management-actions button:disabled, .conversation-share-actions button:disabled { opacity: .35; cursor: default; filter: grayscale(1); box-shadow: none; }
+.conversation-management-hint { position: absolute; inset-inline: 0; bottom: 0; z-index: 4; padding: .85rem 1rem calc(.85rem + env(safe-area-inset-bottom)); text-align: center; color: #8c93a8; background: rgba(248, 250, 255, .94); border-top: 1px solid rgba(120, 140, 180, .08); font-size: clamp(.65rem, .75vw, .75rem); line-height: 1.5; pointer-events: none; }
+.is-conversation-management .message-list { padding-bottom: calc(4rem + env(safe-area-inset-bottom)) !important; scroll-padding-bottom: 4rem !important; }
+.is-management-selectable { cursor: pointer; }
+.is-management-selectable .message-content { position: relative; max-width: min(560px, calc(100% - 2.25rem)); transition: box-shadow 160ms ease, outline-color 160ms ease; }
+.is-management-selected .message-content { outline: 2px solid #bbb5ff; outline-offset: 3px; box-shadow: 0 8px 24px rgba(99, 91, 255, .14); }
+.is-management-selectable:focus-visible { outline: 2px solid #635bff; outline-offset: .3rem; border-radius: 1rem; }
+.message-selection-control { display: block; position: absolute; width: 1.4rem; height: 1.4rem; right: -2rem; bottom: -.15rem; border: 1.5px solid #c8cede; border-radius: 50%; background: rgba(255, 255, 255, .8); box-shadow: 0 3px 8px rgba(40, 60, 120, .05); }
+.is-self .message-selection-control { right: auto; left: -2rem; }
+.is-management-selected .message-selection-control { background: #aaa3ed; border-color: #aaa3ed; }
+.is-management-selected.is-self .message-selection-control, .is-management-selected .message-content--voice .message-selection-control { background: white; border-color: #aaa3ed; }
+.is-management-selected .message-selection-control::after { content: ''; position: absolute; width: .34rem; height: .65rem; left: .45rem; top: .22rem; border: solid var(--bubble-other, white); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.is-management-selected.is-self .message-selection-control::after, .is-management-selected .message-content--voice .message-selection-control::after { border-color: #635bff; }
+.conversation-management-modal { z-index: 140; padding: clamp(.6rem, 2vw, 2rem); }
+.conversation-share-shell, .conversation-delete-shell { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid rgba(120, 140, 180, .18); border-radius: clamp(1.25rem, 2vw, 1.9rem); background: rgba(248, 250, 255, .96); box-shadow: 0 24px 70px rgba(40, 60, 120, .16); backdrop-filter: blur(20px); animation: managementOpen 160ms ease-out; }
+.conversation-management-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.1rem 1.35rem; flex-shrink: 0; background: rgba(255, 255, 255, .86); border-bottom: 1px solid rgba(120, 140, 180, .12); }
+.conversation-management-modal-head > div:first-child { min-width: 0; }
+.conversation-management-modal-head h2 { margin: 0; font-size: 1.05rem; color: var(--text); }
+.conversation-management-modal-head p { margin: .35rem 0 0; font-size: .75rem; color: var(--muted); overflow-wrap: anywhere; }
+.conversation-share-scroll, .conversation-delete-body { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(99, 91, 255, .42) transparent; scrollbar-gutter: stable; }
+.conversation-share-scroll { padding: clamp(.8rem, 2vw, 1.5rem); background: linear-gradient(150deg, #eef1fa, #f7f8fd); }
+.conversation-share-scroll img { display: block; width: 100%; height: auto; border-radius: .8rem; box-shadow: 0 8px 30px rgba(40, 60, 120, .09); }
+.conversation-share-scroll img:not([src]) { display: none; }
+.conversation-share-scroll::-webkit-scrollbar, .conversation-delete-body::-webkit-scrollbar { width: .4rem; height: .4rem; }
+.conversation-share-scroll::-webkit-scrollbar-thumb, .conversation-delete-body::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(99, 91, 255, .42); }
+.conversation-share-scroll::-webkit-scrollbar-track, .conversation-delete-body::-webkit-scrollbar-track { background: transparent; }
+#conversation-delete-panel { place-items: center; }
+.conversation-delete-shell { width: min(100%, 29rem); height: auto; align-self: center; justify-self: center; max-height: calc(100dvh - 3rem); }
+#conversation-delete-title { font-weight: 700; line-height: 1.35; }
+.conversation-delete-body { padding: .5rem 1.6rem 1rem; line-height: 1.75; font-size: .88rem; color: var(--muted); }
+.conversation-delete-body h2 { font-size: 1.2rem; color: var(--text); }
+.conversation-delete-note { padding: .85rem 1rem; border-radius: .9rem; background: #f0f2fa; font-size: .79rem; }
+.conversation-management-error { color: #cf4c63; }
+.conversation-delete-actions { display: flex; justify-content: flex-end; gap: .7rem; padding: 1rem 1.6rem; border-top: 1px solid rgba(120, 140, 180, .1); flex-shrink: 0; }
+.conversation-delete-actions .btn { display: inline-flex; align-items: center; justify-content: center; flex-wrap: nowrap; flex-shrink: 0; gap: .45rem; white-space: nowrap; }
+.conversation-delete-actions img { width: 1rem; height: 1rem; flex: 0 0 1rem; }
+.conversation-delete-confirm { background: #d95166; color: white; border-color: transparent; box-shadow: 0 6px 18px rgba(217, 81, 102, .15); }
+.conversation-delete-confirm img { filter: brightness(0) invert(1); }
+.conversation-delete-confirm:hover { background: #ca4258; }
+/* Fixed export dimensions are image pixels, independent of device layout. */
+.conversation-share-stage { position: fixed; top: 0; left: -10000px; width: 512px; min-height: 288px; padding-bottom: 24px; background: #f5f7fc; color: #28334a; font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; font-size: 15px; line-height: 1.58; }
+.conversation-share-stage .chat-head { height: 66px; padding: 0 18px; gap: 12px; }
+.conversation-share-stage .chat-head__avatar { display: block; width: 42px; height: 42px; }
+.conversation-share-stage .chat-head__titles h1 { font-size: 18px; }
+.conversation-share-stage .chat-head__titles p { font-size: 12px; }
+.conversation-share-stage .chat-head > .conversation-management-actions { display: none; }
+.conversation-share-messages { padding: 16px 20px; }
+.conversation-share-stage .message-row { grid-template-columns: 38px minmax(0, 1fr); gap: 10px; margin: 16px 0; max-width: 82%; }
+.conversation-share-stage .message-row.is-self { grid-template-columns: minmax(0, 1fr) 38px; margin-left: auto; }
+.conversation-share-stage .message-avatar { width: 38px; height: 38px; }
+.conversation-share-stage .message-content { display: block; width: fit-content; max-width: 100%; position: relative; z-index: 0; font-size: 15px; padding: 10px 12px; border-radius: 18px; }
+.conversation-share-stage .is-self .message-content { margin-left: auto; }
+.conversation-share-stage .voice-bubble, .conversation-share-stage .tool-other-files-button, .conversation-share-stage .message-attachment-file { position: relative; z-index: 0; }
+.conversation-share-stage .message-content--voice { padding: 6px; }
+.conversation-share-stage .message-content--sticker-only { background: transparent; border: 0; box-shadow: none; padding: 0; }
+.conversation-share-stage .markdown-table-wrap, .conversation-share-stage .markdown-body pre { max-width: 100% !important; }
+.conversation-share-stage .markdown-body pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@keyframes managementOpen { from { opacity: 0; transform: translateY(.5rem) scale(.99); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .conversation-share-shell, .conversation-delete-shell { animation: none; } }

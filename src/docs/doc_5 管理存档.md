@@ -1,7 +1,7 @@
 ## 📇 APP 的存档保存在哪里？
 
 - **网页端**：保存在你使用的浏览器内部。必须使用同一个浏览器，访问 [https://chat.fritia.online](https://chat.fritia.online)，才能正确继承存档。
-- **Windows**：保存在 `C:\Users\<你电脑的用户名>\AppData\Roaming\fritia-next-chat-electron`位置。直接使用新版 APP 客户端，不会导致存档丢失。
+- **Windows**：保存在 `C:\Users\<用户名>\AppData\Local\com.fritia.next.chat`目录。对话、知识库、记忆等用户数据保存在该目录下的 `EBWebView\Default` 子文件夹中。直接使用新版 APP 客户端，不会导致存档丢失。
 - **Android**：保存在安卓包体内部。因此，更新 APP 版本时，切勿直接卸载旧版本！
 
 ## 📇 导入与导出存档

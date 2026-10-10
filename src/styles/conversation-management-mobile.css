@@ -1,0 +1,16 @@
+@media (max-width: 760px) {
+  #conversation-delete-panel { padding: calc(1.25rem + env(safe-area-inset-top)) 1rem calc(1.25rem + env(safe-area-inset-bottom)); }
+  .conversation-delete-shell { max-height: calc(100dvh - 2.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .conversation-share-shell { width: 100%; max-height: calc(var(--management-viewport, 100dvh) - 1.25rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)); border-radius: 1.25rem; }
+  .conversation-management-modal-head { padding: .85rem .9rem; gap: .5rem; }
+  .conversation-share-actions { gap: .15rem; }
+  .conversation-share-actions .icon-btn, .conversation-management-actions .icon-btn { width: 2.15rem; height: 2.15rem; min-width: 2.15rem; border-radius: .75rem; }
+  .conversation-share-scroll { min-height: min(12rem, 35dvh); padding: .55rem; }
+  .conversation-management-actions { gap: .2rem; }
+  .conversation-management-hint { font-size: clamp(.59rem, 2.5vw, .72rem); padding-inline: .4rem; }
+  .is-conversation-management .chat-head { gap: .5rem; padding-inline: .65rem; }
+  .is-conversation-management .message-list { padding-inline: .85rem; }
+  .is-conversation-management .message-content { max-width: calc(100% - 2rem); }
+  .conversation-delete-body { padding-inline: 1.15rem; }
+  .conversation-delete-actions { padding: .9rem 1.15rem; }
+}

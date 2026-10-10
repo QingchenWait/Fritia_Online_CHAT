@@ -1,0 +1,7 @@
+@media (min-width: 761px) {
+  .conversation-delete-shell { max-height: calc(100dvh - clamp(3rem, 6vh, 6rem)); }
+  .conversation-share-shell { width: min(48rem, 88vw); max-height: calc(100dvh - clamp(2rem, 6vh, 5rem)); }
+  .conversation-share-scroll { min-height: min(16rem, 42vh); }
+  .is-conversation-management .message-list { padding-inline: clamp(1.2rem, 2vw, 2rem); }
+  .conversation-management-actions .icon-btn { width: 2.5rem; height: 2.5rem; }
+}

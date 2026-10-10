@@ -95,6 +95,19 @@ export async function deleteMedia(refOrId) {
   });
 }
 
+// Call the reference guard after opening IDB, without an intervening await.
+export async function deleteMediaIfUnreferenced(ref, canDelete) {
+  if (!isMediaRef(ref)) return false;
+  const db = await openMediaDb();
+  if (!canDelete()) return false;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(mediaRefToId(ref));
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = tx.onabort = () => reject(tx.error || new Error('删除媒体数据失败。'));
+  });
+}
+
 function putMediaRecord(record) {
   return openMediaDb().then(db => new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');

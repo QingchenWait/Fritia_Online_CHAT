@@ -1,5 +1,11 @@
 # 本地解析依赖
 
+## 聊天分享图
+
+- **html-to-image 1.11.13**：官方浏览器发行文件原样保存至 `html-to-image/html-to-image.js`，保留 MIT `LICENSE`。来源：[固定发行文件](https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js)、[官方项目](https://github.com/bubkoo/html-to-image)。只在生成分享图时动态加载，运行时无远程 CDN。
+- 分享图复用 APP 消息 DOM，以有界 Canvas 分段绘制；复用本目录 **fflate 0.8.3** 的 Zlib 增量生成一个 PNG。字体/图片先加载，CSS 白色 SVG 滤镜栅格化，远程图片要求 CORS；未读取到的图片明确报错。没有服务端截图、LLM 图片生成或原生新增桥。
+- 图标位于 `src/_logo/icons`，来源 [Lucide 官方静态包 0.468.0](https://cdn.jsdelivr.net/npm/lucide-static@0.468.0/icons/)，新增 list-checks/share-2/copy 与重新下载的 trash-2/x；ISC 许可在 `LUCIDE-LICENSE`。
+
 本目录保存固定版本发行文件，运行时不加载远程 CDN。附件解析没有采用 Open WebUI 源码；参考其按文件内容/格式选择文本解析器的流程。
 
 - **PDF.js / pdfjs-dist 6.3.289**：Mozilla 的 legacy 发行文件、CMaps 与标准字体。Apache-2.0；目录 LICENSE 及字体自身许可均保留。来源：https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-6.3.289.tgz 。仅将 pdf.min.mjs / pdf.worker.min.mjs 改名为 .js，以复用原生壳 JavaScript MIME 映射；文件内容未改动。不开启 eval/WASM，不加载 PDF JavaScript/附件或渲染整本 PDF。

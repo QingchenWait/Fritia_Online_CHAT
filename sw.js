@@ -1,7 +1,19 @@
-const CACHE_NAME = 'fritia-next-chat-v50';
+const CACHE_NAME = 'fritia-next-chat-v52';
 const CORE_ASSETS = [
   './',
   './index.html',
+  './src/js/conversation_management.js',
+  './src/js/conversation_management_data.js',
+  './src/js/conversation_management_desktop.js',
+  './src/js/conversation_management_mobile.js',
+  './src/js/conversation_share.js',
+  './src/styles/conversation-management.css',
+  './src/styles/conversation-management-desktop.css',
+  './src/styles/conversation-management-mobile.css',
+  './src/vendor/html-to-image/html-to-image.js',
+  './src/_logo/icons/list-checks.svg',
+  './src/_logo/icons/share-2.svg',
+  './src/_logo/icons/copy.svg',
   './src/styles/app.css',
   './src/styles/announcements.css',
   './src/styles/announcements-desktop.css',

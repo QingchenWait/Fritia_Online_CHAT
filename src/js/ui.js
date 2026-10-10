@@ -29,9 +29,12 @@ import { listArchiveRecoveries, getArchiveRecoveryAvailability, exportArchiveRec
 import { getRecoveryLimit, setRecoveryLimit } from './archive_state.js';
 import { bindExternalLinks } from './external_links.js';
 import { initAnnouncementBoard } from './announcements.js';
+import { initConversationManagement } from './conversation_management.js';
 
 let chatProviderPresets = null;
 let announcementBoard = null;
+let conversationManagement = null;
+let pendingConversationReplies = 0;
 
 const CHAT_MODEL_LOGO_PATHS = Object.freeze({
   mimo: 'src/_logo/llms/mimo.svg',
@@ -311,6 +314,16 @@ export function initUi() {
   installNativeBackHandler();
   initWebMcpServer({ getStore: () => state.store });
   bindGlobalEvents();
+  conversationManagement = initConversationManagement({
+    getStore: () => state.store, getConversation: getActiveConversation,
+    closeDetail: closeDetailPane,
+    closePopovers: () => { closeMentionPicker(); closeStickerPopover(); closeChatModelPicker(); closeMcpPicker(); },
+    isBusy: () => pendingConversationReplies > 0 || Boolean(state.activeToolRun),
+    onDelete: (_id, ids) => {
+      if (ids.some(id => state.voicePlayback?.messageId === id || state.voicePlayback?.messageId.startsWith(`${id}:attachment:`))) stopVoicePlayback();
+      if (ids.includes(state.toolOtherFiles.messageId)) closePanel('tool-other-files-panel');
+    }
+  });
   announcementBoard = initAnnouncementBoard({ renderMarkdown: renderMarkdownDocument, requestClose: () => closePanel('announcement-panel') });
   applyStoredConversationListWidth();
   syncSettingsToForm();
@@ -1004,6 +1017,7 @@ function clearComposerDraft(input = document.getElementById('message-input')) {
 }
 
 function sendMessageToActiveConversation(text, attachments = []) {
+  if (conversationManagement?.active()) return null;
   let committed = null;
   try {
     committed = commitOutgoingMessage(text, attachments);
@@ -1062,6 +1076,7 @@ function continueConversationAfterOutgoing(committed) {
   const { store, conversation, message } = committed;
   if (!conversation) return;
   if (conversation.type === 'group') {
+    pendingConversationReplies++;
     const chatRuntime = buildCharacterChatSettings(`group:${conversation.id}`);
     runRoundtableTurn({
       store,
@@ -1075,7 +1090,7 @@ function continueConversationAfterOutgoing(committed) {
       onStore: updateStore
     }).catch(error => {
       console.warn('[ui] roundtable turn failed', error);
-    });
+    }).finally(() => { pendingConversationReplies--; conversationManagement?.update(); });
     return;
   }
   const character = getCharacterById(store.characters, conversation.memberIds[0]);
@@ -1083,6 +1098,7 @@ function continueConversationAfterOutgoing(committed) {
   const chatRuntime = buildCharacterChatSettings(character.id);
   const selectedMcpClientIds = getSelectedMcpClientIds(conversation.id);
   if (selectedMcpClientIds.length) {
+    pendingConversationReplies++;
     const controller = new AbortController();
     state.activeToolRun = {
       conversationId: conversation.id,
@@ -1105,13 +1121,16 @@ function continueConversationAfterOutgoing(committed) {
     }).catch(error => {
       console.warn('[ui] tool private reply failed', error);
     }).finally(() => {
+      pendingConversationReplies--;
       if (state.activeToolRun?.controller === controller) {
         state.activeToolRun = null;
         renderMessages();
       }
+      conversationManagement?.update();
     });
     return;
   }
+  pendingConversationReplies++;
   completePrivateMessageReply({
     store,
     conversation,
@@ -1125,7 +1144,7 @@ function continueConversationAfterOutgoing(committed) {
     onStore: updateStore
   }).catch(error => {
     console.warn('[ui] private reply failed', error);
-  });
+  }).finally(() => { pendingConversationReplies--; conversationManagement?.update(); });
 }
 
 async function sendSticker(sticker) {
@@ -4258,6 +4277,7 @@ function handleAndroidBackAction() {
 }
 
 function closeTransientBackSurface() {
+  if (conversationManagement?.back()) return true;
   const groupLeaveConfirm = document.getElementById('group-leave-confirm-overlay');
   if (groupLeaveConfirm && !groupLeaveConfirm.classList.contains('hidden')) {
     closeGroupLeaveConfirm();
@@ -4353,6 +4373,7 @@ function clearMobileTouchActivationState() {
 }
 
 function closeMobileChatPage() {
+  conversationManagement?.exit();
   closeMentionPicker();
   closeStickerPopover();
   closeChatModelPicker();
@@ -4399,6 +4420,7 @@ function renderAll() {
   renderRoleMigrationSurfaces();
   scheduleRoundtableIdle();
   syncMobileBackAvailability();
+  conversationManagement?.update();
 }
 
 function setImageSource(image, source, fallback = 'src/_logo/emoji/chat.svg') {
@@ -4485,6 +4507,7 @@ let chatScrollController = null;
 const messageNodeCache = new Map();
 
 function renderMessages() {
+  conversationManagement?.update();
   const container = document.getElementById('message-list');
   if (!container) return;
   const conversation = getActiveConversation();
@@ -4530,6 +4553,7 @@ function renderMessages() {
   });
   while (container.children.length > nodes.length) container.lastElementChild.remove();
   chatScrollController.afterRender();
+  conversationManagement?.update();
 }
 
 function createMessageNode(message) {
@@ -6626,6 +6650,7 @@ function openPanel(id, options = {}) {
 }
 
 function closePanel(id) {
+  if (id === 'conversation-share-panel') { conversationManagement?.closePreview(); return; }
   if (id === 'announcement-panel') announcementBoard?.close();
   if (id === 'settings-panel') chatProviderPresets?.close();
   if (id === 'memory-node-panel') {
@@ -6677,6 +6702,7 @@ function showStickerManagerSection(section) {
 }
 
 function selectConversation(id) {
+  conversationManagement?.exit();
   const next = saveAppStore({ ...state.store, activeConversationId: id });
   document.getElementById('app')?.classList.remove('is-detail-open');
   closeGroupInfoPanel();
@@ -6736,7 +6762,8 @@ function scheduleRoundtableIdle() {
     const activeSettings = normalizeGroupSettings(active.groupSettings);
     if (!activeSettings.idleTalk || !activeSettings.autoBotChat) return;
     const runtime = buildCharacterChatSettings(`group:${active.id}`);
-    await runRoundtableTurn({
+    pendingConversationReplies++;
+    try { await runRoundtableTurn({
       store: state.store,
       conversation: active,
       characters: state.store.characters,
@@ -6744,7 +6771,7 @@ function scheduleRoundtableIdle() {
       chatSettings: runtime.settings,
       reasoningEffort: runtime.reasoningEffort,
       onStore: updateStore
-    });
+    }); } finally { pendingConversationReplies--; conversationManagement?.update(); }
   }, delay);
 }
 
