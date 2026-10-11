@@ -36,26 +36,35 @@ export async function archiveFetch(url, init) {
 
 // Call before collecting data, while the button's user activation is alive.
 export async function chooseArchiveDestination(filename) {
+  return chooseFileDestination(filename);
+}
+
+// Keep native clients ahead of browser pickers (WebView directory access can
+// be restricted even when the File System Access API is present).
+export async function chooseFileDestination(filename, mime = 'application/zip') {
+  const type = mime === 'application/zip' ? { extension: 'zip', description: 'ZIP 备份' }
+    : mime === 'image/png' ? { extension: 'png', description: '聊天记录图片' } : null;
+  if (!type) throw new Error('不支持的保存文件类型');
   if (window.FritiaArchive?.chooseFile) {
     if (!['beginWrite', 'writeChunk', 'finishWrite', 'abortWrite'].every(method => typeof window.FritiaArchive[method] === 'function')) {
-      throw new Error('当前 Android 保存桥不支持分块写入，请安装更新后的客户端再导出备份。');
+      throw new Error('当前 Android 保存桥不支持分块写入，请安装更新后的客户端再保存文件。');
     }
-    const chosen = await androidCall('chooseFile', { filename, mime: 'application/zip' });
+    const chosen = await androidCall('chooseFile', { filename, mime });
     if (chosen.cancelled) return null;
     return async blob => {
       const session = await androidCall('beginWrite', { uri: chosen.uri, size: blob.size });
       try {
         // One bounded message is in flight at a time; never materialize the
-        // entire ZIP as an ArrayBuffer/Base64/JSON bridge argument.
+        // entire file as an ArrayBuffer/Base64/JSON bridge argument.
         const chunkSize = Math.min(128 * 1024, Number(session.chunkBytes) || 128 * 1024);
         if (!session.writeId || !Number.isSafeInteger(chunkSize) || chunkSize <= 0) throw new Error('Android 保存会话无效');
         for (let offset = 0; offset < blob.size; offset += chunkSize) {
           const bytes = new Uint8Array(await blob.slice(offset, offset + chunkSize).arrayBuffer());
           const result = await androidCall('writeChunk', { writeId: session.writeId, offset, body: toBase64(bytes) });
-          if (result.written !== offset + bytes.length) throw new Error('Android 备份写入进度不一致');
+          if (result.written !== offset + bytes.length) throw new Error('Android 文件写入进度不一致');
         }
         const result = await androidCall('finishWrite', { writeId: session.writeId });
-        if (result.saved !== true || result.written !== blob.size) throw new Error('Android 备份文件未完整写入');
+        if (result.saved !== true || result.written !== blob.size) throw new Error('Android 文件未完整写入');
         return result;
       } catch (error) {
         await androidCall('abortWrite', { writeId: session.writeId }).catch(() => {});
@@ -66,17 +75,17 @@ export async function chooseArchiveDestination(filename) {
   const dialog = window.__TAURI__?.dialog;
   const fs = window.__TAURI__?.fs;
   if (dialog?.save && fs?.writeFile) {
-    const path = await dialog.save({ defaultPath: filename, filters: [{ name: 'ZIP', extensions: ['zip'] }] });
+    const path = await dialog.save({ defaultPath: filename, filters: [{ name: type.extension.toUpperCase(), extensions: [type.extension] }] });
     return path ? blob => blob.arrayBuffer().then(data => fs.writeFile(path, new Uint8Array(data))) : null;
   }
   const invoke = window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
   if (invoke && !window.FritiaAndroid) {
-    const path = await invoke('choose_archive_file', { filename });
+    const path = await invoke('choose_archive_file', mime === 'application/zip' ? { filename } : { filename, mime });
     return path ? async blob => invoke('write_archive_file', { path, body: toBase64(new Uint8Array(await blob.arrayBuffer())) }) : null;
   }
   if (window.showSaveFilePicker) {
     try {
-      const handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'ZIP 备份', accept: { 'application/zip': ['.zip'] } }] });
+      const handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: type.description, accept: { [mime]: [`.${type.extension}`] } }] });
       return async blob => { const writable = await handle.createWritable(); try { await writable.write(blob); await writable.close(); } catch (error) { await writable.abort().catch(() => {}); throw error; } };
     } catch (error) { if (error.name === 'AbortError') return null; throw error; }
   }

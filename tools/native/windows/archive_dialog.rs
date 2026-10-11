@@ -48,18 +48,24 @@ extern "system" {
 pub async fn choose_archive_file(
     window: tauri::WebviewWindow,
     filename: String,
+    mime: Option<String>,
 ) -> Result<Option<String>, String> {
+    let (filter, title, extension) = match mime.as_deref().unwrap_or("application/zip") {
+        "application/zip" => ("ZIP archive (*.zip)\0*.zip\0\0", "保存 ZIP 备份\0", "zip\0"),
+        "image/png" => ("PNG image (*.png)\0*.png\0\0", "保存聊天记录图片\0", "png\0"),
+        _ => return Err("不支持的保存文件类型".into()),
+    };
     let owner = window.hwnd().map_err(|e| e.to_string())?.0 as usize;
     tauri::async_runtime::spawn_blocking(move || {
         let mut file = vec![0u16; 32768];
         let suggested: Vec<u16> = filename.encode_utf16().collect();
         if suggested.len() >= file.len() || suggested.contains(&0) {
-            return Err("无效的备份文件名".into());
+            return Err("无效的保存文件名".into());
         }
         file[..suggested.len()].copy_from_slice(&suggested);
-        let filter: Vec<u16> = "ZIP archive (*.zip)\0*.zip\0\0".encode_utf16().collect();
-        let title: Vec<u16> = "保存 ZIP 备份\0".encode_utf16().collect();
-        let extension: Vec<u16> = "zip\0".encode_utf16().collect();
+        let filter: Vec<u16> = filter.encode_utf16().collect();
+        let title: Vec<u16> = title.encode_utf16().collect();
+        let extension: Vec<u16> = extension.encode_utf16().collect();
         // All optional pointer fields are null, and backing UTF-16 buffers
         // outlive the synchronous native dialog call.
         let mut dialog: OpenFileName = unsafe { std::mem::zeroed() };

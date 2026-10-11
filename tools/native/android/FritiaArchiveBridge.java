@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
 import java.util.concurrent.TimeUnit;
 import okhttp3.*;
 
-/** WebDAV method fidelity and Storage Access Framework archive saving. */
+/** WebDAV method fidelity and Storage Access Framework ZIP/PNG saving. */
 public final class FritiaArchiveBridge {
     private static final int SAVE_REQUEST = 1902;
     private final Activity activity;
@@ -95,12 +95,14 @@ public final class FritiaArchiveBridge {
             String token = "";
             try {
                 JSONObject input = new JSONObject(raw); token = input.getString("token");
+                String mime = input.optString("mime", "application/zip");
+                if (!mime.equals("application/zip") && !mime.equals("image/png")) throw new Exception("Unsupported save file type");
                 synchronized (saveLock) {
                     if (pickerToken != null || activeWrite != null) throw new Exception("A save operation is already active");
                     pickerToken = token;
                 }
                 Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-                    .setType("application/zip").putExtra(Intent.EXTRA_TITLE, input.getString("filename"));
+                    .setType(mime).putExtra(Intent.EXTRA_TITLE, input.getString("filename"));
                 activity.startActivityForResult(intent, SAVE_REQUEST);
             } catch (Exception error) {
                 synchronized (saveLock) { if (token.equals(pickerToken)) pickerToken = null; }

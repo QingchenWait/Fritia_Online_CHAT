@@ -1,5 +1,6 @@
 import { getMediaDataUrl, isMediaRef } from './media_store.js';
 import { Zlib } from '../vendor/fflate/fflate.js';
+import { chooseFileDestination } from './archive_io.js';
 
 const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, index) => {
   let value = index;
@@ -131,36 +132,16 @@ export async function renderConversationImage({ rows, header, onProgress = () =>
   } finally { stage.remove(); }
 }
 
-export async function saveConversationImage(blob, filename) {
-  if (window.showDirectoryPicker) {
-    const directory = await window.showDirectoryPicker({ mode: 'readwrite' });
-    const handle = await directory.getFileHandle(filename, { create: true });
-    await writeImage(handle, blob);
-    return false;
-  }
-  if (window.showSaveFilePicker) {
-    const handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: '聊天记录图片', accept: { 'image/png': ['.png'] } }] });
-    await writeImage(handle, blob);
-    return false;
-  }
-  const dialog = window.__TAURI__?.dialog;
-  const fs = window.__TAURI__?.fs;
-  if (dialog?.save && fs?.writeFile) {
-    const path = await dialog.save({ defaultPath: filename, filters: [{ name: 'PNG', extensions: ['png'] }] });
-    if (!path) return null;
-    await fs.writeFile(path, new Uint8Array(await blob.arrayBuffer()));
-    return false;
-  }
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
-  return true;
+export function conversationImageFilename(date = new Date()) {
+  const pad = value => String(value).padStart(2, '0');
+  return `海姆休息室_${pad(date.getFullYear() % 100)}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}.png`;
 }
 
-async function writeImage(handle, blob) {
-  const writable = await handle.createWritable();
-  try { await writable.write(blob); await writable.close(); }
-  catch (error) { await writable.abort().catch(() => {}); throw error; }
+export async function saveConversationImage(blob, filename = conversationImageFilename()) {
+  const write = await chooseFileDestination(filename, 'image/png');
+  if (!write) return null;
+  const result = await write(blob);
+  return result?.browserDownload === true;
 }
 
 export async function copyConversationImage(blob) {

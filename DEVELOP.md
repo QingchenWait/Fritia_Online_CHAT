@@ -1,5 +1,12 @@
 # DEVELOP
 
+## 2026-10-11 v1.1.0 分享 PNG 原生保存修复（缓存 v53）
+
+- PNG 原路径优先使用 showDirectoryPicker，触发 WebView2 敏感目录限制；Android 未接入 SAF，且原桥硬编码 application/zip。现在优先复用 ZIP 原生保存桥，浏览器仅使用 showSaveFilePicker 或下载回退；文件名可在系统窗口修改，默认保存时本地时间 `海姆休息室_YYMMDD_HHMMSS.png`。
+- archive_io.js 抽出 chooseFileDestination，ZIP 入口与既有命令调用参数保持；仅 PNG 传 image/png。Windows optional mime 限定 ZIP/PNG，保留原路径一次性授权、覆盖确认及取消流程；Android 同样限定 MIME 并沿用 128 KiB 顺序分块/偏移确认/close 完成校验。取消不写入，失败不显示成功。
+- 未更改图片生成、尺寸、UI 布局、剪贴板、存储结构和公共版本。规范原生源码位于 tools/native；重新打包时需同步进入外部 Windows/Android 壳体，旧 APK/EXE 无法仅通过网页代码获得新桥能力。构建与原生系统窗口验收记录放在外部 chat_v1.1.0 的 BUILD_PROCESS.md / validation 目录。
+- tools/archive_export.test.mjs 新增 5 项 PNG 回归：默认名称、原生优先与重命名路径、Android 图像分块字节完整性、取消/失败、网页版 PNG 类型及写入中止。既有 4 项 ZIP 回归继续通过；对话管理浏览器保存桩改用可重命名的文件保存选择器。
+
 ## 2026-10-11 v1.1.0 旧版 WebView dvh 高度补丁
 
 - 仅向 `chat-scroll-desktop.css` / `chat-scroll-mobile.css` 追加 `@supports not (height: 100dvh)` 规则。桌面回退主窗口/聊天区高度；窄屏回退主窗口/会话列表/聊天区及输入框 max-height，使用 vh 和既有 --chat-viewport-height。限定聊天布局，不泛化替换其他窗口中的 dvh。

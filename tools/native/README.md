@@ -3,7 +3,7 @@
 静态 JS 无法修复旧 Android HTTP 栈的扩展方法支持，也不能直接调用 Android 系统文件创建界面。此目录保存所需的最小原生补丁，不是安装包。
 
 - `android/FritiaArchiveBridge.java`：OkHttp WebDAV 扩展方法、同源重定向、安全的 204 响应回传；SAF 系统保存路径、受限 URI 写入、用户点击时读取剪贴板。
-- `windows/archive_dialog.rs`：Tauri 命令 `choose_archive_file` / `write_archive_file`；后台线程调用 Windows 原生 GetSaveFileNameW 保存窗口，不阻塞 WebView；只接受用户刚选择的路径。
+- `windows/archive_dialog.rs`：Tauri 命令 `choose_archive_file` / `write_archive_file`；后台线程调用 Windows 原生 GetSaveFileNameW 保存窗口，不阻塞 WebView；只接受用户刚选择的路径。可选 `mime` 仅接受 `application/zip`（默认）或 `image/png`，分别使用 ZIP/PNG 过滤器和默认扩展名。
 - `apply_archive_bridges.py`：向指定壳层源码和 Android 模板接入桥接，保留 `.before-archive-v101` 文件；Android 编译脚本加入依赖 classpath。必须先获得目标目录写入授权，不会自行构建。
 - `prepare_v101_sources.py`：专用于本次获授权的 `chat_v1.0.1`，复制原平台源码并覆盖本轮前端变动，保留已有平台注入，更新版本；不运行打包。
 
@@ -37,6 +37,10 @@ Android 依赖来自 Maven Central 原始 JAR，不修改库源码：
 
 本批只更新前端画布手势声明、恢复副本事务和数量控件；原生桥、包名、版本及证书不变。源码与产物继续位于授权的 chat_v1.0.2。验收使用真实 Chromium/WebView2 触控输入协议、专用 Android 模拟器和 recovery_limit_cases.mjs；本批报告存于 validation/graph-recovery，构建过程见两端 BUILD_PROCESS.md。
 
+
+### v1.1.0 PNG 保存
+
+分享图优先使用原生文件保存窗口，用户可选择位置和重命名。Android chooseFile 按请求 MIME 限定 ZIP/PNG，PNG 使用 image/png 的 ACTION_CREATE_DOCUMENT；沿用分块会话、所选 URI 和完整关闭校验。Windows 保持原命令及一次性路径授权，PNG 请求增加 mime 字段，ZIP 不传该字段时仍使用原过滤器。默认名称为保存时本地时间 `海姆休息室_YYMMDD_HHMMSS.png`。取消不写入，失败不提示成功。必须同步规范源码并重新构建两个客户端；实际系统保存窗口测试与构建记录位于外部 chat_v1.1.0。
 
 ### v1.0.2 Android ZIP 分块保存
 

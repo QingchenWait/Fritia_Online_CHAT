@@ -1,5 +1,18 @@
 # STRUCTURE
 
+## v1.1.0 分享 PNG 保存桥（2026-10-11，缓存 v53）
+
+| 文件 / API | 作用 |
+| --- | --- |
+| archive_io.js / chooseFileDestination(filename, mime) | 原生优先的 ZIP/PNG 保存目的地与写入函数；PNG MIME 为 image/png，chooseArchiveDestination 保持原 ZIP 入口 |
+| conversation_share.js / conversationImageFilename(date) | 本地时间两位年份的 海姆休息室_YYMMDD_HHMMSS.png 默认名称 |
+| conversation_share.js / saveConversationImage | 复用文件保存桥；完整写入返回 false、浏览器下载返回 true、取消返回 null |
+| tools/native/windows/archive_dialog.rs / choose_archive_file | 可选 mime，仅 ZIP/PNG；相应过滤器、标题及默认扩展名；沿用一次性用户所选路径写入 |
+| tools/native/android/FritiaArchiveBridge.java / chooseFile | 限定 ZIP/PNG MIME 的 ACTION_CREATE_DOCUMENT，保留原 URI/会话与 128 KiB 分块保存 |
+| tools/archive_export.test.mjs | ZIP 原行为及 PNG 默认名、原生优先、重命名路径、字节完整性、取消/失败的 9 项回归 |
+
+原有 UI、图像渲染与尺寸规则、聊天数据及公共版本不变。Windows/Android 的原生改动在外部打包目录集成；未新增项目内打包文件。
+
 ## v1.1.0 旧版 WebView dvh 回退（2026-10-11）
 
 | 文件 / 规则 | 作用 |
@@ -21,7 +34,7 @@
 | media_store.js / deleteMediaIfUnreferenced | IDB 打开后同步引用 guard；只删除单个明确 media ref |
 | conversation_share.js / renderConversationImage | 复制选中行、图片加载校验、复用现有 Markdown/语音/工具 UI、白色 SVG 栅格化、分段浏览器原生 DOM 绘图 |
 | createTranscriptPng | 流式 PNG：Sub scanline filter、现有 fflate Zlib、CRC32/IDAT；单图无固定高度上限 |
-| saveConversationImage/copyConversationImage | 原生目录/文件 Web picker 或现有 Tauri 插件；无能力时下载回退；ClipboardItem PNG |
+| saveConversationImage/copyConversationImage | ZIP/PNG 原生文件保存桥优先，可重命名；浏览器文件 picker 或下载回退；ClipboardItem PNG |
 | conversation_management_desktop.js / initConversationManagementDesktop | 桌面预览 PageUp/PageDown 滚动 |
 | conversation_management_mobile.js / initConversationManagementMobile | 手机 VisualViewport、旋转和安全区高度 |
 | conversation-management.css | 选择控件、固定提示、确认/分享玻璃窗口、自绘滚动条及固定像素导出样式 |
@@ -36,7 +49,7 @@
 | tools/conversation_management.test.mjs、conversation_management_browser.mjs | 保守删除、共享保护、40,000 高 PNG 编码、双端真实操作与布局回归 |
 | src/docs/doc_7 对话管理.md | APP 内动态帮助目录发现的完整操作指南 |
 
-不新增持久化键或聊天字段，不更改 1.1.0。管理状态不参与存档。原始 memory.deletedIds 仅追加本次独占记忆/边的精确 ID；其他数据不进行生命周期维护、级联擦除或全库垃圾回收。原有备份、云合并和 ZIP 专用原生桥行为不变。
+不新增持久化键或聊天字段，不更改 1.1.0。管理状态不参与存档。原始 memory.deletedIds 仅追加本次独占记忆/边的精确 ID；其他数据不进行生命周期维护、级联擦除或全库垃圾回收。原有备份、云合并和 ZIP 保存行为不变；原生保存桥新增 PNG 文件类型。
 
 
 ## v1.1.0 DeepSeek 原生协议与兜底（2026-10-09，缓存 v50）

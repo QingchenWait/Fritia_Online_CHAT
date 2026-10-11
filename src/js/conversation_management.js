@@ -136,7 +136,7 @@ export function initConversationManagement({ getStore, getConversation, closeDet
       const result = await renderConversationImage({ rows, header: document.querySelector('.chat-head'), signal: task.signal,
         onProgress: progress => { if (generation === task) status.textContent = `正在生成聊天记录图… ${progress}%`; } });
       task.signal.throwIfAborted();
-      preview = { ...result, filename: `海姆休息室-${getConversation().title.replace(/[\\/:*?"<>|]/g, '_')}-${Date.now()}.png` };
+      preview = result;
       previewUrl = URL.createObjectURL(result.blob); image.src = previewUrl;
       status.textContent = `${result.width} × ${result.height} · PNG`;
       copy.disabled = save.disabled = false;
@@ -154,8 +154,8 @@ export function initConversationManagement({ getStore, getConversation, closeDet
   save.addEventListener('click', async () => {
     if (!preview || save.disabled) return;
     save.disabled = true;
-    try { const download = await saveConversationImage(preview.blob, preview.filename);
-      if (download !== null) status.textContent = download ? '已交给浏览器下载；当前环境不支持目录选择器' : '聊天记录图已保存'; }
+    try { const download = await saveConversationImage(preview.blob);
+      if (download !== null) status.textContent = download ? '已交给浏览器下载；可在浏览器设置中开启保存前询问' : '聊天记录图已保存'; }
     catch (error) { if (error.name !== 'AbortError') status.textContent = `保存失败：${error.message}`; }
     finally { save.disabled = !preview; }
   });

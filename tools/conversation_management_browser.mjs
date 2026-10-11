@@ -137,7 +137,7 @@ try {
     assert.equal(await page.locator('.composer').isVisible(), true);
     await page.evaluate(() => {
       window.__savedImage = null; window.__copiedImage = null;
-      window.showDirectoryPicker = async () => ({ getFileHandle: async filename => ({ createWritable: async () => ({ write: async blob => { window.__savedImage = { filename, size: blob.size, mime: blob.type }; }, close: async () => {} }) }) });
+      window.showSaveFilePicker = async ({ suggestedName: filename }) => ({ createWritable: async () => ({ write: async blob => { window.__savedImage = { filename, size: blob.size, mime: blob.type }; }, close: async () => {} }) });
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { write: async items => { window.__copiedImage = (await items[0].getType('image/png')).size; } } });
     });
     await page.click('#conversation-share-copy'); await page.waitForFunction(() => window.__copiedImage > 0);
