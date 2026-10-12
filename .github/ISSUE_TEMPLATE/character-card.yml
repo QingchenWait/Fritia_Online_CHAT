@@ -1,0 +1,72 @@
+
+name: "角色卡投稿"
+description: "向《海姆休息室》共创计划提交角色卡，包含简介、人格提示词和参考语音"
+title: "[角色卡投稿] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 《海姆休息室》角色卡共创计划
+
+        感谢参与角色卡共创！请按要求填写角色信息并上传相关附件。
+
+        提交前请仔细阅读共创计划的介绍和要求，确保角色卡内容与格式符合规范。
+
+  - type: input
+    id: character-name
+    attributes:
+      label: "角色卡名称"
+      placeholder: "请输入角色名称"
+    validations:
+      required: true
+
+  - type: input
+    id: character-description
+    attributes:
+      label: "角色卡介绍"
+      description: "对角色卡进行 30 字以内的简短介绍。"
+      placeholder: "请简要介绍角色卡"
+    validations:
+      required: true
+
+  - type: upload
+    id: personality-prompt
+    attributes:
+      label: "人格提示词"
+      description: "请上传 1000 字以上的 TXT 纯文本提示词。建议至少包含：角色身份介绍、简单背景故事、核心性格、细节人物设定、发言风格、恋人互动的情感基调、示例对话等。"
+    validations:
+      required: true
+      accept: ".txt"
+
+  - type: textarea
+    id: reference-voice
+    attributes:
+      label: "参考语音"
+      description: "请在下方上传参考音频附件（MP3/WAV）。用于语音对话时的参考，建议时长 5–30 秒、无背景音乐、声音清晰干净。不需要输入语音对应的台词文本。"
+      placeholder: "请将参考音频文件拖拽至此处，或点击附件上传入口选择文件。"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: required-declarations
+    attributes:
+      label: "必要上传声明"
+      description: "以下声明必须全部勾选，否则将视为无效提交。"
+      options:
+        - label: "我已经阅读了共创计划的介绍和要求，确保角色卡格式正确。"
+          required: true
+        - label: "我确认上传的内容为以分析员（用户）为核心的纯爱/后宫基调，不包含 NTR/百合/猎奇XP 等与社区调性不符的内容。"
+          required: true
+        - label: "我保证上传的所有内容不包含暴力/恐怖/涉政/生理不适/版权争议等违法违规内容。"
+          required: true
+
+  - type: checkboxes
+    id: optional-declarations
+    attributes:
+      label: "可选声明"
+      description: "以下授权完全自愿，不影响角色卡投稿与审核。"
+      options:
+        - label: "我授权该角色卡并入《海姆休息室》官方分支，并授权官方在并入时进行适度修改。"
+          required: false
+        - label: "我授权《海姆休息室》官方在第三方平台宣发时，在标注作者的前提下使用该角色卡。"
+          required: false
