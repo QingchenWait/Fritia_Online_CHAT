@@ -12,7 +12,7 @@ body:
 
         感谢参与角色卡共创！请按要求填写角色信息并上传相关附件。
 
-        提交前请仔细阅读共创计划的介绍和要求，确保角色卡内容与格式符合规范。
+        提交前请仔细阅读 [共创计划](https://fritia.online/creator/) 的介绍和要求，确保角色卡内容与格式符合规范。
 
   - type: input
     id: character-name
@@ -64,7 +64,7 @@ body:
       label: "必要上传声明"
       description: "以下声明必须全部勾选，否则将无法成功提交。"
       options:
-        - label: "我已经阅读了共创计划的介绍和要求，确保角色卡格式正确。"
+        - label: "我已经阅读了[共创计划](https://fritia.online/creator/)的介绍和要求，确保角色卡格式正确。"
           required: true
         - label: "我确认角色卡是以分析员（用户）为核心的纯爱/后宫作品，<strong>不包含</strong> NTR/百合/猎奇XP 等与社区调性不符的内容。"
           required: true
