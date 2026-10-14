@@ -26,10 +26,21 @@ body:
     id: character-description
     attributes:
       label: "角色卡介绍"
-      description: "对角色卡进行 30 字以内的简短介绍。"
+      description: "简短的介绍，导入后作为角色个性签名显示，最多 60 个字符。"
       placeholder: "请简要介绍角色卡"
     validations:
       required: true
+      max_length: 60
+
+  - type: textarea
+    id: character-detail-description
+    attributes:
+      label: "详细描述"
+      description: "填写对角色卡的详细描述或说明，仅显示在插件商店的角色卡片中，最多 1000 个字符。"
+      placeholder: "请输入角色详细描述（选填）"
+    validations:
+      required: false
+      max_length: 1000
 
   - type: upload
     id: character-avatar
