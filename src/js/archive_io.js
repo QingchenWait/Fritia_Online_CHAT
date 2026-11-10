@@ -43,7 +43,12 @@ export async function chooseArchiveDestination(filename) {
 // be restricted even when the File System Access API is present).
 export async function chooseFileDestination(filename, mime = 'application/zip') {
   const type = mime === 'application/zip' ? { extension: 'zip', description: 'ZIP 备份' }
-    : mime === 'image/png' ? { extension: 'png', description: '聊天记录图片' } : null;
+    : mime === 'image/png' ? { extension: 'png', description: '聊天记录图片' }
+    : ({ 'image/jpeg': { extension: /\.jpeg$/i.test(filename) ? 'jpeg' : 'jpg', description: 'JPEG 头像' },
+      'image/webp': { extension: 'webp', description: 'WEBP 头像' },
+      'text/plain': { extension: 'txt', description: '人格提示词' },
+      'audio/mpeg': { extension: 'mp3', description: 'MP3 参考语音' },
+      'audio/wav': { extension: 'wav', description: 'WAV 参考语音' } }[mime] || null);
   if (!type) throw new Error('不支持的保存文件类型');
   if (window.FritiaArchive?.chooseFile) {
     if (!['beginWrite', 'writeChunk', 'finishWrite', 'abortWrite'].every(method => typeof window.FritiaArchive[method] === 'function')) {

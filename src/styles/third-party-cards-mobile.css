@@ -1,0 +1,29 @@
+@media (max-width: 760px), (orientation: portrait) {
+  #plugin-store-panel:has(.third-party-view.is-active) { place-items: center; padding: .75rem; }
+  #plugin-store-panel:has(.third-party-view.is-active) .plugin-store-shell { width: calc(100vw - 1.5rem); height: calc(100vh - 2rem); height: calc(100dvh - 2rem); min-height: 0; max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem); border-radius: 1.2rem; }
+  #plugin-store-panel:has(.third-party-view.is-active) .plugin-store-layout { grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); }
+  #plugin-store-panel:has(.third-party-view.is-active) .plugin-store-nav { display: flex; overflow: auto; padding: .5rem; gap: .4rem; border-right: 0; border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+  #plugin-store-panel:has(.third-party-view.is-active) .plugin-store-nav button { min-height: 2.5rem; flex: none; display: inline-flex; flex-direction: row; align-items: center; padding: .45rem .7rem; gap: .4rem; font-size: .8rem; }
+  .third-party-view.is-active { padding: .75rem; }
+  .third-party-list { gap: .55rem; }
+  .third-party-list-scroll > * + * { margin-top: .55rem; }
+  .third-party-card { padding: .85rem; }
+  .third-party-toolbar { gap: .4rem; }
+  .third-party-toolbar select { font-size: .75rem; padding-inline: .2rem; }
+  .third-party-detail-head { gap: .5rem; }
+  .third-party-detail-head .btn { font-size: .75rem; padding: .6rem; }
+  .third-party-pagination { gap: .25rem; }
+  .third-party-pagination .plugin-store-pages { gap: .1rem; }
+  .third-party-pagination .plugin-store-pages button, .third-party-pagination .plugin-store-pages span { min-width: 1.6rem; width: auto; height: 1.8rem; font-size: .7rem; }
+  .third-party-pagination .icon-btn { width: 1.9rem; height: 1.9rem; }
+  .third-party-disclaimer-card { gap: .7rem; padding: .9rem; }
+}
+@media (max-width: 760px) and (max-height: 480px) {
+  #plugin-store-panel:has(.third-party-view.is-active) > .plugin-store-shell > .modal-head { min-height: 3rem; padding: .5rem .75rem; }
+  #plugin-store-panel:has(.third-party-view.is-active) .modal-head h2 { font-size: 1.1rem; }
+  .third-party-view.is-active { padding: .4rem .65rem; }
+  .third-party-list { gap: .3rem; }
+  .third-party-note { font-size: .65rem; line-height: 1.4; }
+  .third-party-disclaimer-card { gap: .4rem; padding: .6rem; }
+  .third-party-disclaimer { padding: .4rem; }
+}

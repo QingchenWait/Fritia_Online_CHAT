@@ -29,10 +29,12 @@ import { listArchiveRecoveries, getArchiveRecoveryAvailability, exportArchiveRec
 import { getRecoveryLimit, setRecoveryLimit } from './archive_state.js';
 import { bindExternalLinks } from './external_links.js';
 import { initAnnouncementBoard } from './announcements.js';
+import { initThirdPartyCards } from './third_party_cards.js';
 import { initConversationManagement } from './conversation_management.js';
 
 let chatProviderPresets = null;
 let announcementBoard = null;
+let thirdPartyCards = null;
 let conversationManagement = null;
 let pendingConversationReplies = 0;
 
@@ -2613,6 +2615,7 @@ function createBlankMcpClientConfig(transport) {
 }
 
 function bindPluginStore() {
+  thirdPartyCards = initThirdPartyCards({ renderMarkdown: renderMarkdownDocument });
   document.querySelectorAll('[data-plugin-store-section]').forEach(button => {
     button.addEventListener('click', () => showPluginStoreSection(button.dataset.pluginStoreSection));
   });
@@ -2667,8 +2670,10 @@ function bindPluginStore() {
 }
 
 function showPluginStoreSection(section = 'mcp') {
-  state.pluginStoreSection = section === 'roles' ? 'roles' : 'mcp';
+  if (state.pluginStoreSection === 'third-party') thirdPartyCards?.close();
+  state.pluginStoreSection = ['roles', 'third-party'].includes(section) ? section : 'mcp';
   renderPluginStorePanel();
+  if (state.pluginStoreSection === 'third-party') thirdPartyCards?.open();
   if (state.pluginStoreSection === 'roles' && !state.rolePluginStore.loaded && !state.rolePluginStore.loading) {
     loadRolePluginCatalog();
   }
@@ -6639,6 +6644,7 @@ function openPanel(id, options = {}) {
   if (id === 'tool-call-panel') renderToolCallPanel();
   if (id === 'plugin-store-panel') {
     renderPluginStorePanel();
+    if (state.pluginStoreSection === 'third-party') thirdPartyCards?.open();
     loadRolePluginCatalog({ force: true });
     if (state.pluginStoreSection === 'mcp' && !state.pluginStore.items.length && !state.pluginStore.loading) {
       checkModelScopeLoginStatus();
@@ -6650,6 +6656,7 @@ function openPanel(id, options = {}) {
 }
 
 function closePanel(id) {
+  if (id === 'plugin-store-panel') thirdPartyCards?.close();
   if (id === 'conversation-share-panel') { conversationManagement?.closePreview(); return; }
   if (id === 'announcement-panel') announcementBoard?.close();
   if (id === 'settings-panel') chatProviderPresets?.close();

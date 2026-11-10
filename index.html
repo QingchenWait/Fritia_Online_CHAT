@@ -28,6 +28,9 @@
   <link rel="stylesheet" href="src/styles/conversation-management.css">
   <link rel="stylesheet" href="src/styles/conversation-management-desktop.css">
   <link rel="stylesheet" href="src/styles/conversation-management-mobile.css">
+  <link rel="stylesheet" href="src/styles/third-party-cards.css">
+  <link rel="stylesheet" href="src/styles/third-party-cards-desktop.css">
+  <link rel="stylesheet" href="src/styles/third-party-cards-mobile.css">
 </head>
 <body>
   <div id="app" class="app-shell" data-view="chat">
@@ -1622,6 +1625,10 @@
             <img src="src/_logo/icons/ai-agent.svg" alt="">
             <span>MCP 插件</span>
           </button>
+          <button type="button" data-plugin-store-section="third-party">
+            <img src="src/_logo/icons/role-card.svg" alt="">
+            <span>第三方角色卡</span>
+          </button>
         </nav>
         <section class="plugin-store-content">
           <div class="plugin-store-view is-active" data-plugin-store-view="roles">
@@ -1672,6 +1679,46 @@
               <button id="plugin-store-next" class="icon-btn" type="button" aria-label="下一页">
                 <span aria-hidden="true">›</span>
               </button>
+            </div>
+          </div>
+          <div id="third-party-cards" class="plugin-store-view third-party-view" data-plugin-store-view="third-party">
+            <div id="third-party-content" class="third-party-content">
+              <div id="third-party-list" class="third-party-list">
+                <div id="third-party-list-scroll" class="third-party-list-scroll third-party-scroll" tabindex="0" aria-label="第三方角色卡列表">
+                <p class="third-party-note">社区创作的角色卡，版权归属作者，本 APP 不对角色卡内容负责。角色卡在 GitHub 归档，欢迎通过<a href="https://fritia.online/creator/#intro" target="_blank" rel="noopener noreferrer">共创计划</a>投稿！</p>
+                <div class="third-party-toolbar">
+                  <label class="third-party-search"><img src="src/_logo/icons/search.svg" alt=""><input id="third-party-search" type="search" placeholder="搜索角色卡" aria-label="搜索角色卡"></label>
+                  <select id="third-party-sort" aria-label="排序方式"><option value="newest">最近发布</option><option value="oldest">最早发布</option></select>
+                  <button id="third-party-refresh" class="icon-btn" type="button" title="刷新角色卡" aria-label="刷新角色卡"><img src="src/_logo/icons/refresh-cw.svg" alt=""></button>
+                </div>
+                <small id="third-party-status" class="third-party-status" aria-live="polite"></small>
+                <div id="third-party-grid" class="third-party-grid third-party-scroll" tabindex="0" aria-label="第三方角色卡列表" aria-live="polite"></div>
+                </div>
+                <div class="third-party-pagination">
+                  <button id="third-party-prev" class="icon-btn" type="button" aria-label="上一页"><img src="src/_logo/icons/chevron-left.svg" alt=""></button>
+                  <div id="third-party-pages" class="plugin-store-pages"></div><small id="third-party-page-label"></small>
+                  <button id="third-party-next" class="icon-btn" type="button" aria-label="下一页"><img src="src/_logo/icons/chevron-right.svg" alt=""></button>
+                </div>
+              </div>
+              <div id="third-party-detail" class="third-party-detail" hidden>
+                <header class="third-party-detail-head"><button id="third-party-back" class="btn btn-soft" type="button"><img src="src/_logo/icons/arrow-left.svg" alt=""><span>返回主页</span></button><strong id="third-party-detail-name"></strong></header>
+                <div id="third-party-detail-scroll" class="third-party-detail-scroll third-party-scroll" tabindex="0">
+                  <section class="third-party-intro"><h3>角色卡介绍</h3><p id="third-party-detail-intro"></p></section>
+                  <section class="third-party-detailed-description"><h3>详细描述</h3><div id="third-party-detail-description"></div></section>
+                  <section class="third-party-resource"><h3>头像</h3><button id="third-party-download-avatar" class="btn btn-soft" type="button"><img src="src/_logo/icons/download.svg" alt=""><span>单独下载</span></button></section>
+                  <section class="third-party-resource"><h3>人格提示词</h3><button id="third-party-download-prompt" class="btn btn-soft" type="button"><img src="src/_logo/icons/download.svg" alt=""><span>单独下载</span></button></section>
+                  <section class="third-party-resource"><h3>参考语音</h3><button id="third-party-download-voice" class="btn btn-soft" type="button"><img src="src/_logo/icons/download.svg" alt=""><span>单独下载</span></button></section>
+                </div>
+                <small id="third-party-detail-status" class="third-party-status" role="status"></small>
+                <footer class="third-party-detail-actions"><a id="third-party-original" class="btn btn-soft" href="https://github.com/QingchenWait/Fritia_Online_CHAT_plugins/issues" target="_blank" rel="noopener noreferrer"><img src="src/_logo/icons/external-link.svg" alt=""><span>GitHub 原文</span></a><button id="third-party-install" class="btn btn-primary" type="button"><img src="src/_logo/icons/download.svg" alt=""><span id="third-party-install-label">一键安装</span></button></footer>
+              </div>
+            </div>
+            <div id="third-party-disclaimer" class="third-party-disclaimer" hidden>
+              <div class="third-party-disclaimer-card" role="dialog" aria-modal="true" aria-labelledby="third-party-disclaimer-title" aria-describedby="third-party-disclaimer-body">
+                <header><img src="src/_logo/icons/shield-check.svg" alt=""><h3 id="third-party-disclaimer-title">免责声明</h3></header>
+                <div id="third-party-disclaimer-body" class="third-party-disclaimer-body third-party-scroll"><p>本页中所有内容均来自互联网公开收集与分享，仅供交流、体验与个人使用。<br>本软件免费开源，不以角色卡内容获利，不代表或认可卡片中的观点、设定与创作内容。<br>如您是权利人并认为内容存在侵权，请联系 GitHub 平台处理删除。</p><p class="third-party-adult-notice">部分内容可能仅适合成年人浏览与使用。请确认您已年满 18 周岁，并遵守所在地法律法规。</p></div>
+                <footer><label><input id="third-party-dont-remind" type="checkbox"><span>不再提醒</span></label><button id="third-party-acknowledge" class="btn btn-primary" type="button"><img src="src/_logo/icons/shield-check.svg" alt=""><span>我已知悉</span></button></footer>
+              </div>
             </div>
           </div>
         </section>

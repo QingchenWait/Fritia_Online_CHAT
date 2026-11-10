@@ -1,9 +1,13 @@
-# v1.0.1 原生配套源码
+# 原生配套源码
+
+### v1.2.0 第三方角色卡附件保存
+
+`chooseFileDestination`、Windows `choose_archive_file` 和 Android `chooseFile` 新增 `image/jpeg`、`image/webp`、`text/plain`、`audio/mpeg`、`audio/wav`，分别保存头像、人格提示词与参考语音。保留 ZIP/PNG 的现有参数、目的地授权和写入行为。这里只维护规范源码，本轮不打包；旧客户端的保存桥需要后续重新构建才能识别新增类型。网页端支持 File System Access API 时弹出保存选择器，其余浏览器使用下载回退。
 
 静态 JS 无法修复旧 Android HTTP 栈的扩展方法支持，也不能直接调用 Android 系统文件创建界面。此目录保存所需的最小原生补丁，不是安装包。
 
 - `android/FritiaArchiveBridge.java`：OkHttp WebDAV 扩展方法、同源重定向、安全的 204 响应回传；SAF 系统保存路径、受限 URI 写入、用户点击时读取剪贴板。
-- `windows/archive_dialog.rs`：Tauri 命令 `choose_archive_file` / `write_archive_file`；后台线程调用 Windows 原生 GetSaveFileNameW 保存窗口，不阻塞 WebView；只接受用户刚选择的路径。可选 `mime` 仅接受 `application/zip`（默认）或 `image/png`，分别使用 ZIP/PNG 过滤器和默认扩展名。
+- `windows/archive_dialog.rs`：Tauri 命令 `choose_archive_file` / `write_archive_file`；后台线程调用 Windows 原生 GetSaveFileNameW 保存窗口，不阻塞 WebView；只接受用户刚选择的路径。可选 `mime` 接受 ZIP（默认）、PNG、JPEG、WEBP、TXT、MP3 和 WAV，各自使用对应过滤器和默认扩展名。
 - `apply_archive_bridges.py`：向指定壳层源码和 Android 模板接入桥接，保留 `.before-archive-v101` 文件；Android 编译脚本加入依赖 classpath。必须先获得目标目录写入授权，不会自行构建。
 - `prepare_v101_sources.py`：专用于本次获授权的 `chat_v1.0.1`，复制原平台源码并覆盖本轮前端变动，保留已有平台注入，更新版本；不运行打包。
 

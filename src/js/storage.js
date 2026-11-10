@@ -181,6 +181,10 @@ export function normalizeCharacterRecord(raw = {}) {
     avatar: clampText(raw.avatar, 3000000),
     voiceSample: clampText(raw.voiceSample, 8000000),
     source: clampText(raw.source || 'custom', 40),
+    ...(Number.isSafeInteger(raw.thirdPartyIssueId) && raw.thirdPartyIssueId > 0 ? {
+      thirdPartyIssueId: raw.thirdPartyIssueId,
+      ...(Number.isSafeInteger(raw.thirdPartyIssueNumber) && raw.thirdPartyIssueNumber > 0 ? { thirdPartyIssueNumber: raw.thirdPartyIssueNumber } : {})
+    } : {}),
     tags: Array.isArray(raw.tags) ? raw.tags.map(item => clampText(item, 24)).filter(Boolean).slice(0, 8) : [],
     createdAt: Number(raw.createdAt) || now(),
     updatedAt: Number(raw.updatedAt) || now()

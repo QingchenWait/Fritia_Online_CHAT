@@ -1,0 +1,15 @@
+@media (min-width: 761px) and (orientation: landscape) {
+  #plugin-store-panel:has(.third-party-view.is-active) .plugin-store-shell { height: min(52rem, calc(100vh - 3rem)); height: min(52rem, calc(100dvh - 3rem)); min-height: 0; }
+  .third-party-view[data-layout="desktop"] .third-party-grid { gap: clamp(.65rem, 1vw, 1rem); }
+  #plugin-store-panel:has(.third-party-view.is-active) .plugin-store-nav { overflow-y: auto; }
+}
+@media (min-width: 761px) and (orientation: landscape) and (max-height: 480px) {
+  #plugin-store-panel:has(.third-party-view.is-active) > .plugin-store-shell > .modal-head { min-height: 3rem; padding: .5rem 1rem; }
+  #plugin-store-panel:has(.third-party-view.is-active) .modal-head h2 { font-size: 1.1rem; }
+  .third-party-view.is-active { padding: .55rem .85rem; }
+  .third-party-list { gap: .35rem; }
+  .third-party-list-scroll > * + * { margin-top: .35rem; }
+  .third-party-status:empty { display: none; }
+  .third-party-disclaimer-card { gap: .5rem; padding: .75rem; }
+  .third-party-disclaimer { padding: .5rem; }
+}

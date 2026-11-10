@@ -1,5 +1,37 @@
 # STRUCTURE
 
+## v1.2.0 第三方角色卡（2026-11-10，缓存 v57）
+
+发布仓库：`https://github.com/QingchenWait/Fritia_Online_CHAT_plugins/issues`，REST API：`https://api.github.com/repos/QingchenWait/Fritia_Online_CHAT_plugins/issues`。目录、详情和下载前状态核对统一使用新仓库；附件来源取自新 issue，身份直接保存响应的 `id` / `number`，没有旧仓库 ID 映射或并行来源。共创链接仍为 `https://fritia.online/creator/#intro`。
+
+| 文件 / API | 作用 |
+| --- | --- |
+| `src/js/third_party_cards_data.js` | 独立目录解析、实时 GitHub 请求、附件校验、安装与失败清理，不存储社区目录 |
+| `isApprovedCharacterIssue` / `parseCharacterIssue` | 同时复核 open、角色卡及初审通过标签，排除 PR；解析模板五个字段、提交者、issue ID/编号和发布时间 |
+| `parseCharacterIssue` / `detailedDescription`（仅内存） | 额外读取可选“详细描述”；保留 Markdown 子标题及围栏内的模板同名标题，缺失/空白/未回答转为空串，不纳入安装角色记录 |
+| `fetchApprovedCharacterCards({signal})` | 按 100 条遍历 API 页，客户端再次筛选，返回内存卡片列表；所有请求 no-store、使用唯一 URL |
+| `fetchCurrentCharacterCard` / `downloadCharacterAttachment` | 重新核对投稿；返回验证后的 Blob、MIME、文件名及 TXT 文本，GitHub blob 链接转 raw，兼容 Markdown/HTML/裸附件 URL |
+| `requestThirdPartyResource` / `requestFresh`（内部） | 客户端优先使用 Android `__FRITIA_ANDROID_SHELL__.invoke` 或 Tauri invoke 调用通用 `proxy_fetch`，Base64 转字节响应；不走 WebDAV 桥。网页保持原生 fetch/no-store，所有请求有唯一 URL、超时及中止处理 |
+| `installThirdPartyCharacter(card,{onProgress})` | 独立串行安装，完整下载再暂存媒体，单次保存角色+私聊+空消息；失败精确删除本次新媒体，保护已引用媒体 |
+| `src/js/third_party_cards.js` / `initThirdPartyCards({renderMarkdown})` | 栏目生命周期、免责声明、搜索排序、每页 10 行、已安装状态、附件保存、列表/详情切换；注入既有 Markdown 文档渲染器，提供 `open()` / `close()` |
+| `src/js/third_party_cards_desktop.js` | 横屏独立 ResizeObserver 按内容宽度切换一/两列，PageUp/PageDown 浏览正文 |
+| `src/js/third_party_cards_mobile.js` | 窄屏/竖屏独立媒体查询及尺寸同步，固定单列 |
+| `src/styles/third-party-cards.css` | 共享 Soft UI 卡片、区域内水平/垂直居中的免责声明模糊层、环形动画、自绘滚动条、正文滚动及固定操作区 |
+| `src/styles/third-party-cards-desktop.css` / `third-party-cards-mobile.css` | 横屏与竖屏各自的弹窗尺寸、导航、间距及低高度适配，仅限定新增分组选中时的插件窗口 |
+| `src/js/ui.js` | 插件商店分组选中/窗口打开时调用 `open()`，离开/关闭时调用 `close()`；其他分组逻辑沿用原入口 |
+| `src/js/storage.js` / `normalizeCharacterRecord` | 仅在存在合法来源 ID 时保留可选 `thirdPartyIssueId` / `thirdPartyIssueNumber` |
+| `src/js/archive_io.js` / `chooseFileDestination` | 增加 JPEG/WEBP/TXT/MP3/WAV 保存，沿用原生优先与浏览器下载回退 |
+| `tools/native/windows/archive_dialog.rs` / `android/FritiaArchiveBridge.java` | 保存窗口扩充对应 MIME 白名单、扩展名及过滤器，原有一次性所选目的地及分块写入保持原样 |
+| `src/_logo/icons/{arrow-left,chevron-left,chevron-right,external-link,shield-check}.svg` | 从 Lucide 官方下载的按钮资源，沿用已有许可证 |
+| `tools/third_party_cards{.test,_browser,_fixtures}.mjs` | 目录/附件/ID/文件保存单元测试及临时浏览器端导入回归，截图与报告在 `.codex/third-party-cards/` |
+| `package.json` / `sw.js` | 版本 1.2.0，缓存 v57，仅预缓存本地代码/样式/图标，GitHub 内容不进入 Service Worker 缓存 |
+
+HTML 映射：`[data-plugin-store-section="third-party"]` 位于 MCP 后；`#third-party-cards` 为栏目，`#third-party-content` 在声明未确认时 inert/blur。`#third-party-list-scroll` 包含说明、搜索/排序/刷新、状态与 `#third-party-grid`，`#third-party-pages`/`prev`/`next`/`page-label` 固定在滚动区之外。卡片 `[data-card-id]` 使用 GitHub 全局 issue ID；详情 `#third-party-back`/`detail-name` 顶部固定，`detail-scroll` 正文滚动，`download-avatar`/`download-prompt`/`download-voice` 分别保存附件，`original`/`install` 位于固定底部。`#third-party-disclaimer` 包含独立可滚动正文、`dont-remind` 与 `acknowledge`。
+
+持久化仅包含用户确认后的提醒偏好 `fritia_third_party_cards_disclaimer_dismissed=1`，以及安装成功的角色数据/来源 ID 和媒体引用。目录、详情、预览和附件识别 Blob 都不进入 localStorage、sessionStorage、IndexedDB 或 CacheStorage；关闭栏目后释放对象 URL 与内存目录。角色媒体安装期间只使用本次随机生成的 ID，失败不扫描或清空全库。用户主动安装的完整角色资源进入原存档和媒体库，继续参与已有 ZIP/云备份流程。
+
+详细描述映射：`#third-party-detail-description` 位于介绍之后、头像之前，外层 `.third-party-detailed-description` 沿用卡片设计；有内容时使用 `renderMarkdownDocument` 渲染，无内容时 `.is-empty` 使用灰色 token。正文位于既有 `#third-party-detail-scroll` 内，代码/表格具有自绘横向滚动条；不新增持久化键、角色字段或导出附件。
+
 ## v1.1.0 分享 PNG 保存桥（2026-10-11，缓存 v53）
 
 | 文件 / API | 作用 |

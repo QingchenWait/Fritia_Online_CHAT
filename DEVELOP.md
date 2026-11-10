@@ -1,5 +1,36 @@
 # DEVELOP
 
+## 2026-11-10 v1.2.0 第三方角色卡详细描述（缓存 v57）
+
+- 在详情页“角色卡介绍”和“头像”之间增加“详细描述”。读取 issue 模板同名可选字段，复用 `ui.js` 的既有 Markdown 文档渲染器，支持标题、强调、列表、引用、表格、代码块和链接等已有格式；缺失、空白或 `_No response_` 显示灰色“作者暂未填写详细描述。”。
+- 解析保留详细描述中的三级子标题与围栏代码块，模板的头像/人格提示词/参考语音边界仍正常识别；旧卡片不必补充该字段。详细描述只存在于内存目录及详情 DOM，安装仍显式构建原角色字段，不保存此正文，也不增加下载文件或存档字段。
+- 新栏目复用详情正文滚动区和 Soft UI 样式，固定顶部返回及底部操作；宽屏和竖屏均支持长正文、代码及表格滚动。Markdown 渲染回调由 `bindPluginStore` 注入，不改动共享渲染器。
+- 新增可选字段、子标题/代码围栏、空值兼容单元回归；浏览器回归覆盖栏目顺序、Markdown 展示、空态颜色及安装后不持久化。版本保持 1.2.0，Windows 单文件及构建资料输出到 `D:\Models\vibe_coding\fritia_online_next_desktop\chat_v1.2.0c\win_x64`。
+
+## 2026-11-05 v1.2.0 第三方角色卡发布仓库迁移（缓存 v56）
+
+- 第三方角色卡目录和详情 API 改为 `QingchenWait/Fritia_Online_CHAT_plugins/issues`，GitHub 原文及网络错误链接同步使用新仓库。附件直接取自新 issue 的模板字段，原生代理、完整校验和独立安装流程沿用原实现。
+- 安装身份直接采用新仓库返回的 GitHub issue ID/number，不增加新旧仓库兼容或 ID 映射。共创计划仍为 `https://fritia.online/creator/#intro`；软件版本保持 1.2.0。
+- 新增新仓库列表/详情请求路径、原文链接和原始 issue 身份回归。Windows 打包资料及成品放在项目外 `D:\Models\vibe_coding\fritia_online_next_desktop\chat_v1.2.0b\win_x64`，延续 Tauri + 系统 WebView2 单文件流程。
+
+## 2026-10-14 v1.2.0 第三方角色卡居中与原生下载修复（缓存 v55）
+
+- 免责声明使用 `place-items: center`，在第三方角色卡栏目中水平、垂直居中，保留横竖屏和矮屏的正文滚动及固定底部操作。
+- `third_party_cards_data.js` 新增内部 `requestThirdPartyResource`，通过 Windows Tauri 或 Android 的兼容 invoke 显式调用现有 `proxy_fetch`，按原始字节解码 Base64 响应。第三方卡片预览、附件识别、单独下载和一键安装共用这一请求路径；不使用限制同源重定向的 WebDAV 存档桥。
+- 没有原生 invoke 时继续使用浏览器 `fetch`。网页版仍是纯前端，没有新增 Web 后端、代理服务器、代理地址设置或部署入口。其他角色导入、共享 WebDAV 请求函数及原生源码保持本轮开始时的行为，版本仍为 1.2.0，未打包。
+- 新增 Windows/内部 invoke/Android 三类桥的附件完整性回归，以及原生 HTTP/网络错误不回退浏览器请求的验证。浏览器回归新增区域居中断言，并用受控原生桥在浏览器 GitHub 请求被阻止时验证 Windows/Android 单独下载、完整安装和失败中止。
+- 验证通过：`npm run check`、第三方角色卡 7 项单元、既有保存 9 项/存档 7 项/Service Worker 7 项回归、十种尺寸的居中与界面回归，以及 Windows/Android 两组受控原生桥的下载和安装回归。未运行真实客户端系统窗口，未打包。
+
+## 2026-10-14 v1.2.0 第三方角色卡（缓存 v54）
+
+- 依照 `.agents/fritia_chat_dev_agent.md` 及 `src/ui_rules/ui_design_rules.md`，在插件商店 MCP 分组之后增加独立第三方角色卡分组。蓝紫浅色卡片、圆形头像、环形加载动画、免责声明模糊遮罩、固定分页与详情操作，横屏和竖屏分别使用独立 JS/CSS；低高度下正文整体滚动。
+- 对接 GitHub 官方 Issues REST API，按模板的角色卡名称、介绍、头像、人格提示词、参考语音解析。分页取完整目录，服务端筛选和逐条复核 open/双标签，排除 PR。目录、正文、附件预览只保留内存，不写浏览器缓存；每次进入/刷新重新请求，网络失败不展示旧数据。
+- 安装使用独立流程，前后复核 issue 状态及附件 URL；资源依次下载，校验 TXT 编码、图片格式与解码、音频格式与可用浏览器音频解码，不静默截断。完整下载后保存媒体，最后以一次 app store 写入追加新角色与私聊。失败仅精确清理本次随机生成的媒体 ID，且跳过已被存档引用的媒体。
+- `normalizeCharacterRecord` 可选保留 `thirdPartyIssueId`（GitHub 全局 issue ID）和 `thirdPartyIssueNumber`（仓库编号）。原角色记录不新增字段；内置/手动/角色插件导入逻辑不变，同名社区角色通过独立 ID 区分。已有的角色编辑、ZIP 和云同步保留该字段。
+- 单独下载沿用文件保存桥，仅新增 JPEG/WEBP/TXT/MP3/WAV 类型；ZIP/PNG 路径及写入机制保持原行为。没有扩展名的 GitHub asset 在详情中先于内存识别类型，确保点击时直接调用保存窗口。规范 Windows/Android 源码已同步，不打包；现有客户端获得新增文件类型支持仍需将来重新构建。
+- 新图标来自 Lucide 官方仓库，沿用 `src/_logo/icons/LUCIDE-LICENSE`。新增 `check:third-party-cards`、`test:third-party-cards`、`test:third-party-cards:browser`。浏览器测试使用模拟 GitHub 投稿与临时用户档案，覆盖安装、下载、标签撤销、错误回滚、重复安装、网络失败及多个屏幕尺寸。
+- 验证通过：`npm run check`；第三方角色卡 5 项单元、既有保存 9 项、Service Worker 7 项、存档 7 项、对话管理 7 项回归；Chromium 在 1440×900、390×844、320×568、844×390、1024×280、1024×1366、1536×864、1280×720、2560×1440、3840×2160 验证。实际接口仅核验目录 HTTP 200、筛选条件及 CORS，未安装社区真实附件；系统保存交互使用受控接口，未做原生窗口实机验证。Android 桥单独 javac 编译通过，Windows 源码 rustfmt 语法/格式检查通过，未构建安装包。
+
 ## 2026-10-11 v1.1.0 分享 PNG 原生保存修复（缓存 v53）
 
 - PNG 原路径优先使用 showDirectoryPicker，触发 WebView2 敏感目录限制；Android 未接入 SAF，且原桥硬编码 application/zip。现在优先复用 ZIP 原生保存桥，浏览器仅使用 showSaveFilePicker 或下载回退；文件名可在系统窗口修改，默认保存时本地时间 `海姆休息室_YYMMDD_HHMMSS.png`。

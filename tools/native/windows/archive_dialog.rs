@@ -52,7 +52,24 @@ pub async fn choose_archive_file(
 ) -> Result<Option<String>, String> {
     let (filter, title, extension) = match mime.as_deref().unwrap_or("application/zip") {
         "application/zip" => ("ZIP archive (*.zip)\0*.zip\0\0", "保存 ZIP 备份\0", "zip\0"),
-        "image/png" => ("PNG image (*.png)\0*.png\0\0", "保存聊天记录图片\0", "png\0"),
+        "image/png" => (
+            "PNG image (*.png)\0*.png\0\0",
+            "保存聊天记录图片\0",
+            "png\0",
+        ),
+        "image/jpeg" => (
+            "JPEG image (*.jpg;*.jpeg)\0*.jpg;*.jpeg\0\0",
+            "保存角色头像\0",
+            "jpg\0",
+        ),
+        "image/webp" => (
+            "WEBP image (*.webp)\0*.webp\0\0",
+            "保存角色头像\0",
+            "webp\0",
+        ),
+        "text/plain" => ("Text file (*.txt)\0*.txt\0\0", "保存人格提示词\0", "txt\0"),
+        "audio/mpeg" => ("MP3 audio (*.mp3)\0*.mp3\0\0", "保存参考语音\0", "mp3\0"),
+        "audio/wav" => ("WAV audio (*.wav)\0*.wav\0\0", "保存参考语音\0", "wav\0"),
         _ => return Err("不支持的保存文件类型".into()),
     };
     let owner = window.hwnd().map_err(|e| e.to_string())?.0 as usize;

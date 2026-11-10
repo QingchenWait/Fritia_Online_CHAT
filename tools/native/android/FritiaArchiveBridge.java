@@ -96,7 +96,10 @@ public final class FritiaArchiveBridge {
             try {
                 JSONObject input = new JSONObject(raw); token = input.getString("token");
                 String mime = input.optString("mime", "application/zip");
-                if (!mime.equals("application/zip") && !mime.equals("image/png")) throw new Exception("Unsupported save file type");
+                if (!mime.equals("application/zip") && !mime.equals("image/png")
+                    && !mime.equals("image/jpeg") && !mime.equals("image/webp")
+                    && !mime.equals("text/plain") && !mime.equals("audio/mpeg")
+                    && !mime.equals("audio/wav")) throw new Exception("Unsupported save file type");
                 synchronized (saveLock) {
                     if (pickerToken != null || activeWrite != null) throw new Exception("A save operation is already active");
                     pickerToken = token;

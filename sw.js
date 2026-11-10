@@ -1,7 +1,19 @@
-const CACHE_NAME = 'fritia-next-chat-v53';
+const CACHE_NAME = 'fritia-next-chat-v57';
 const CORE_ASSETS = [
   './',
   './index.html',
+  './src/js/third_party_cards.js',
+  './src/js/third_party_cards_data.js',
+  './src/js/third_party_cards_desktop.js',
+  './src/js/third_party_cards_mobile.js',
+  './src/styles/third-party-cards.css',
+  './src/styles/third-party-cards-desktop.css',
+  './src/styles/third-party-cards-mobile.css',
+  './src/_logo/icons/arrow-left.svg',
+  './src/_logo/icons/chevron-left.svg',
+  './src/_logo/icons/chevron-right.svg',
+  './src/_logo/icons/external-link.svg',
+  './src/_logo/icons/shield-check.svg',
   './src/js/conversation_management.js',
   './src/js/conversation_management_data.js',
   './src/js/conversation_management_desktop.js',
