@@ -94,8 +94,13 @@ function otherLocalData() {
   return values;
 }
 
-export async function deleteSelectedPrivateMessages(conversationId, messageIds, runtimeStore, isBusy = () => false) {
-  if (isBusy() || Object.values(runtimeStore?.messages || {}).flat().some(item => item.status === 'typing')) {
+export async function deleteSelectedPrivateMessages(conversationId, messageIds, runtimeStore, isBusy) {
+  // Historic typing status is persisted display data, not proof of a live
+  // writer. The UI supplies the actual reply/voice/tool request guard.
+  const pending = typeof isBusy === 'function'
+    ? isBusy()
+    : Object.values(runtimeStore?.messages || {}).flat().some(item => item.status === 'typing');
+  if (pending) {
     throw new Error('请等待正在进行的对话、语音或工具调用结束，再删除消息。');
   }
   const appRaw = localStorage.getItem(STORAGE_KEYS.app);

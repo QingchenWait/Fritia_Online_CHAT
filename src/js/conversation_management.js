@@ -38,7 +38,10 @@ export function initConversationManagement({ getStore, getConversation, closeDet
     hint.classList.toggle('hidden', !active);
     const entry = document.getElementById('detail-conversation-management');
     entry.classList.toggle('hidden', current?.type !== 'private');
-    remove.disabled = !selected.size || busy || isBusy() || Object.values(getStore().messages || {}).flat().some(message => message.status === 'typing');
+    // Persisted typing placeholders can outlive their request (Android process
+    // termination, refresh or archive restore). Only the live request guard
+    // indicates that an asynchronous writer could overwrite a deletion.
+    remove.disabled = !selected.size || busy || isBusy();
     remove.title = selected.size ? (remove.disabled ? '等待当前对话处理结束后删除' : `删除 ${selected.size} 条对话`) : '请先选择对话';
     share.disabled = !selected.size || busy || messages.some(message => selected.has(message.id) && message.status === 'typing');
     share.title = selected.size ? `分享 ${selected.size} 条对话` : '请先选择对话';
@@ -70,10 +73,13 @@ export function initConversationManagement({ getStore, getConversation, closeDet
 
   function hideConfirm() { confirm.classList.add('hidden'); returnFocus?.focus(); }
   function closePreview() {
-    generation?.abort(); generation = null;
+    const task = generation;
+    generation = null;
+    if (task) { task.abort(); busy = false; }
     imagePanel.classList.add('hidden'); image.removeAttribute('src');
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = ''; preview = null;
+    update();
     returnFocus?.focus();
   }
   function exit({ keepPreview = false } = {}) {
@@ -142,7 +148,11 @@ export function initConversationManagement({ getStore, getConversation, closeDet
       copy.disabled = save.disabled = false;
       if (conversationId === targetId) exit({ keepPreview: true });
     } catch (error) { if (!task.signal.aborted) status.textContent = `生成失败：${error.message}`; }
-    finally { if (generation === task) generation = null; busy = false; update(); }
+    finally {
+      // A cancelled renderer may settle after a newer share/deletion starts.
+      // Only the task that still owns generation may release its busy state.
+      if (generation === task) { generation = null; busy = false; update(); }
+    }
   });
   copy.addEventListener('click', async () => {
     if (!preview || copy.disabled) return;

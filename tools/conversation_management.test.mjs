@@ -82,6 +82,37 @@ test('failed chat commit restores memory byte-for-byte; busy requests perform no
   } finally { if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous; }
 });
 
+test('orphaned typing records do not lock deletion or rewrite other surviving records', async () => {
+  const previousStorage = globalThis.localStorage, previousDocument = globalThis.document;
+  globalThis.document = new EventTarget();
+  try {
+    for (const status of ['sent', 'typing']) {
+      const { app, memory } = fixtures();
+      app.messages.a[0].status = status;
+      app.messages.a.push({ id: 'interrupted-current', status: 'typing', text: '保留的旧记录' });
+      app.messages.b.push({ id: 'interrupted-other', status: 'typing', text: '' });
+      const original = structuredClone(app);
+      const records = new Map([['fritia_next_chat_store', JSON.stringify(app)], ['fritia_long_term_memory', JSON.stringify(memory)],
+        ['management-protected-media', JSON.stringify(['idb-media:exclusive', 'idb-media:tool-only'])]]);
+      globalThis.localStorage = { get length() { return records.size; }, key: index => [...records.keys()][index], getItem: key => records.get(key) ?? null,
+        setItem: (key, value) => records.set(key, value) };
+      await assert.rejects(deleteSelectedPrivateMessages('a', ['selected'], app), /等待/, 'callers without a live guard remain conservative');
+      assert.equal(records.get('fritia_next_chat_store'), JSON.stringify(original));
+      const result = await deleteSelectedPrivateMessages('a', ['selected'], app, () => false);
+      assert.equal(result.count, 1);
+      const saved = JSON.parse(records.get('fritia_next_chat_store'));
+      assert.deepEqual(saved.messages.a, original.messages.a.filter(message => message.id !== 'selected'));
+      assert.deepEqual(saved.messages.b, original.messages.b);
+      assert.deepEqual(saved.characters, original.characters);
+      assert.deepEqual(saved.conversations, original.conversations);
+      assert.deepEqual(app, original);
+    }
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage; else globalThis.localStorage = previousStorage;
+    if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument;
+  }
+});
+
 test('PNG streaming preserves all pixels across tiles, including height beyond Canvas limits', async () => {
   const width = 2, height = 40000, png = createTranscriptPng(width, height);
   for (let top = 0; top < height; top += 768) {

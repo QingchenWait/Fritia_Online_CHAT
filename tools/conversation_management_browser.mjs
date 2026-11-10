@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
-const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { chromium, devices } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ headless: true, ...(process.env.CHAT_TEST_BROWSER ? { executablePath: process.env.CHAT_TEST_BROWSER } : {}) });
 const origin = process.env.CHAT_TEST_URL || 'http://127.0.0.1:3038';
 const artifacts = new URL('../.codex/conversation-management/', import.meta.url);
 await mkdir(artifacts, { recursive: true });
 try {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
-    const context = await browser.newContext({ viewport, serviceWorkers: 'block' }), page = await context.newPage(), errors = [];
+    const context = await browser.newContext({ ...(viewport.width < 761 ? devices['Pixel 5'] : {}), viewport, serviceWorkers: 'block' }), page = await context.newPage(), errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => localStorage.setItem('fritia_chat_onboarding_dismissed', '1'));
     await page.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort());
@@ -33,6 +33,10 @@ try {
         storage.normalizeMessage({ id: 'short-message', role: 'user', speakerName: '分析员', text: '短消息' }),
         ...Array.from({ length: 24 }, (_, index) => storage.normalizeMessage({ id: `long-${index}`, role: index % 2 ? 'assistant' : 'user', speakerId: 'management-custom', speakerName: index % 2 ? '管理测试角色' : '分析员', text: `长图 ${index}\n\n${'应保留所有选中消息及中文换行。'.repeat(5)}\n\n\`\`\`js\nconst value = ${index};\n\`\`\`` }))
       ];
+      app.messages[id].push(storage.normalizeMessage({ id: 'interrupted-current-reply', role: 'assistant', status: 'typing', text: '', speakerId: 'management-custom' }));
+      const otherId = app.conversations[1].id;
+      app.messages[otherId] ||= [];
+      app.messages[otherId].push(storage.normalizeMessage({ id: 'interrupted-other-reply', role: 'assistant', status: 'typing', text: '' }));
       const originalOther = JSON.stringify(app.messages[app.conversations[1].id]);
       app.activeConversationId = id; storage.saveAppStore(app);
       const memory = (await import('/src/js/long_term_memory.js')).getLongTermMemoryStore();
@@ -45,6 +49,7 @@ try {
       localStorage.setItem('management-protected', JSON.stringify({ ref: shared.ref }));
       return { id, originalOther, exclusive: exclusive.ref, shared: shared.ref, tool: tool.ref, voice: voice.ref };
     });
+    await page.reload(); await page.waitForFunction(() => document.querySelector('.conversation-item'));
     await page.locator('.conversation-item').filter({ hasText: '管理测试角色' }).first().click();
     await page.evaluate(async () => {
       await import('/src/vendor/html-to-image/html-to-image.js');
@@ -66,13 +71,60 @@ try {
       assert.equal(await page.locator('.composer').isVisible(), false);
       assert.equal(await page.locator('#conversation-management-delete').isEnabled(), false);
     }
+    await page.evaluate(async () => {
+      const settings = await import('/src/js/settings.js');
+      window.__managementSettings = settings.getSettings();
+      settings.saveSettings({ chatProviders: [{ id: 'management-live', name: '请求状态测试', apiKey: 'fixture-not-a-real-key', baseUrl: 'https://management.invalid/v1', model: 'fixture-model' }], defaultChatProviderId: 'management-live', defaultImageCaptionProviderId: 'management-live' });
+      window.__managementFetch = window.fetch;
+      window.fetch = async (input, init) => {
+        if (String(input).includes('management.invalid/v1/chat/completions')) {
+          return new Promise(resolve => { window.__finishManagementReply = () => resolve(new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'LIVE_REQUEST_FINISHED' } }] }), { headers: { 'Content-Type': 'application/json' } })); });
+        }
+        return window.__managementFetch(input, init);
+      };
+    });
+    await page.fill('#message-input', '验证真实请求期间的删除保护'); await page.click('#send-btn');
+    await page.waitForFunction(() => typeof window.__finishManagementReply === 'function');
+    await enter();
+    await page.locator('[data-message-id="short-message"]').scrollIntoViewIfNeeded();
+    if (viewport.width < 761) await page.locator('[data-message-id="short-message"] .message-content').tap();
+    else await page.locator('[data-message-id="short-message"] .message-content').click();
+    assert.equal(await page.locator('#conversation-management-delete').isEnabled(), false, 'an actual running reply must keep deletion locked');
+    await page.evaluate(() => window.__finishManagementReply());
+    await page.waitForFunction(() => !document.getElementById('conversation-management-delete').disabled);
+    await page.click('#conversation-management-close');
+    await page.evaluate(async () => { window.fetch = window.__managementFetch; (await import('/src/js/settings.js')).saveSettings(window.__managementSettings); });
     await enter();
     assert.equal(await page.locator('#app').evaluate(node => node.classList.contains('is-detail-open')), false);
     for (const id of ['delete-image', 'delete-tool', 'delete-voice']) {
       const row = page.locator(`[data-message-id="${id}"]`);
-      await row.scrollIntoViewIfNeeded(); await row.locator('.message-content').click();
+      await row.scrollIntoViewIfNeeded();
+      if (viewport.width < 761) await row.locator('.message-content').tap(); else await row.locator('.message-content').click();
       assert.equal(await row.getAttribute('aria-checked'), 'true');
     }
+    assert.equal(await page.locator('#conversation-management-delete').isEnabled(), true, 'interrupted typing records must not block deletion after a real page restart');
+    await page.evaluate(() => {
+      window.__managementCanvas = htmlToImage.toCanvas;
+      window.__managementCanvasGates = [];
+      htmlToImage.toCanvas = async (...args) => {
+        await new Promise(resolve => window.__managementCanvasGates.push(resolve));
+        return window.__managementCanvas(...args);
+      };
+    });
+    await page.click('#conversation-management-share');
+    await page.waitForFunction(() => window.__managementCanvasGates.length === 1);
+    await page.click('#conversation-share-close');
+    assert.equal(await page.locator('#conversation-management-delete').isEnabled(), true, 'closing a still-rendering share must immediately unlock management');
+    await page.click('#conversation-management-share');
+    await page.waitForFunction(() => window.__managementCanvasGates.length === 2);
+    await page.evaluate(() => window.__managementCanvasGates.shift()());
+    await page.waitForFunction(() => document.querySelectorAll('.conversation-share-stage').length === 1);
+    assert.equal(await page.locator('#conversation-management-delete').isEnabled(), false, 'completion of an old cancelled render must not unlock a newer render');
+    await page.click('#conversation-share-close');
+    assert.equal(await page.locator('#conversation-management-delete').isEnabled(), true);
+    await page.evaluate(() => window.__managementCanvasGates.shift()());
+    await page.waitForFunction(() => !document.querySelector('.conversation-share-stage'));
+    await page.evaluate(() => { htmlToImage.toCanvas = window.__managementCanvas; });
     if (viewport.width === 1440) {
       for (const size of [{ width: 320, height: 568 }, { width: 760, height: 360 }, { width: 1024, height: 280 }, { width: 1280, height: 720 }, { width: 1536, height: 864 }, { width: 1920, height: 1080 }, { width: 2560, height: 1440 }, { width: 3840, height: 2160 }]) {
         await page.setViewportSize(size);
@@ -180,6 +232,7 @@ try {
     await writeFile(new URL(`long-${viewport.width}.png`, artifacts), new Uint8Array(long.bytes));
     await page.screenshot({ path: new URL(`preview-${viewport.width}.png`, artifacts).pathname.replace(/^\/([A-Z]:)/, '$1') });
     await page.click('#conversation-share-close');
+    const memoryBeforeDeletion = await page.evaluate(() => JSON.parse(localStorage.getItem('fritia_long_term_memory')).memories);
     await enter();
     await page.evaluate(() => ['delete-image', 'delete-tool', 'delete-voice'].forEach(id => document.querySelector(`[data-message-id="${id}"]`).click()));
     await page.click('#conversation-management-delete'); await page.click('#conversation-delete-confirm');
@@ -187,13 +240,13 @@ try {
     const deleted = await page.evaluate(async fixture => {
       const app = JSON.parse(localStorage.getItem('fritia_next_chat_store')), memory = JSON.parse(localStorage.getItem('fritia_long_term_memory'));
       const { getMediaDataUrl } = await import('/src/js/media_store.js');
-      return { ids: app.messages[fixture.id].map(m => m.id), memoryIds: memory.memories.map(m => m.id), edges: memory.edges.length,
+      return { ids: app.messages[fixture.id].map(m => m.id), memories: memory.memories, edges: memory.edges.length,
         exclusive: await getMediaDataUrl(fixture.exclusive), tool: await getMediaDataUrl(fixture.tool), voice: await getMediaDataUrl(fixture.voice), shared: !!await getMediaDataUrl(fixture.shared),
         other: JSON.stringify(app.messages[app.conversations[1].id]) };
     }, fixture);
     assert.ok(!deleted.ids.some(id => id.startsWith('delete-')));
     assert.ok(deleted.ids.includes('keep-message'));
-    assert.deepEqual(deleted.memoryIds, ['memory-shared'], JSON.stringify(deleted)); assert.equal(deleted.edges, 0);
+    assert.deepEqual(deleted.memories, memoryBeforeDeletion.filter(memory => memory.id !== 'memory-exclusive'), JSON.stringify(deleted)); assert.equal(deleted.edges, 0);
     assert.equal(deleted.exclusive, ''); assert.equal(deleted.tool, ''); assert.equal(deleted.voice, ''); assert.equal(deleted.shared, true);
     assert.equal(deleted.other, fixture.originalOther);
     await enter(); await page.reload(); await page.waitForFunction(() => document.querySelector('.conversation-item'));
@@ -204,7 +257,7 @@ try {
     else { await page.locator('.conversation-item').filter({ hasText: '芙提雅' }).first().click(); }
     assert.equal(await page.locator('#app').evaluate(node => node.classList.contains('is-conversation-management')), false);
     assert.deepEqual(errors, []);
-    console.log(`PASS ${viewport.width}: multi-select, cancel, PNG ${short.width}×${short.height}/${long.height}, directory/clipboard, exclusive deletion, shared retention, refresh and navigation`);
+    console.log(`PASS ${viewport.width}${viewport.width < 761 ? ' Android touch emulation' : ''}: orphaned typing, live request guard, cancelled rendering ownership, multi-select, PNG ${short.width}×${short.height}/${long.height}, exclusive deletion, shared retention, refresh and navigation`);
     await context.close();
   }
 } finally { await browser.close(); }

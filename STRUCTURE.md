@@ -1,5 +1,13 @@
 # STRUCTURE
 
+## v1.2.0 对话管理状态修复（2026-11-10，缓存 v58）
+
+- `src/js/conversation_management.js`：删除按钮使用管理操作 busy 与既有真实请求 `isBusy()`，不再用全库历史消息的 `typing` 推断当前忙碌。`closePreview()` 取消生成任务并即时刷新管理操作；分享任务 `finally` 仅在仍持有 generation 时释放 busy，避免旧任务影响新操作。
+- `src/js/conversation_management_data.js` / `deleteSelectedPrivateMessages`：明确传入实时 `isBusy` 时优先采用回调，未提供回调则沿用保守的 `typing` 检查。其余一致性检查、同步提交、内存/媒体精确清理与失败回滚保持原样，不增加持久化字段。
+- `tools/conversation_management.test.mjs`：覆盖遗留当前/其他会话占位、无回调时保守拒绝、明确空闲后精确删除及其他原始记录保留。
+- `tools/conversation_management_browser.mjs`：刷新复现遗留占位、实际请求完成前后状态、慢绘图取消与任务归属、Android Pixel 5 触摸模拟；保留既有桌面/移动选择、PNG、删除、共享保护、重载与导航测试。
+- `README.md` / `src/docs/doc_7 对话管理.md`：说明真实忙碌条件及取消生成后的恢复行为。版本仍 1.2.0，未打包。
+
 ## v1.2.0 第三方角色卡（2026-11-10，缓存 v57）
 
 发布仓库：`https://github.com/QingchenWait/Fritia_Online_CHAT_plugins/issues`，REST API：`https://api.github.com/repos/QingchenWait/Fritia_Online_CHAT_plugins/issues`。目录、详情和下载前状态核对统一使用新仓库；附件来源取自新 issue，身份直接保存响应的 `id` / `number`，没有旧仓库 ID 映射或并行来源。共创链接仍为 `https://fritia.online/creator/#intro`。
