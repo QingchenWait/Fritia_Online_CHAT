@@ -1,6 +1,6 @@
 
 name: "🪪 角色卡投稿"
-description: "向《海姆休息室》共创计划提交角色卡，包含简介、人格提示词和参考语音"
+description: "⚠️注意：共创计划已经迁移到新仓库中，请访问共创计划页面官网，以获取最新投稿地址"
 title: "[角色卡投稿] "
 labels: ["角色卡"]
 
@@ -9,10 +9,10 @@ body:
     attributes:
       value: |
         ## 《海姆休息室》角色卡共创计划
+        
+        ⚠️注意：共创计划已经迁移到新仓库中，请通过 [新链接](https://github.com/QingchenWait/Fritia_Online_CHAT_plugins/issues/new?template=character-card.yml) 进行角色卡投稿。
 
-        感谢参与角色卡共创！请按要求填写角色信息并上传相关附件。
-
-        提交前请仔细阅读 [共创计划](https://fritia.online/creator/) 的介绍和要求，确保角色卡内容与格式符合规范。
+        欢迎访问 [共创计划](https://fritia.online/creator/) 页面，以查看相关的介绍和要求。
 
   - type: input
     id: character-name
