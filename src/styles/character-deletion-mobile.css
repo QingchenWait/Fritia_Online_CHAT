@@ -1,0 +1,8 @@
+@media (max-width: 760px) {
+  #character-delete-panel { padding: max(.65rem, env(safe-area-inset-top)) .65rem max(.65rem, env(safe-area-inset-bottom)); }
+  .character-delete-shell { max-height: calc(var(--character-delete-viewport, 100vh) - 1.3rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .character-delete-head { padding: .85rem 1rem; }
+  .character-delete-body { padding-inline: 1rem; }
+  .character-delete-actions { padding: .8rem 1rem; gap: .45rem; }
+  .character-delete-actions .btn { min-width: 0; padding-inline: .7rem; font-size: .8rem; }
+}

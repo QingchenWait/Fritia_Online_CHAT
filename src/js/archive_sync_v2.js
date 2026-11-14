@@ -1,5 +1,6 @@
 import { digestText, stableJson, snapshotRecords, recordsSnapshot, mergeRecords } from './archive_merge.js';
 import { archiveState, saveRecovery, getSyncDevice } from './archive_state.js';
+import { webDavWriteError } from './archive_webdav_error.js';
 
 let running = null;
 let pending = null;
@@ -159,7 +160,7 @@ async function sync(ctx, choices) {
       const file = `pack-${hash}.${gzip ? 'gz' : 'json'}`;
       report('正在上传增量文件', file, index, groups.length + 1, 0.65);
       const response = await fetchAt(file, { method: 'PUT', headers: { 'Content-Type': gzip ? 'application/gzip' : 'application/json' }, body });
-      if (!response.ok) throw new Error(`上传增量失败：${response.status}，原有版本未改变。`);
+      if (!response.ok) throw await webDavWriteError(response, config, { label: '上传增量失败', file, size: body.size });
       await archiveState(cacheKey(file), text);
       for (const item of group) { refs[item.key] = { file, hash: item.hash }; known.set(`${item.key}:${item.hash}`, refs[item.key]); }
       report('正在上传增量文件', file, index + 1, groups.length + 1, 0.7);
@@ -167,8 +168,9 @@ async function sync(ctx, choices) {
     const name = `commit-${device.id}-${Date.now()}-${crypto.randomUUID()}.json`;
     const manifest = { version: 2, device, at: Date.now(), parents: parentNames, records: refs };
     report('正在发布合并版本', name, groups.length, groups.length + 1, 0.8);
-    const response = await fetchAt(name, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: stableJson(manifest) });
-    if (!response.ok) throw new Error(`发布同步版本失败：${response.status}，下次可继续同步。`);
+    const manifestText = stableJson(manifest);
+    const response = await fetchAt(name, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: manifestText });
+    if (!response.ok) throw await webDavWriteError(response, config, { label: '发布同步版本失败', file: name, size: new Blob([manifestText]).size });
     catalog[name] = manifest;
     report('正在发布合并版本', name, groups.length + 1, groups.length + 1, 0.85);
     return name;

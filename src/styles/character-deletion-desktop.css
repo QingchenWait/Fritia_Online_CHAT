@@ -1,0 +1,3 @@
+@media (min-width: 761px) {
+  .character-delete-shell { max-height: calc(100vh - clamp(2rem, 6vh, 6rem)); max-height: calc(100dvh - clamp(2rem, 6vh, 6rem)); }
+}

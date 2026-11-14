@@ -28,6 +28,9 @@
   <link rel="stylesheet" href="src/styles/conversation-management.css">
   <link rel="stylesheet" href="src/styles/conversation-management-desktop.css">
   <link rel="stylesheet" href="src/styles/conversation-management-mobile.css">
+  <link rel="stylesheet" href="src/styles/character-deletion.css">
+  <link rel="stylesheet" href="src/styles/character-deletion-desktop.css">
+  <link rel="stylesheet" href="src/styles/character-deletion-mobile.css">
   <link rel="stylesheet" href="src/styles/third-party-cards.css">
   <link rel="stylesheet" href="src/styles/third-party-cards-desktop.css">
   <link rel="stylesheet" href="src/styles/third-party-cards-mobile.css">
@@ -274,6 +277,7 @@
         </div>
         <div class="quick-grid">
           <button id="detail-conversation-management" class="hidden" type="button"><img src="src/_logo/icons/list-checks.svg" alt=""><span>对话管理</span></button>
+          <button id="detail-character-delete" class="hidden" type="button"><img src="src/_logo/icons/trash-2.svg" alt=""><span>删除角色</span></button>
           <button id="detail-character-action" type="button" data-panel-open="character-import-panel">
             <img id="detail-character-action-icon" src="src/_logo/icons/user-plus.svg" alt="">
             <span id="detail-character-action-label">导入角色</span>
@@ -1716,7 +1720,7 @@
             <div id="third-party-disclaimer" class="third-party-disclaimer" hidden>
               <div class="third-party-disclaimer-card" role="dialog" aria-modal="true" aria-labelledby="third-party-disclaimer-title" aria-describedby="third-party-disclaimer-body">
                 <header><img src="src/_logo/icons/shield-check.svg" alt=""><h3 id="third-party-disclaimer-title">免责声明</h3></header>
-                <div id="third-party-disclaimer-body" class="third-party-disclaimer-body third-party-scroll"><p>本页中所有内容均来自互联网公开收集与分享，仅供交流、体验与个人使用。<br>本软件免费开源，不以角色卡内容获利，不代表或认可卡片中的观点、设定与创作内容。<br>如您是权利人并认为内容存在侵权，请联系 GitHub 平台处理删除。</p><p class="third-party-adult-notice">部分内容可能仅适合成年人浏览与使用。请确认您已年满 18 周岁，并遵守所在地法律法规。</p></div>
+                <div id="third-party-disclaimer-body" class="third-party-disclaimer-body third-party-scroll"><p>本页中所有内容均来自互联网公开收集与分享，仅供交流、体验与个人使用。<br>本软件免费开源，不以角色卡获利，不代表或认可卡片中的内容、设定与观点。<br>如您是权利人并认为内容存在侵权，请联系 GitHub 平台处理删除。</p><p class="third-party-adult-notice">部分内容可能仅适合成年人浏览与使用。请确认您已年满 18 周岁，并遵守所在地法律法规。</p></div>
                 <footer><label><input id="third-party-dont-remind" type="checkbox"><span>不再提醒</span></label><button id="third-party-acknowledge" class="btn btn-primary" type="button"><img src="src/_logo/icons/shield-check.svg" alt=""><span>我已知悉</span></button></footer>
               </div>
             </div>
@@ -2160,5 +2164,22 @@
   </div>
 
   <script type="module" src="src/js/main.js"></script>
+  <div id="character-delete-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="character-delete-title" aria-describedby="character-delete-name">
+    <section class="character-delete-shell">
+      <header class="character-delete-head"><h2 id="character-delete-title">角色删除确认</h2><button id="character-delete-close" class="icon-btn" type="button" aria-label="关闭删除确认"><img src="src/_logo/icons/x.svg" alt=""></button></header>
+      <div class="character-delete-body" tabindex="0">
+        <h3 id="character-delete-name"></h3><p id="character-delete-id"></p>
+        <p>选中角色的所有相关数据都会被删除，包括角色卡、对话历史、长期记忆、对话过程中产生的附件、图片、语音，以及工具调用记录等。</p>
+        <p><strong>此操作无法恢复。建议删除前手动导出一次完整备份。</strong></p>
+        <p class="character-delete-note">同名的其他角色不会被删除。与其他角色共享的文件、记忆与记录将保留；若角色加入了群聊，则需手动移除所有群聊后再尝试删除。</p>
+        <p id="character-delete-error" role="status" aria-live="polite"></p>
+      </div>
+      <footer class="character-delete-actions">
+        <button id="character-delete-backup" class="btn btn-soft" type="button"><img src="src/_logo/icons/download.svg" alt=""><span>导出备份</span></button>
+        <button id="character-delete-cancel" class="btn btn-soft" type="button"><img src="src/_logo/icons/x.svg" alt=""><span>取消</span></button>
+        <button id="character-delete-confirm" class="btn" type="button"><img src="src/_logo/icons/trash-2.svg" alt=""><span>确认删除</span></button>
+      </footer>
+    </section>
+  </div>
 </body>
 </html>

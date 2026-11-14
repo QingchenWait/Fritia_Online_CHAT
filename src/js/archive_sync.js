@@ -118,8 +118,8 @@ export async function exportArchiveZip(options = {}) {
     lastStatus: '已创建本地备份'
   });
   setSyncStatus('idle', result?.browserDownload ? '已交给浏览器下载；此环境不支持指定路径，可在浏览器设置中开启下载前询问位置' : 'ZIP 备份已保存到所选位置', 1, options);
-  showSettingsNotice('备份 ZIP 包已成功导出');
-  return { filename, size: blob.size };
+  showSettingsNotice(result?.browserDownload ? '已交给浏览器下载' : options.noticeText || '备份 ZIP 包已成功导出');
+  return { filename, size: blob.size, browserDownload: Boolean(result?.browserDownload) };
 }
 
 export async function importArchiveZipFile(file, options = {}) {

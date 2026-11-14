@@ -31,11 +31,13 @@ import { bindExternalLinks } from './external_links.js';
 import { initAnnouncementBoard } from './announcements.js';
 import { initThirdPartyCards } from './third_party_cards.js';
 import { initConversationManagement } from './conversation_management.js';
+import { initCharacterDeletion } from './character_deletion.js';
 
 let chatProviderPresets = null;
 let announcementBoard = null;
 let thirdPartyCards = null;
 let conversationManagement = null;
+let characterDeletion = null;
 let pendingConversationReplies = 0;
 
 const CHAT_MODEL_LOGO_PATHS = Object.freeze({
@@ -324,6 +326,17 @@ export function initUi() {
     onDelete: (_id, ids) => {
       if (ids.some(id => state.voicePlayback?.messageId === id || state.voicePlayback?.messageId.startsWith(`${id}:attachment:`))) stopVoicePlayback();
       if (ids.includes(state.toolOtherFiles.messageId)) closePanel('tool-other-files-panel');
+    }
+  });
+  characterDeletion = initCharacterDeletion({
+    getStore: () => state.store, getCharacter: getActivePrivateCharacter,
+    isBusy: () => pendingConversationReplies > 0 || Boolean(state.activeToolRun),
+    onDeleted: (id, result) => {
+      state.characterChatRuntime.delete(id);
+      if (result.messageIds.some(messageId => state.voicePlayback?.messageId === messageId || state.voicePlayback?.messageId.startsWith(`${messageId}:attachment:`))) stopVoicePlayback();
+      if (result.messageIds.includes(state.toolOtherFiles.messageId)) closePanel('tool-other-files-panel');
+      closeDetailPane();
+      if (matchMedia(MOBILE_LAYOUT_QUERY).matches) closeMobileChatPage();
     }
   });
   announcementBoard = initAnnouncementBoard({ renderMarkdown: renderMarkdownDocument, requestClose: () => closePanel('announcement-panel') });
@@ -1092,7 +1105,7 @@ function continueConversationAfterOutgoing(committed) {
       onStore: updateStore
     }).catch(error => {
       console.warn('[ui] roundtable turn failed', error);
-    }).finally(() => { pendingConversationReplies--; conversationManagement?.update(); });
+    }).finally(() => { pendingConversationReplies--; conversationManagement?.update(); characterDeletion?.update(); });
     return;
   }
   const character = getCharacterById(store.characters, conversation.memberIds[0]);
@@ -1129,6 +1142,7 @@ function continueConversationAfterOutgoing(committed) {
         renderMessages();
       }
       conversationManagement?.update();
+      characterDeletion?.update();
     });
     return;
   }
@@ -1146,7 +1160,7 @@ function continueConversationAfterOutgoing(committed) {
     onStore: updateStore
   }).catch(error => {
     console.warn('[ui] private reply failed', error);
-  }).finally(() => { pendingConversationReplies--; conversationManagement?.update(); });
+  }).finally(() => { pendingConversationReplies--; conversationManagement?.update(); characterDeletion?.update(); });
 }
 
 async function sendSticker(sticker) {
@@ -4282,6 +4296,7 @@ function handleAndroidBackAction() {
 }
 
 function closeTransientBackSurface() {
+  if (characterDeletion?.back()) return true;
   if (conversationManagement?.back()) return true;
   const groupLeaveConfirm = document.getElementById('group-leave-confirm-overlay');
   if (groupLeaveConfirm && !groupLeaveConfirm.classList.contains('hidden')) {
@@ -5153,6 +5168,7 @@ function formatVoiceSeconds(value) {
 }
 
 function renderDetail() {
+  characterDeletion?.update();
   const conversation = getActiveConversation();
   updateConversationChrome(conversation);
   const avatar = document.getElementById('detail-avatar');
@@ -6656,6 +6672,7 @@ function openPanel(id, options = {}) {
 }
 
 function closePanel(id) {
+  if (id === 'character-delete-panel') { characterDeletion?.back(); return; }
   if (id === 'plugin-store-panel') thirdPartyCards?.close();
   if (id === 'conversation-share-panel') { conversationManagement?.closePreview(); return; }
   if (id === 'announcement-panel') announcementBoard?.close();
@@ -6778,7 +6795,7 @@ function scheduleRoundtableIdle() {
       chatSettings: runtime.settings,
       reasoningEffort: runtime.reasoningEffort,
       onStore: updateStore
-    }); } finally { pendingConversationReplies--; conversationManagement?.update(); }
+    }); } finally { pendingConversationReplies--; conversationManagement?.update(); characterDeletion?.update(); }
   }, delay);
 }
 

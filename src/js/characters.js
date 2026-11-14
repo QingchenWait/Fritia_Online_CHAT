@@ -99,6 +99,11 @@ const PRESET_CHARACTER_SOURCES = [
   }
 ];
 
+// Identity, never display names, decides whether a role belongs to the app.
+export function isBuiltinCharacter(character) {
+  return Boolean(character && (character.source === 'preset' || PRESET_CHARACTER_SOURCES.some(item => item.id === character.id)));
+}
+
 export async function ensurePresetCharacters() {
   const store = loadAppStore();
   const existing = new Map(store.characters.map(item => [item.id, item]));

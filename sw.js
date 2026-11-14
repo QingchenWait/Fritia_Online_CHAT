@@ -1,7 +1,15 @@
-const CACHE_NAME = 'fritia-next-chat-v58';
+const CACHE_NAME = 'fritia-next-chat-v59';
 const CORE_ASSETS = [
   './',
   './index.html',
+  './src/js/character_deletion.js',
+  './src/js/character_deletion_data.js',
+  './src/js/character_deletion_desktop.js',
+  './src/js/character_deletion_mobile.js',
+  './src/js/archive_webdav_error.js',
+  './src/styles/character-deletion.css',
+  './src/styles/character-deletion-desktop.css',
+  './src/styles/character-deletion-mobile.css',
   './src/js/third_party_cards.js',
   './src/js/third_party_cards_data.js',
   './src/js/third_party_cards_desktop.js',

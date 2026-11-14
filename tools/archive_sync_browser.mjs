@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const files = new Map(), calls = [];
-let failPut = false, listingGate = null;
+let failPut = false, deniedPut = null, listingGate = null;
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname.startsWith('/dav/')) {
@@ -18,6 +18,7 @@ const server = createServer(async (req, res) => {
       res.end(`<d:multistatus xmlns:d="DAV:">${names.map(name => `<d:response><d:href>${name}</d:href></d:response>`).join('')}</d:multistatus>`); return;
     }
     if (req.method === 'PUT') {
+      if (deniedPut) { res.writeHead(403); res.end(deniedPut); return; }
       if (failPut) { res.writeHead(503); res.end(); return; }
       files.set(url.pathname, Buffer.concat(body)); res.writeHead(201); res.end(); return;
     }
@@ -101,6 +102,23 @@ try {
   failPut = false; await sync(a); await sync(b);
   assert.ok((await texts(b)).includes('keep-on-failure'));
   console.log('PASS failed upload preserves local history and retries successfully');
+  await a.evaluate(() => edit('A', 'quota-remote'));
+  await b.evaluate(() => edit('A', 'quota-local'));
+  await sync(a); assert.equal((await sync(b)).conflict, true);
+  const cloudBeforeQuota = [...files].map(([path, bytes]) => [path, bytes.toString('base64')]);
+  deniedPut = '<d:error xmlns:d="DAV:"><d:message>Upload traffic quota exceeded</d:message></d:error>';
+  const quotaFailure = await b.evaluate(() => sync(Object.fromEntries(conflict.files.map(item => [item.choiceKey, 'remote']))).then(() => '', error => error.message));
+  assert.match(quotaFailure, /上传流量额度已用尽/);
+  assert.ok((await texts(b)).includes('quota-local'));
+  assert.ok(await b.evaluate(() => Boolean(conflict?.recoveryId)));
+  assert.deepEqual([...files].map(([path, bytes]) => [path, bytes.toString('base64')]), cloudBeforeQuota);
+  deniedPut = 'Forbidden';
+  const genericFailure = await b.evaluate(() => sync(Object.fromEntries(conflict.files.map(item => [item.choiceKey, 'remote']))).then(() => '', error => error.message));
+  assert.match(genericFailure, /服务器未明确说明/);
+  deniedPut = null;
+  await b.evaluate(() => sync(Object.fromEntries(conflict.files.map(item => [item.choiceKey, 'remote']))));
+  assert.ok((await texts(b)).includes('quota-remote'));
+  console.log('PASS quota 403 during conflict resolution preserves both versions/recovery, distinguishes generic 403 and retries');
   // Corruption cannot reach the apply callback on a fresh device.
   const pack = [...files.keys()].find(key => key.endsWith('.gz') || key.includes('/pack-'));
   const bytes = files.get(pack); files.set(pack, Buffer.from('corrupted'));

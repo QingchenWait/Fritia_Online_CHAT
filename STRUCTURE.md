@@ -1,5 +1,28 @@
 # STRUCTURE
 
+## v1.2.0 角色删除与上传错误（2026-11-10，缓存 v59）
+
+| 文件 / 内部 API | 作用 |
+| --- | --- |
+| `characters.js` / `isBuiltinCharacter(character)` | 通过内置来源或内置唯一 ID 保护角色，与显示名称无关 |
+| `character_deletion_data.js` / `planCharacterDeletion(app,memory,characterId,otherData)` | 纯函数规划角色、私聊桶、独占记忆/边及精确媒体候选；不归一化其他数据；返回保留原字段的 app/memory、会话和消息 ID、数量及媒体引用 |
+| `character_deletion_data.js` / `deleteSelectedCharacter(id,expectedCharacter,getRuntime,isBusy)` | Web Lock、核对确认身份及实时请求、读取所有本地引用、未知库保守降级、localStorage 提交/回滚、UI 事件、逐媒体键再次检查；保护所有未选中记录 |
+| `character_deletion_data.js` / `readProtectedDatabases`（内部） | 只读已有媒体、知识库、附件隔离和公告数据库；未知/不可读库保留附属数据，不创建库；恢复快照/同步缓存包含独立副本并保持原样 |
+| `character_deletion.js` / `initCharacterDeletion` | 通过 `getStore/getCharacter/isBusy/onDeleted` 接入原 UI，捕获确认目标，处理备份与删除；返回 `update/back` |
+| `character_deletion_desktop.js` / `initCharacterDeletionDesktop` | 宽屏正文 PageUp/PageDown 独立滚动交互 |
+| `character_deletion_mobile.js` / `initCharacterDeletionMobile` | 窄屏 VisualViewport/resize 独立高度同步 |
+| `styles/character-deletion{,-desktop,-mobile}.css` | 浅红快速操作卡片、Soft UI 确认窗、横竖屏高度和间距、固定操作/正文自绘滚动条、按钮图文同排 |
+| `archive_sync.js` / `exportArchiveZip({noticeText})` | 既有 ZIP 全量导出增加可选完成提示，返回 `filename/size/browserDownload`；取消仍返回 `cancelled` |
+| `archive_webdav_error.js` / `webDavWriteError(response,config,{label,file,size})` | 读取失败 PUT 正文，分类明确上传流量/空间原因；通用 403 保留不确定性，说明目录访问与写入额度区别；返回可显示的 Error |
+| `archive_sync_v2.js` | 增量包和 commit 上传失败调用错误分类，其余合并/发布流程保持 |
+| `tools/character_deletion{.test,_browser}.mjs` | 纯删除计划、提交回滚、错误分类，以及临时浏览器中的备份/删除/UI 和七类安全边界；截图写系统临时目录 |
+| `tools/archive_sync_browser.mjs` | 模拟额度 403 与通用 403，验证冲突选择不覆盖本地/云端旧版本及额度恢复后重试 |
+
+HTML 映射：`#detail-character-delete` 位于角色卡 `.quick-grid`，只对非内置私聊角色显示；`#character-delete-panel` 是居中确认 dialog；`#character-delete-name` / `id` 显示本次捕获的角色名称/ID；`.character-delete-body` 在高度不足时独立滚动；`#character-delete-error` 显示备份/删除失败原因；`backup/cancel/confirm/close` 分别为完整 ZIP 保存、取消、确认永久删除和关闭。`ui.js` 接入实时请求计数、store 更新、Android 返回及选中消息的播放/工具附件清理；成功后移动端回列表，桌面关闭角色卡。
+
+删除不新增持久化键、角色字段或同步墓碑。保留跨角色文件、混合记忆、无归属日志和全部独立备份；角色仍在群聊或其他会话时中止，避免删除角色后留空的群成员。旧设备/旧存档可能通过既有非删除式合并重新带回角色。`README.md`、导入角色与存档帮助同步描述使用方式和这些保守边界。
+
+
 ## v1.2.0 对话管理状态修复（2026-11-10，缓存 v58）
 
 - `src/js/conversation_management.js`：删除按钮使用管理操作 busy 与既有真实请求 `isBusy()`，不再用全库历史消息的 `typing` 推断当前忙碌。`closePreview()` 取消生成任务并即时刷新管理操作；分享任务 `finally` 仅在仍持有 generation 时释放 busy，避免旧任务影响新操作。
