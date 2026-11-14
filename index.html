@@ -16,6 +16,8 @@
   <link rel="stylesheet" href="src/styles/onboarding-mobile.css">
   <link rel="stylesheet" href="src/styles/chat-model-picker-desktop.css">
   <link rel="stylesheet" href="src/styles/chat-model-picker-mobile.css">
+  <link rel="stylesheet" href="src/styles/deepseek-web-desktop.css">
+  <link rel="stylesheet" href="src/styles/deepseek-web-mobile.css">
   <link rel="stylesheet" href="src/styles/model-provider-presets-desktop.css">
   <link rel="stylesheet" href="src/styles/model-provider-presets-mobile.css">
   <link rel="stylesheet" href="src/styles/archive-sync-desktop.css">
@@ -210,6 +212,7 @@
           <div class="sticker-grid" id="sticker-popover-grid"></div>
         </section>
         <section id="chat-model-popover" class="chat-model-popover hidden" role="menu" aria-label="模型与思考强度">
+          <div class="chat-model-popover__scroll">
           <section id="lm-studio-connection" class="lm-studio-connection hidden" aria-label="模型连接">
             <strong class="lm-studio-connection__title">模型连接</strong>
             <div class="lm-studio-connection__actions">
@@ -217,6 +220,13 @@
               <button id="lm-studio-config-btn" type="button">配置</button>
             </div>
             <p id="lm-studio-connection-status" class="lm-studio-connection__status" role="status"></p>
+          </section>
+          <section id="deepseek-web-controls" class="deepseek-web-controls hidden" aria-label="API 功能扩展">
+            <strong class="deepseek-web-controls__title">API 功能扩展</strong>
+            <div class="deepseek-web-controls__actions">
+              <button id="deepseek-web-search-btn" type="button" role="menuitemcheckbox" aria-checked="false"><i aria-hidden="true"></i><span>联网搜索</span></button>
+              <button id="deepseek-read-url-btn" type="button" role="menuitemcheckbox" aria-checked="false"><i aria-hidden="true"></i><span>阅读网页</span></button>
+            </div>
           </section>
           <header class="chat-model-popover__head">
             <img src="src/_logo/icons/brain.svg" alt="">
@@ -231,6 +241,7 @@
             </span>
             <img class="chat-model-current__arrow" src="src/_logo/icons/chevron-down.svg" alt="">
           </button>
+          </div>
           <aside id="chat-model-submenu" class="chat-model-submenu hidden" role="menu" aria-label="对话模型"></aside>
         </section>
         <div id="attachment-preview" class="attachment-preview hidden"></div>

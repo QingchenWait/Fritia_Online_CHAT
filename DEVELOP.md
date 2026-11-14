@@ -1,5 +1,17 @@
 # DEVELOP
 
+## 2026-11-14 v1.2.0 DeepSeek API 联网扩展（缓存 v60，未打包）
+
+- 遵循 `.agents/fritia_chat_dev_agent.md` 与 `src/ui_rules/ui_design_rules.md`，版本保持 1.2.0，不运行静态构建或平台打包。2026-11-14 已阅读并核对在线 [新闻](https://api-docs.deepseek.com/zh-cn/news/news261113)、[Chatbot 总览](https://api-docs.deepseek.com/zh-cn/guides/build_a_chatbot)、[联网工具](https://api-docs.deepseek.com/zh-cn/guides/web_tools)、[网页搜索与抓取](https://api-docs.deepseek.com/zh-cn/guides/search)，以在线文档为准；参考官方开源 [chat-demo](https://github.com/deepseek-ai/chat-demo)。
+- 审计后选择独立 Search / Fetch：服务端联网工具会忽略温度等采样参数，Chat Completions 不接受非 text 的 `response_format`，阅读链接后续轮次还需要原样回传 `server_tool_calls` / `signature`。独立接口可保留现有群聊 JSON、正式回复思考档位、DeepSeek 极限档正文处理和 MCP 工具循环，不引入原生工具协议状态或修改存档结构；不宣称实现服务端深度思考搜索。
+- `deepseek_web.js` 独立检查精确模型名 `deepseek-flash` 及已配置的 HTTP(S) Base URL / 密钥；两个开关均默认关闭。先用当前 API 发起独立非思考 JSON 查询规划，查询限制为 128 Unicode 字符，最多两条；网页候选仅取当前和最近用户消息中的 HTTP(S) 链接，最多抓取三页。规划 JSON 完整解析，不截断模型输出；失败回退当前输入查询与显式链接。
+- Search 请求使用 `POST /v1/tools/search`、`query/count:5/need_content:true`，Fetch 使用 `POST /v1/tools/fetch`、`url`，复用当前 Bearer 密钥与服务地址。每项请求独立 30 秒超时；错误和空结果明确标注后继续原聊天，不自动重试、不伪造联网成功。外部正文解析后按共享预算摘录，引用来源要求进入参考说明，不改最终回复生成长度或字段。
+- 常规私聊在正式回复前插入参考消息；MCP 私聊在工具循环开始前插入，恢复已有工具任务时不重复检索；圆桌仅玩家输入 / @ 触发检索，参考输入计入原 Token 预算，若参考资料导致原本可执行的回复超出预算则舍弃该参考、保留原回复。Bot 跟进和空闲轮次保持原流程。知识库、长期记忆等辅助模型请求不接入扩展。联网参考不新增存储库或聊天字段；既有 MCP 续跑快照继续按原流程保存和恢复。
+- `settings.js` 在既有模型配置中增加 `deepseekWebSearch` / `deepseekReadUrl` 两个布尔项，由原设置保存及存档收集机制持久化，不变更聊天/归档版本、表结构或已有配置含义。按钮只提交对应字段补丁。
+- 新 `deepseek_web_ui.js` 与独立横/竖屏 JS、CSS 接入原模型菜单。两个无 Logo 文字按钮并排，灰色关闭、强调色开启及绿色状态点；不修改原菜单宽度。新增内部主菜单滚动层，模型子菜单保持外置，横/竖屏都使用自绘滚动条及视口可用高度，避免裁剪二级菜单。
+- 查询规划与 Search / Fetch 均为额外 API 请求；没有增加服务后端或额外用户设置。自定义网关需同时支持这些接口。新模块与样式加入 SW 核心资源，缓存批次升为 v60。
+- 验证：新增模块/API 回归及真实私聊、MCP、圆桌入口集成回归通过；既有 DeepSeek 回复 6 项、思考与工具 9 项、Grok 5 项、Service Worker 7 项、存档 7 项、导出 9 项通过，`npm run check` 与 `git diff --check` 通过。新浏览器回归覆盖 1440×900、390×844、320×568、980×360、390×320 的固定宽度、状态颜色、切模型、刷新持久化、低高度滚动和子菜单；桌面与手机验证 MCP 关闭时完整规划→Search/Fetch→回复、高思考与极限流式协议。既有 DeepSeek 浏览器 1440×1000、390×844 回归也通过，并已查看横/竖屏截图。全部使用受控 API 夹具，未调用真实收费接口或实机 Android，未构建产物。
+
 ## 2026-11-10 v1.2.0 角色安全删除与 WebDAV 流量错误提示（缓存 v59，未打包）
 
 - 按 `.agents/fritia_chat_dev_agent.md` 和 UI 规范，仅扩展角色卡快速操作、删除确认/备份及 WebDAV 上传失败提示。复用已有 Lucide 官方 `trash-2` / `download` / `x` 图标；版本保持 1.2.0，不生成 dist、APK 或 EXE。

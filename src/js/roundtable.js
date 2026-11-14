@@ -11,6 +11,7 @@ import { markFailedTurn, filterFailedTurnHistory, isFailedTurnMessage } from './
 import { getSelectedMcpClientIds, collectMcpToolDefinitions, callMcpToolByRegistryEntry, formatMcpContentText } from './mcp_tools.js';
 import { requestToolAwareCompletion, normalizeToolCalls, extractMcpResultAttachments, normalizeGeneratedAttachments } from './tool_chat_engine.js';
 import { getReasoningFields } from './model_reasoning.js';
+import { buildDeepSeekWebReference } from './deepseek_web.js';
 
 const groupModelRuntime = new Map();
 
@@ -338,9 +339,16 @@ async function runSpeakerReply({
     const ragMessage = await buildRoundtableRagMessage(requestEvent, history);
     const memoryMessage = await buildRoundtableMemoryMessage(requestEvent, speakerForRequest, history);
     intimateMessage = await buildDeepSeekIntimateUserMessage(settings);
-    const estimatedTokens = estimateRequestTokens(speakerForRequest, requestEvent, ragMessage, memoryMessage, intimateMessage, settings, history);
+    // Only player-triggered turns retrieve; bot follow-ups and idle messages
+    // keep their existing scheduling and never initiate background web calls.
+    let webReference = (settings.deepseekWebSearch || settings.deepseekReadUrl) && ['player', 'mention'].includes(eventType)
+      ? await buildDeepSeekWebReference({ settings, userText: triggerText, history }) : null;
+    const baseEstimatedTokens = estimateRequestTokens(speakerForRequest, requestEvent, ragMessage, memoryMessage, intimateMessage, settings, history);
     const budgetBeforeRequest = getBudgetState();
     const tokenHardLimit = getRoundtableTokenHardLimit();
+    // Optional references must not prevent an otherwise affordable group reply.
+    if (webReference && budgetBeforeRequest.tokenTotal + baseEstimatedTokens + estimateTokens(webReference.content) >= tokenHardLimit) webReference = null;
+    const estimatedTokens = baseEstimatedTokens + (webReference ? estimateTokens(webReference.content) : 0);
     if (budgetBeforeRequest.tokenTotal + estimatedTokens >= tokenHardLimit) {
       const error = new Error('圆桌密语触发 token 硬上限');
       error.kind = 'request-token-hard-limit';
@@ -356,6 +364,7 @@ async function runSpeakerReply({
     }
 
     const body = buildRequestBody(settings, speakerForRequest, requestEvent, ragMessage, memoryMessage, intimateMessage, mediaContentParts);
+    if (webReference) body.messages.splice(1, 0, webReference);
     toolResult = await requestRoundtableCompletion({ settings, body, attachmentIssues, conversationId: conversation.id, reasoningEffort: modelRuntime?.reasoningEffort || '' });
     const rawReply = typeof toolResult === 'string' ? toolResult : toolResult.content;
     recordCall(requestEvent.type, estimatedTokens + estimateTokens(rawReply));

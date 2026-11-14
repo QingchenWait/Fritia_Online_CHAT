@@ -1,0 +1,83 @@
+@media (min-width: 761px) and (orientation: landscape) {
+  .chat-model-popover__scroll {
+    max-height: var(--chat-model-available-height, calc(100dvh - 10rem));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .chat-model-popover .chat-model-submenu {
+    max-height: min(20rem, 56dvh, var(--chat-model-available-height, 100dvh));
+  }
+
+  .chat-model-popover__scroll,
+  .chat-model-popover .chat-model-submenu {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 91, 255, 0.42) transparent;
+  }
+
+  .chat-model-popover__scroll::-webkit-scrollbar,
+  .chat-model-popover .chat-model-submenu::-webkit-scrollbar { width: 0.3rem; }
+  .chat-model-popover__scroll::-webkit-scrollbar-track,
+  .chat-model-popover .chat-model-submenu::-webkit-scrollbar-track { background: transparent; }
+  .chat-model-popover__scroll::-webkit-scrollbar-thumb,
+  .chat-model-popover .chat-model-submenu::-webkit-scrollbar-thumb {
+    border-radius: 1rem;
+    background: rgba(99, 91, 255, 0.42);
+  }
+
+  .deepseek-web-controls {
+    display: grid;
+    gap: 0.4rem;
+    margin-bottom: 0.4rem;
+    padding: 0.15rem 0.3rem 0.55rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .deepseek-web-controls__title {
+    padding: 0 0.25rem;
+    color: #303751;
+    font-size: 0.72rem;
+  }
+
+  .deepseek-web-controls__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .deepseek-web-controls__actions button {
+    min-width: 0;
+    min-height: 1.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.25rem;
+    border: 1px solid rgba(151, 161, 173, 0.22);
+    border-radius: 0.6rem;
+    background: #f5f6f9;
+    color: #9ba3b3;
+    font-size: 0.68rem;
+    white-space: nowrap;
+    transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
+  }
+
+  .deepseek-web-controls__actions button i {
+    width: 0.35rem;
+    height: 0.35rem;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: #bac1cd;
+  }
+
+  .deepseek-web-controls__actions button:hover { border-color: rgba(99, 91, 255, 0.38); }
+  .deepseek-web-controls__actions button:active { background: #e9ecf6; }
+  .deepseek-web-controls__actions button:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+  .deepseek-web-controls__actions button[aria-checked="true"] {
+    color: var(--brand);
+    border-color: rgba(79, 99, 255, 0.3);
+    background: rgba(79, 99, 255, 0.09);
+  }
+  .deepseek-web-controls__actions button[aria-checked="true"] i { background: #21a675; }
+}

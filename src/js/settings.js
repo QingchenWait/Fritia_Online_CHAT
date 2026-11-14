@@ -28,6 +28,8 @@ export const DEFAULT_SETTINGS = {
   temperature: 0.8,
   stream: true,
   localizationSensitivity: 0.5,
+  deepseekWebSearch: false,
+  deepseekReadUrl: false,
   deepseekIntimateMode: false,
   deepseekIntimateModeStartedAt: 0,
   deepseekIntimateModeDisabledAt: 0
@@ -94,6 +96,8 @@ export function normalizeSettings(raw = {}) {
     temperature: clampNumber(raw.temperature, 0, 2, DEFAULT_SETTINGS.temperature),
     stream: raw.stream !== false,
     localizationSensitivity: clampLocalizationSensitivity(raw.localizationSensitivity),
+    deepseekWebSearch: raw.deepseekWebSearch === true,
+    deepseekReadUrl: raw.deepseekReadUrl === true,
     deepseekIntimateMode: Boolean(raw.deepseekIntimateMode),
     deepseekIntimateModeStartedAt: normalizeTimestamp(raw.deepseekIntimateModeStartedAt),
     deepseekIntimateModeDisabledAt: normalizeTimestamp(raw.deepseekIntimateModeDisabledAt)

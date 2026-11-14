@@ -20,6 +20,7 @@ import {
 import { characterAvatar, getCharacterById, normalizeCharacterAvatarSource } from './characters.js';
 import { getSettings, saveSettings, getAdvancedSettings, saveAdvancedSettings, isDeepSeekIntimateModeAvailable, getDefaultChatProvider } from './settings.js';
 import { getModelReasoningProfile, normalizeModelReasoningEffort, loadModelReasoningProfile } from './model_reasoning.js';
+import { bindDeepSeekWebControls, renderDeepSeekWebControls, syncDeepSeekWebLayout } from './deepseek_web_ui.js';
 import { createChatScrollController } from './chat_scroll.js';
 import { getLmStudioReasoningProfile, isLmStudioProvider, testLmStudioConnection } from './lm_studio.js';
 import { CHAT_PROVIDER_PRESETS, getProviderPresetForUrl, buildMimoTtsSyncPatch, initChatProviderPresets } from './model_provider_presets.js';
@@ -1232,6 +1233,10 @@ function bindRoleMigrationControls() {
 }
 
 function bindChatModelControl() {
+  bindDeepSeekWebControls({ getRuntime: () => {
+    const character = getActiveChatModelContext();
+    return character ? getCharacterChatRuntime(character.id) : null;
+  } });
   const control = document.getElementById('chat-model-control-btn');
   const modelTrigger = document.getElementById('chat-model-submenu-trigger');
   const popover = document.getElementById('chat-model-popover');
@@ -1323,6 +1328,7 @@ function renderChatModelControl() {
     popover.classList.add('hidden');
     submenu.classList.add('hidden');
     connection?.classList.add('hidden');
+    renderDeepSeekWebControls(null);
     return;
   }
 
@@ -1349,6 +1355,7 @@ function renderChatModelControl() {
   modelTrigger.setAttribute('aria-expanded', String(state.chatModelSubmenuOpen));
   submenu.classList.toggle('hidden', !state.chatModelSubmenuOpen);
   renderLmStudioConnection(runtime);
+  renderDeepSeekWebControls(runtime);
   syncChatModelPickerLayout();
   renderChatReasoningOptions(character.id, runtime, options);
   renderChatModelSubmenu(character.id, runtime, submenu);
@@ -1516,6 +1523,7 @@ function syncChatModelPickerLayout() {
   popover.dataset.layout = window.matchMedia('(max-width: 760px), (orientation: portrait)').matches
     ? 'mobile'
     : 'desktop';
+  syncDeepSeekWebLayout();
 }
 
 function closeChatModelPicker(options = {}) {

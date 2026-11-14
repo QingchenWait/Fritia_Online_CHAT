@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fritia-next-chat-v59';
+const CACHE_NAME = 'fritia-next-chat-v60';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -67,6 +67,12 @@ const CORE_ASSETS = [
   './src/js/settings.js',
   './src/js/model_reasoning.js',
   './src/js/deepseek_reply.js',
+  './src/js/deepseek_web.js',
+  './src/js/deepseek_web_ui.js',
+  './src/js/deepseek_web_desktop.js',
+  './src/js/deepseek_web_mobile.js',
+  './src/styles/deepseek-web-desktop.css',
+  './src/styles/deepseek-web-mobile.css',
   './src/js/model_provider_presets.js',
   './src/js/model_provider_presets_desktop.js',
   './src/js/model_provider_presets_mobile.js',

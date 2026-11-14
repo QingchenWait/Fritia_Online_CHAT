@@ -1,5 +1,29 @@
 # STRUCTURE
 
+## v1.2.0 DeepSeek API 联网扩展（2026-11-14，缓存 v60）
+
+| 文件 / 内部 API / 元素 | 作用 |
+| --- | --- |
+| `src/js/deepseek_web.js` / `isDeepSeekWebAvailable(provider)` | 精确 `deepseek-flash`、已配置密钥和有效 HTTP(S) Base URL 判断，其他模型不执行扩展 |
+| `buildDeepSeekWebReference({settings,provider,userText,history,signal})` | 当前模型独立 JSON 查询规划、用户来源 URL 候选校验、Search / Fetch 请求和超时、外部资料预算与失败说明；返回 system 参考消息或 null，不修改正式 completion 参数 |
+| `compactQuery` / `extractUrls` / `postJson`（内部） | 128 Unicode 查询限制；去重 HTTP(S) 用户链接与凭据/8192 长度检查；Bearer JSON 请求、HTTP/业务错误检查、可中止与 30 秒超时 |
+| `chat_engine.js` / `requestCharacterReply` | 常规私聊构造原消息后、正式回复前插入本轮参考 |
+| `tool_chat_engine.js` / `completeToolPrivateMessageReply` | 新 MCP 私聊任务在原工具循环前插入参考，既有任务续跑保持原快照 |
+| `roundtable.js` / 玩家触发请求分支 | 玩家输入 / @ 触发群聊时插入参考并计入原 Token 预算，保留 JSON 调度、角色跟进和空闲轮次 |
+| `settings.js` / `DEFAULT_SETTINGS`、`normalizeSettings` | 原 `fritia-settings` 内增加默认关闭的 `deepseekWebSearch`、`deepseekReadUrl`；保存合并及原存档备份/恢复自动覆盖这两个配置 |
+| `src/js/deepseek_web_ui.js` / `bindDeepSeekWebControls`、`renderDeepSeekWebControls`、`syncDeepSeekWebLayout` | 按当前会话实际 provider 显隐，保存开关与更新无图标按钮状态，分派横/竖屏定位 |
+| `src/js/deepseek_web_desktop.js` / `positionDeepSeekWebDesktop` | 桌面横屏按菜单底部和窗口高度计算主滚动层可用空间 |
+| `src/js/deepseek_web_mobile.js` / `positionDeepSeekWebMobile` | 手机竖屏按 VisualViewport 可视范围计算可用高度 |
+| `src/styles/deepseek-web-desktop.css`、`deepseek-web-mobile.css` | 各自的并排文字按钮、灰色/强调色/绿色圆点、主菜单和模型子菜单自绘滚动条，不覆盖原浮层宽度 |
+| `index.html` / `#deepseek-web-controls` | 思考强度上方的“API 功能扩展”区，默认隐藏 |
+| `#deepseek-web-search-btn`、`#deepseek-read-url-btn` | 联网搜索、阅读网页开关，`aria-checked` 同步状态，圆点与文字同排 |
+| `.chat-model-popover__scroll` / `#chat-model-submenu` | 主菜单内部滚动层；二级模型菜单继续作为外层直接子元素，避免滚动裁剪 |
+| `tools/deepseek_web_regression.test.mjs` / `npm run test:deepseek-web` | 开关组合、模型门控、规划与原始 API 协议、用户链接白名单及失败退化回归 |
+| `tools/deepseek_web_chat.test.mjs` / `npm run test:deepseek-web` | 真实私聊、MCP 工具循环和圆桌入口，保留回复协议、聊天结构及参考 Token 计量 |
+| `tools/deepseek_web_browser.mjs` / `npm run test:deepseek-web:browser` | 五种视口的菜单状态、持久化与滚动，以及工具开关关闭时完整联网聊天链路 |
+
+使用独立 `POST /v1/tools/search` 与 `POST /v1/tools/fetch`；不向正式聊天注入 `deepseek_web_search` / `deepseek_read_url` 服务端工具声明。联网参考为本轮输入，不新增网页专用存档或数据库；已有 MCP 工具续跑快照按原机制处理。正式聊天的思考参数、采样、工具定义、群聊输出格式及存档结构继续沿用既有实现，软件版本保持 1.2.0。
+
 ## v1.2.0 角色删除与上传错误（2026-11-10，缓存 v59）
 
 | 文件 / 内部 API | 作用 |

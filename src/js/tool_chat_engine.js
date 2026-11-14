@@ -17,6 +17,7 @@ import {
 import { isLmStudioSettings, isLmStudioProvider, requestLmStudioCompletion } from './lm_studio.js';
 import { needsOpenAIResponses, requestOpenAIResponses } from './openai_responses.js';
 import { markFailedTurn, filterFailedTurnHistory, isFailedTurnMessage } from './failed_turns.js';
+import { buildDeepSeekWebReference } from './deepseek_web.js';
 
 const PLAYER_NAME = '分析员';
 const MAX_TOOL_AGENT_STEPS = 50;
@@ -111,6 +112,12 @@ export async function completeToolPrivateMessageReply({
     const agentMessages = resumeState?.messages?.length
       ? cloneResumeMessages(resumeState.messages)
       : [...baseMessages];
+    if (!resumeState && (settings.deepseekWebSearch || settings.deepseekReadUrl)) {
+      const history = filterFailedTurnHistory(getConversationMessages(nextStore, conversation.id), conversation.id)
+        .filter(item => shouldKeepMessageForCurrentDeepSeekMode(item, settings));
+      const webReference = await buildDeepSeekWebReference({ settings, userText: text, history, signal });
+      if (webReference) agentMessages.splice(1, 0, webReference);
+    }
     if (resumeState?.messages?.length) {
       agentMessages.push({
         role: 'system',

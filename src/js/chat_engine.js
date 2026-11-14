@@ -13,6 +13,7 @@ import { getReasoningFields, reasoningProviderKey } from './model_reasoning.js';
 import { filterAttachmentHistory } from './attachment_inputs.js';
 import { AttachmentInputError } from './attachment_state.js';
 import { markFailedTurn, filterFailedTurnHistory } from './failed_turns.js';
+import { buildDeepSeekWebReference } from './deepseek_web.js';
 
 const PLAYER_ID = 'player';
 const PLAYER_NAME = '分析员';
@@ -212,6 +213,9 @@ export async function requestCharacterReply({ store, conversation, character, us
     currentUserContent,
     provider
   });
+  const webReference = settings.deepseekWebSearch || settings.deepseekReadUrl
+    ? await buildDeepSeekWebReference({ settings, provider, userText, history }) : null;
+  if (webReference) messages.splice(1, 0, webReference);
   const response = await requestOpenAICompatible(settings, messages, reasoningEffort, attachmentIssues);
   return {
     ...response,
