@@ -328,35 +328,66 @@ export async function rebuildKnowledgeBaseIndex(kbId) {
 export async function searchKnowledgeBase(query, options = {}) {
   const ids = options.knowledgeBaseIds || getActiveKnowledgeBaseIds();
   const queryTokens = tokenize(query);
+  const primaryTokens = searchTopicTokens(options.primaryQuery ?? query);
   if (!queryTokens.length || !ids.length) return [];
   const results = [];
+  const primaryScores = new Map();
+  const sources = [];
+  const corpus = { docCount: 0, avgLength: 0, df: Object.create(null) };
+  const terms = [...new Set([...queryTokens, ...primaryTokens])];
+  let totalLength = 0;
   for (const kbId of ids) {
     const kb = await getRecord('knowledgeBases', kbId);
-    const index = await getRecord('indexes', kbId) || await buildIndexFromChunks(kbId);
+    const storedIndex = await getRecord('indexes', kbId);
+    // Older archives use documents/postings instead of docs/terms. Also, an
+    // empty or previous index can survive a later chunk import. Reuse only a
+    // compatible, up-to-date cache; rebuild this KB from its existing chunks.
+    const index = Array.isArray(storedIndex?.docs)
+      && storedIndex.docCount === storedIndex.docs.length
+      && (!Number.isFinite(kb?.chunkCount) || storedIndex.docs.length === kb.chunkCount)
+      && !(Number(kb?.updatedAt) > (Number(storedIndex.updatedAt) || 0))
+      ? storedIndex : await buildIndexFromChunks(kbId);
     if (!index || !Array.isArray(index.docs)) continue;
+    sources.push({ kbId, kb, index });
+    corpus.docCount += index.docCount;
+    totalLength += index.avgLength * index.docCount;
+    for (const term of terms) corpus.df[term] = (corpus.df[term] || 0) + (index.df?.[term] || 0);
+  }
+  // Scores merged into one top-k must use the same corpus statistics. Scoring
+  // each KB separately makes a relevant small user KB lose to the preset KB.
+  corpus.avgLength = totalLength / Math.max(1, corpus.docCount);
+  for (const { kbId, kb, index } of sources) {
     for (const doc of index.docs) {
-      const score = scoreDoc(doc, queryTokens, index);
+      const score = scoreDoc(doc, queryTokens, corpus);
       if (score <= 0) continue;
-      results.push({
+      const result = {
         ...doc,
         score,
         knowledgeBaseId: kbId,
         knowledgeBaseName: kb?.name || '知识库',
         fileName: await fileNameFor(doc.fileId)
-      });
+      };
+      results.push(result);
+      primaryScores.set(result, scoreDoc(doc, primaryTokens, corpus));
     }
   }
   const limit = options.limit || getAdvancedSettings().kbInjectLimit;
-  return results.sort((a, b) => b.score - a.score).slice(0, limit);
+  // Current topic wins over incidental matches in long earlier replies; the
+  // original combined-query BM25 score remains the tie-break and result field.
+  return results.sort((a, b) => primaryScores.get(b) - primaryScores.get(a) || b.score - a.score).slice(0, limit);
 }
 
 export async function buildRagReferenceMessage(options = {}) {
+  const currentQuery = [...new Set([options.query, options.userText].filter(Boolean))].join('\n');
+  const history = Array.isArray(options.history) ? options.history.slice(-6) : [];
+  // "Continue" has no new subject: retain the most recent user's topic.
+  const primaryQuery = searchTopicTokens(currentQuery).length ? currentQuery
+    : [...history].reverse().find(item => ['user', 'player'].includes(item.role) && searchTopicTokens(item.text).length)?.text || currentQuery;
   const query = [
-    options.query,
-    options.userText,
-    ...(Array.isArray(options.history) ? options.history.slice(-6).map(item => item.text || '') : [])
+    currentQuery,
+    ...history.map(item => item.text || '')
   ].filter(Boolean).join('\n');
-  const results = await searchKnowledgeBase(query, { limit: options.limit });
+  const results = await searchKnowledgeBase(query, { limit: options.limit, primaryQuery });
   if (!results.length) return null;
   const content = [
     '以下是当前对话可参考的知识库片段。只在有帮助时使用，不要把参考资料逐字复述给用户。',
@@ -366,6 +397,15 @@ export async function buildRagReferenceMessage(options = {}) {
     })
   ].join('\n\n');
   return { role: 'system', content };
+}
+
+// Query instructions are not the subject of a lookup. Keep index tokenization
+// unchanged; weak follow-ups have no primary topic and can still use history.
+function searchTopicTokens(text) {
+  const topic = String(text || '')
+    .replace(/(?:请|帮我)?(?:看看|看|查看|查询|查找|检索|搜索|根据|参考|读取)?(?:一下)?(?:知识库|参考资料|资料|文档|文件|内容)(?:里面|中的|中|里|内)?/g, ' ')
+    .replace(/(?:能否|可以|能)?(?:详细)?(?:介绍一下|解释一下|说明一下|说说|展开|告诉我|继续|接着)(?:一点)?|请(?:介绍|解释|说明)|请问|帮我|详细一点|是什么|什么是|为什么|什么|怎么|如何|几号|几日/g, ' ');
+  return [...new Set(tokenize(topic))].filter(token => !/^[的了吗呢啊呀吧是我你他她它这那能再就也还]$/.test(token));
 }
 
 async function buildIndexFromChunks(kbId) {

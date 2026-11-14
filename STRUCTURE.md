@@ -1,5 +1,18 @@
 # STRUCTURE
 
+## v1.2.0 知识库 RAG 多库评分与当前主题（2026-11-14，缓存 v62）
+
+- `src/js/knowledge_base.js / searchKnowledgeBase(query, options)`：沿用指定库或全部 `activeKbIds`，校验并复用/重建各库原索引，在内存聚合启用库 `docCount/df/avgLength` 后使用相同 BM25 基准。先按 `options.primaryQuery`（默认当前 query）的主题匹配分数排序，再按完整查询 score 排序，最终使用既有 limit；主题分数只在临时 Map 中，不增加结果字段或存储字段。单库公式和参数不变。
+- `buildRagReferenceMessage(options)`：对当前 query/userText 去重；当前主题优先，最近六条历史仍作辅助。当前输入无主题的继续追问选择最近 user/player 的主题。参考消息格式和聊天入口不变。
+- `searchTopicTokens(text)`（内部）：仅清理查询中的检索指令/常用追问词，原索引分词及原始文本不变；保留“介绍信/说明书/请夏”等正文主题。不是模型规划或外部请求。
+- 索引兼容：`docs`、计数与更新时间异常时复用 `buildIndexFromChunks/rebuildKnowledgeBaseIndex`。IndexedDB `fritia_knowledge_base_db` version 2、四表及 `fritia_knowledge_base_state` 不变；无全局持久化索引、墓碑、新字段或数据库升级，不改原文件/分块/启用开关和 ZIP/WebDAV 格式。
+- `tools/knowledge_base_regression.mjs` / `test:knowledge-base`：统一入口，隔离数据与旧索引、开关/重载、桌面/移动 UI、全部聊天路径检查。
+- `tools/knowledge_base_chat_cases.mjs`：原私聊/MCP/圆桌各 1/2/0 个启用库的真实构造调用。
+- `tools/knowledge_base_ranking_cases.mjs` / `knowledgeBaseRankingCases()`：真实内置 145 分块 + 用户原文 LDFTEP，验证默认 limit、长历史与当前提问、弱追问、大小写/顺序/开关、同文档跨库不变性、单库公式、原数据不变及 12 组实际出站事实。
+- `tools/knowledge_base_ui_cases.mjs` / `knowledgeBaseUiCases(page,viewport)`：Node 侧驱动实际创建/上传/启用/输入/发送，检查两条用户原句出站 RAG 和渲染回复；只有模型 HTTP 受控。
+- UI/横竖屏布局及其他功能无变动；`sw.js` 缓存批次 v62，软件仍 1.2.0，未打包。
+
+
 ## v1.2.0 DeepSeek API 联网扩展（2026-11-14，缓存 v60）
 
 | 文件 / 内部 API / 元素 | 作用 |
