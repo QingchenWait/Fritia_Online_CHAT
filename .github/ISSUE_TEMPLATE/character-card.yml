@@ -1,0 +1,94 @@
+
+name: "🪪 角色卡投稿"
+description: "⚠️注意：共创计划已经迁移到新仓库中，请访问共创计划页面官网，以获取最新投稿地址"
+title: "[角色卡投稿] "
+labels: ["角色卡"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 《海姆休息室》角色卡共创计划
+        
+        ⚠️注意：共创计划已经迁移到新仓库中，请通过 [新链接](https://github.com/QingchenWait/Fritia_Online_CHAT_plugins/issues/new?template=character-card.yml) 进行角色卡投稿。
+
+        欢迎访问 [共创计划](https://fritia.online/creator/) 页面，以查看相关的介绍和要求。
+
+  - type: input
+    id: character-name
+    attributes:
+      label: "角色卡名称"
+      placeholder: "请输入角色名称"
+    validations:
+      required: true
+
+  - type: input
+    id: character-description
+    attributes:
+      label: "角色卡介绍"
+      description: "简短的介绍，导入后作为角色个性签名显示，最多 60 个字符。"
+      placeholder: "请简要介绍角色卡"
+    validations:
+      required: true
+      max_length: 60
+
+  - type: textarea
+    id: character-detail-description
+    attributes:
+      label: "详细描述"
+      description: "填写对角色卡的详细描述或说明，仅显示在插件商店的角色卡片中，最多 1000 个字符。"
+      placeholder: "请输入角色详细描述（选填）"
+    validations:
+      required: false
+      max_length: 1000
+
+  - type: upload
+    id: character-avatar
+    attributes:
+      label: "头像"
+      description: "请上传用于角色的头像，可使用表情包等静态图片。支持 PNG、JPG、JPEG、WEBP 格式。"
+    validations:
+      required: true
+      accept: ".png,.jpg,.jpeg,.webp"
+
+  - type: upload
+    id: personality-prompt
+    attributes:
+      label: "人格提示词"
+      description: "请上传 1000 字以上的 TXT 纯文本提示词。建议至少包含：角色身份介绍、简单背景故事、核心性格、细节人物设定、发言风格、恋人互动的情感基调、示例对话等。"
+    validations:
+      required: true
+      accept: ".txt"
+
+  - type: textarea
+    id: reference-voice
+    attributes:
+      label: "参考语音"
+      description: "请在下方上传<strong>参考音频附件</strong>（MP3/WAV）。用于语音对话时的参考，建议时长 5–30 秒、无背景音乐、声音清晰干净。不需要输入语音对应的台词文本。"
+      placeholder: "请将参考音频文件拖拽至此处，或点击下方的 Paste, drop, or click to add files 上传按钮，并选择音频文件。"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: required-declarations
+    attributes:
+      label: "必要上传声明"
+      description: "以下声明必须全部勾选，否则将无法成功提交。"
+      options:
+        - label: "我已经阅读了[共创计划](https://fritia.online/creator/)的介绍和要求，确保角色卡格式正确。"
+          required: true
+        - label: "我确认角色卡是以分析员（用户）为核心的纯爱/后宫作品，<strong>不包含</strong> NTR/百合/猎奇XP 等与社区调性不符的内容。"
+          required: true
+        - label: "我保证上传的所有内容<strong>不包含</strong>暴力/恐怖/涉政/生理不适/版权争议等违法违规内容。"
+          required: true
+
+  - type: checkboxes
+    id: optional-declarations
+    attributes:
+      label: "可选声明"
+      description: "以下授权完全自愿，不影响角色卡投稿与审核。"
+      options:
+        - label: "我授权该角色卡并入《海姆休息室》官方分支，并授权官方在并入时进行适度修改。"
+          required: false
+        - label: "我授权《海姆休息室》官方在第三方平台宣发时，在标注作者的前提下使用该角色卡。"
+          required: false

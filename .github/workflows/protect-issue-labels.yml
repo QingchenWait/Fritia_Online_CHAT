@@ -1,0 +1,86 @@
+
+name: Protect Issue Labels
+
+# 添加标签时立即触发
+# opened 用于检查新建 Issue 自带的标签
+on:
+  issues:
+    types: [labeled, opened]
+
+# 只授予修改 Issue 所需的权限
+permissions:
+  issues: write
+
+jobs:
+  protect-labels:
+    # 仅处理受保护标签，或新创建的 Issue
+    if: >-
+      github.event.action == 'opened' ||
+      contains(fromJSON('["初审通过","不通过","精选角色卡"]'), github.event.label.name)
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Remove unauthorized labels
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // 1. 受保护的标签
+            const protectedLabels = new Set([
+              '初审通过',
+              '不通过',
+              '精选角色卡'
+            ]);
+
+            // 2. 授权用户（仓库 Owner 自动包含）
+            const authorizedUsers = new Set([
+              context.repo.owner.toLowerCase(),
+              'ADMIN_USERNAME_1',
+              'ADMIN_USERNAME_2'
+            ].map(name => name.toLowerCase()));
+
+            // 3. 获取触发事件的用户
+            const actor = context.payload.sender?.login?.toLowerCase();
+
+            if (!actor) {
+              core.setFailed('Cannot identify event sender.');
+              return;
+            }
+
+            // Owner 和管理员直接放行
+            if (authorizedUsers.has(actor)) {
+              core.info(`Authorized user: ${actor}`);
+              return;
+            }
+
+            // 4. 获取本次操作涉及的标签
+            const labels = context.payload.action === 'labeled'
+              ? [context.payload.label?.name]
+              : (context.payload.issue?.labels ?? [])
+                  .map(label => label.name);
+
+            // 5. 撤销非授权用户添加的保护标签
+            for (const name of labels) {
+              if (!protectedLabels.has(name)) continue;
+
+              try {
+                await github.rest.issues.removeLabel({
+                  ...context.repo,
+                  issue_number: context.issue.number,
+                  name
+                });
+
+                core.notice(
+                  `Removed unauthorized label "${name}" ` +
+                  `from issue #${context.issue.number} ` +
+                  `(actor: ${actor})`
+                );
+              } catch (error) {
+                // 标签已被其他操作移除
+                if (error.status === 404) {
+                  core.info(`Label "${name}" already removed.`);
+                  continue;
+                }
+                throw error;
+              }
+            }
